@@ -103,13 +103,10 @@ void sync_search_kernel(T *query, size_t query_num, size_t query_dim, const int 
   float *gt_dists = NULL;
   size_t gt_num, gt_dim;
 
-  if (!file_exists(truthset_file)) {
-    calRecall = false;
-  }
-
   if (calRecall) {
     LOG(INFO) << "current truthfile: " << truthset_file;
-    pipeann::load_truthset(truthset_file, gt_ids, gt_dists, gt_num, gt_dim);
+    uint32_t* gt_tags = nullptr;
+    pipeann::load_truthset(truthset_file, gt_ids, gt_dists, gt_num, gt_dim, &gt_tags);
   }
 
   float *query_result_dists = new float[recall_at * query_num];

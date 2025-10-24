@@ -299,6 +299,7 @@ namespace pipeann {
   template<typename T, typename TagT>
   void Index<T, TagT>::load(const char *filename) {
     _change_lock.lock();
+    size_t rss_before_index_load = get_current_rss();
 
     size_t tags_file_num_pts = 0, graph_num_pts = 0, data_file_num_pts = 0;
 
@@ -307,14 +308,32 @@ namespace pipeann {
       std::string tags_file = std::string(filename) + ".tags";
       std::string delete_set_file = std::string(filename) + ".del";
       std::string graph_file = std::string(filename);
+
+      size_t rss_before_data = get_current_rss();
       data_file_num_pts = load_data(data_file);
+      size_t rss_after_data = get_current_rss();
+      LOG(DEBUG) << "[Index::load] 加载数据文件 (" << data_file_num_pts << " 点) - 增长前: " << rss_before_data << " KB"
+                 << ", 增长后: " << rss_after_data << " KB"
+                 << ", 实际增长: " << (rss_after_data - rss_before_data) << " KB";
+
       if (file_exists(delete_set_file)) {
         load_delete_set(delete_set_file);
       }
       if (_enable_tags) {
+        size_t rss_before_tags = get_current_rss();
         tags_file_num_pts = load_tags(tags_file);
+        size_t rss_after_tags = get_current_rss();
+        LOG(DEBUG) << "[Index::load] 加载标签 - 增长前: " << rss_before_tags << " KB"
+                   << ", 增长后: " << rss_after_tags << " KB"
+                   << ", 实际增长: " << (rss_after_tags - rss_before_tags) << " KB";
       }
+
+      size_t rss_before_graph = get_current_rss();
       graph_num_pts = load_graph(graph_file, data_file_num_pts);
+      size_t rss_after_graph = get_current_rss();
+      LOG(DEBUG) << "[Index::load] 加载图结构 - 增长前: " << rss_before_graph << " KB"
+                 << ", 增长后: " << rss_after_graph << " KB"
+                 << ", 实际增长: " << (rss_after_graph - rss_before_graph) << " KB";
 
     } else {
       uint64_t nr, nc;
@@ -324,13 +343,30 @@ namespace pipeann {
 
       pipeann::load_bin<uint64_t>(index_file, file_offset_data, nr, nc, 0);
       // Loading data first so that we know how many points to expect.
+      size_t rss_before_data = get_current_rss();
       data_file_num_pts = load_data(index_file, file_offset_data[1]);
+      size_t rss_after_data = get_current_rss();
+      LOG(DEBUG) << "[Index::load] 加载数据文件 (" << data_file_num_pts << " 点) - 增长前: " << rss_before_data << " KB"
+                 << ", 增长后: " << rss_after_data << " KB"
+                 << ", 实际增长: " << (rss_after_data - rss_before_data) << " KB";
+
+      size_t rss_before_graph = get_current_rss();
       graph_num_pts = load_graph(index_file, data_file_num_pts, file_offset_data[0]);
+      size_t rss_after_graph = get_current_rss();
+      LOG(DEBUG) << "[Index::load] 加载图结构 - 增长前: " << rss_before_graph << " KB"
+                 << ", 增长后: " << rss_after_graph << " KB"
+                 << ", 实际增长: " << (rss_after_graph - rss_before_graph) << " KB";
+
       if (file_offset_data[3] != file_offset_data[4]) {
         load_delete_set(index_file, file_offset_data[3]);
       }
       if (_enable_tags) {
+        size_t rss_before_tags = get_current_rss();
         tags_file_num_pts = load_tags(index_file, file_offset_data[2]);
+        size_t rss_after_tags = get_current_rss();
+        LOG(DEBUG) << "[Index::load] 加载标签 - 增长前: " << rss_before_tags << " KB"
+                   << ", 增长后: " << rss_after_tags << " KB"
+                   << ", 实际增长: " << (rss_after_tags - rss_before_tags) << " KB";
       }
     }
 
@@ -354,6 +390,11 @@ namespace pipeann {
     LOG(INFO) << "Num frozen points:" << _num_frozen_pts << " _nd: " << _nd << " _ep: " << _ep
               << " size(_location_to_tag): " << _location_to_tag.size()
               << " size(_tag_to_location):" << _tag_to_location.size() << " Max points: " << _max_points;
+
+    size_t rss_after_index_load = get_current_rss();
+    LOG(DEBUG) << "[Index::load] Index 加载总计 - 增长前: " << rss_before_index_load << " KB"
+               << ", 增长后: " << rss_after_index_load << " KB"
+               << ", 实际增长: " << (rss_after_index_load - rss_before_index_load) << " KB";
 
     _change_lock.unlock();
   }

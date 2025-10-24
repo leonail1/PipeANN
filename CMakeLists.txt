@@ -25,7 +25,8 @@ add_compile_options(
 	-Wno-unused-parameter
 	-Wno-unused-but-set-variable
 )
-add_compile_options(-g -O3 -march=native -mtune=native -ftree-vectorize -funroll-loops -Wl,--no-as-needed)
+add_compile_options(-g -O3 -march=native -mtune=native -ftree-vectorize -funroll-loops -Wl,--no-as-needed -mavx512vpopcntdq)
+# add_compile_options(-g -O3 -march=native -mtune=native -ftree-vectorize -funroll-loops -Wl,--no-as-needed)
 
 message("Additional definitions: " $ENV{ADDITIONAL_DEFINITIONS})
 add_definitions(

@@ -160,12 +160,22 @@ namespace pipeann {
     std::string disk_index_file = std::string(index_prefix) + "_disk.index";
     this->_disk_index_file = disk_index_file;
 
+    size_t rss_before_meta = get_current_rss();
     SSDIndexMetadata<T> meta;
     meta.load_from_disk_index(disk_index_file);
     this->init_metadata(meta);
+    size_t rss_after_meta = get_current_rss();
+    LOG(DEBUG) << "[SSDIndex::load] 加载元数据 - 增长前: " << rss_before_meta << " KB"
+               << ", 增长后: " << rss_after_meta << " KB"
+               << ", 实际增长: " << (rss_after_meta - rss_before_meta) << " KB";
 
     // load nbrs (e.g., PQ)
+    size_t rss_before_nbr = get_current_rss();
     nbr_handler->load(index_prefix);
+    size_t rss_after_nbr = get_current_rss();
+    LOG(DEBUG) << "[SSDIndex::load] 加载 PQ/Nbr 数据 - 增长前: " << rss_before_nbr << " KB"
+               << ", 增长后: " << rss_after_nbr << " KB"
+               << ", 实际增长: " << (rss_after_nbr - rss_before_nbr) << " KB";
 
     // read index metadata
     // open AlignedFileReader handle to index_file
@@ -176,18 +186,49 @@ namespace pipeann {
 
     this->destroy_buffers();  // in case of re-init.
     reader->open(disk_index_file, true, false);
+
+    size_t rss_before_buffers = get_current_rss();
     this->init_buffers(num_threads);
+    size_t rss_after_buffers = get_current_rss();
+    size_t buffer_theoretical = num_threads * 2 * (
+        this->aligned_dim * sizeof(T) +  // coord_scratch
+        MAX_N_SECTOR_READS * SECTOR_LEN +  // sector_scratch
+        MAX_N_EDGES * AbstractNeighbor<T>::MAX_BYTES_PER_NBR +  // nbr_vec_scratch
+        256 * AbstractNeighbor<T>::MAX_BYTES_PER_NBR * sizeof(float) +  // nbr_ctx_scratch
+        MAX_N_EDGES * sizeof(float) +  // aligned_dist_scratch
+        this->aligned_dim * sizeof(T) +  // aligned_query_T
+        sizeof(tsl::robin_set<uint64_t>) + 4096 * 16 +  // visited (approx)
+        sizeof(tsl::robin_set<unsigned>) + 4096 * 8  // page_visited (approx)
+    ) / 1024;
+    LOG(DEBUG) << "[SSDIndex::load] 初始化查询缓冲区 (" << num_threads << " 线程, " << (num_threads * 2) << " 缓冲区)"
+               << " - 理论大小: " << buffer_theoretical << " KB"
+               << ", 增长前: " << rss_before_buffers << " KB"
+               << ", 增长后: " << rss_after_buffers << " KB"
+               << ", 实际增长: " << (rss_after_buffers - rss_before_buffers) << " KB";
     this->max_nthreads = num_threads;
 
     // load page layout.
     this->use_page_search_ = use_page_search;
+    size_t rss_before_page = get_current_rss();
     this->load_page_layout(index_prefix, nnodes_per_sector, num_points);
+    size_t rss_after_page = get_current_rss();
+    size_t page_layout_theoretical = (num_points * sizeof(uint64_t) + cur_loc * sizeof(uint32_t)) / 1024;
+    LOG(DEBUG) << "[SSDIndex::load] 加载页面布局 (id2loc_: " << num_points << " 项, loc2id_: " << cur_loc << " 项)"
+               << " - 理论大小: " << page_layout_theoretical << " KB"
+               << ", 增长前: " << rss_before_page << " KB"
+               << ", 增长后: " << rss_after_page << " KB"
+               << ", 实际增长: " << (rss_after_page - rss_before_page) << " KB";
 
     // load tags
     if (this->enable_tags) {
       std::string tag_file = disk_index_file + ".tags";
       LOG(INFO) << "Loading tags from " << tag_file;
+      size_t rss_before_tags = get_current_rss();
       this->load_tags(tag_file);
+      size_t rss_after_tags = get_current_rss();
+      LOG(DEBUG) << "[SSDIndex::load] 加载标签 - 增长前: " << rss_before_tags << " KB"
+                 << ", 增长后: " << rss_after_tags << " KB"
+                 << ", 实际增长: " << (rss_after_tags - rss_before_tags) << " KB";
     }
 
     load_flag = true;

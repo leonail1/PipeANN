@@ -83,12 +83,32 @@ namespace pipeann {
       LOG(INFO) << "PQ Pivots offset: " << pq_pivots_offset << " PQ Vectors offset: " << pq_vectors_offset;
 
       size_t npts_u64, nchunks_u64;
+      size_t rss_before_pq = get_current_rss();
       pipeann::load_bin<uint8_t>(pq_compressed_vectors, data, npts_u64, nchunks_u64, pq_vectors_offset);
+      size_t rss_after_pq = get_current_rss();
+      size_t pq_data_theoretical = (npts_u64 * nchunks_u64) / 1024;
 
       LOG(INFO) << "Load compressed vectors from file: " << pq_compressed_vectors << " offset: " << pq_vectors_offset
                 << " num points: " << npts_u64 << " n_chunks: " << nchunks_u64;
+      LOG(DEBUG) << "[PQNeighbor::load] 加载 PQ 压缩向量 - 理论大小: " << pq_data_theoretical << " KB"
+                 << ", 增长前: " << rss_before_pq << " KB"
+                 << ", 增长后: " << rss_after_pq << " KB"
+                 << ", 实际增长: " << (rss_after_pq - rss_before_pq) << " KB";
 
+      size_t rss_before_table = get_current_rss();
       pq_table.load_pq_centroid_bin(pq_table_bin.c_str(), nchunks_u64, pq_pivots_offset);
+      size_t rss_after_table = get_current_rss();
+      size_t pq_table_theoretical = (
+          NUM_PQ_CENTROIDS * nchunks_u64 * sizeof(float) * 4 +  // tables (128 KB)
+          NUM_PQ_CENTROIDS * nchunks_u64 * sizeof(float) +      // tables_T (128 KB)
+          256 * 256 * nchunks_u64 * sizeof(float) +             // all_to_all_dists (8 MB for 32 chunks)
+          nchunks_u64 * 4 * sizeof(float) +                     // centroid
+          nchunks_u64 * 4 * sizeof(uint32_t) * 2                // rearrangement + chunk_offsets
+      ) / 1024;
+      LOG(DEBUG) << "[PQNeighbor::load] 加载 PQ 表 - 理论大小: " << pq_table_theoretical << " KB"
+                 << ", 增长前: " << rss_before_table << " KB"
+                 << ", 增长后: " << rss_after_table << " KB"
+                 << ", 实际增长: " << (rss_after_table - rss_before_table) << " KB";
       this->npoints = npts_u64;
     }
 
@@ -100,28 +120,58 @@ namespace pipeann {
       pq_table.save_pq_pivots(pq_pivot_out.c_str());
     }
 
+    /**
+     * @brief 构建PQ（Product Quantization）邻居处理器
+     * 
+     * 该函数实现了Product Quantization的完整构建流程，包括：
+     * 1. 从训练数据中生成PQ聚类中心（pivots）
+     * 2. 使用生成的聚类中心对原始数据进行量化压缩
+     * 3. 将压缩后的数据保存到磁盘
+     * 
+     * @param index_prefix_path 索引文件前缀路径，用于生成PQ相关文件名
+     * @param data_bin 原始数据的二进制文件路径
+     * @param bytes_per_nbr 每个邻居使用的字节数，决定PQ chunks的数量
+     * 
+     * @note PQ chunks数量受以下限制：
+     *       - 不能超过 bytes_per_nbr
+     *       - 不能超过 AbstractNeighbor<T>::MAX_BYTES_PER_NBR (128)
+     *       - 不能超过数据维度 dim
+     * 
+     * @details 构建过程：
+     *          1. 读取数据元信息（点数和维度）
+     *          2. 确定PQ chunks数量
+     *          3. 从原始数据中随机采样训练集
+     *          4. 使用K-means聚类生成PQ pivots
+     *          5. 使用pivots对所有数据进行量化压缩
+     *          6. 保存压缩数据到磁盘
+     */
     void build(const std::string &index_prefix_path, const std::string &data_bin, uint32_t bytes_per_nbr) {
+      // 构造PQ相关文件路径
       std::string pq_pivots_path = index_prefix_path + "_pq_pivots.bin";
       std::string pq_compressed_vectors_path = index_prefix_path + "_pq_compressed.bin";
 
       size_t points_num, dim;
 
+      // 读取数据文件的元信息（点数和维度）
       pipeann::get_bin_metadata(data_bin, points_num, dim);
 
       this->npoints = points_num;
+      // 确定PQ chunks数量，受多个因素限制
       size_t num_pq_chunks = std::min(bytes_per_nbr, AbstractNeighbor<T>::MAX_BYTES_PER_NBR);
-      num_pq_chunks = std::min(num_pq_chunks, dim);  // cannot have more chunks than dim.
+      num_pq_chunks = std::min(num_pq_chunks, dim);  // PQ chunks数量不能超过数据维度
       LOG(INFO) << "File: " << data_bin << " has: " << points_num << " points.";
       LOG(INFO) << "Using " << num_pq_chunks << " PQ chunks.";
 
       size_t train_size, train_dim;
-      float *train_data;  // maximum: 256000 * dim * data_size, 1GB for 1024-dim float vector.
+      float *train_data;  // 训练数据，最大约1GB（256000 * 1024维 * 4字节）
 
+      // 开始计时PQ构建过程
       auto start = std::chrono::high_resolution_clock::now();
       double p_val = this->get_sample_p();
-      // generates random sample and sets it to train_data and updates train_size
+      // 从原始数据中生成随机采样的训练集
       gen_random_slice<T>(data_bin, p_val, train_data, train_size, train_dim);
 
+      // 使用训练数据生成PQ聚类中心（pivots）
       LOG(INFO) << "Generating PQ pivots with training data of size: " << train_size;
       generate_pq_pivots(train_data, train_size, (uint32_t) dim, 256, (uint32_t) num_pq_chunks, NUM_KMEANS,
                          pq_pivots_path);
@@ -129,7 +179,9 @@ namespace pipeann {
 
       LOG(INFO) << "Pivots generated in " << std::chrono::duration<double>(end - start).count() << "s.";
       start = std::chrono::high_resolution_clock::now();
+      // 使用生成的pivots对所有数据进行PQ压缩
       generate_pq_data_from_pivots(data_bin, 256, num_pq_chunks, pq_pivots_path, pq_compressed_vectors_path, 0);
+      // 释放训练数据内存
       delete[] train_data;
       train_data = nullptr;
       end = std::chrono::high_resolution_clock::now();

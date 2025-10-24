@@ -560,33 +560,65 @@ namespace pipeann {
     LOG(INFO) << "Output file written.";
   }
 
+  /**
+   * @brief 构建磁盘索引的主函数
+   * 
+   * 该函数负责构建一个完整的磁盘索引，包括以下步骤：
+   * 1. 数据预处理（如余弦相似度归一化）
+   * 2. 构建内存索引
+   * 3. 将内存索引转换为磁盘布局
+   * 4. 清理临时文件
+   * 
+   * @tparam T 数据类型（如 float, int8_t, uint8_t）
+   * @tparam TagT 标签数据类型（通常为 uint32_t）
+   * 
+   * @param dataPath 输入数据文件的路径
+   * @param indexFilePath 输出索引文件的前缀路径
+   * @param R 图的最大出度（每个节点的最大邻居数）
+   * @param L 构建时的搜索列表大小
+   * @param M 构建索引的RAM预算（GB）
+   * @param num_threads 使用的线程数（0表示使用默认值）
+   * @param bytes_per_nbr 每个邻居的字节数
+   * @param _compareMetric 距离度量类型（L2, COSINE, INNER_PRODUCT等）
+   * @param tag_file 标签文件路径（可为nullptr）
+   * @param nbr_handler 邻居处理器的抽象接口
+   * 
+   * @return bool 构建是否成功
+   */
   template<typename T, typename TagT>
   bool build_disk_index(const char *dataPath, const char *indexFilePath, uint32_t R, uint32_t L, uint32_t M,
                         uint32_t num_threads, uint32_t bytes_per_nbr, pipeann::Metric _compareMetric,
                         const char *tag_file, AbstractNeighbor<T> *nbr_handler) {
+    // 将输入参数转换为字符串格式
     std::string dataFilePath(dataPath);
     std::string index_prefix_path(indexFilePath);
-    std::string mem_index_path = index_prefix_path + "_mem.index";
-    std::string disk_index_path = index_prefix_path + "_disk.index";
-    std::string medoids_path = disk_index_path + "_medoids.bin";
-    std::string centroids_path = disk_index_path + "_centroids.bin";
+    
+    // 定义输出文件路径
+    std::string mem_index_path = index_prefix_path + "_mem.index";        // 内存索引文件路径
+    std::string disk_index_path = index_prefix_path + "_disk.index";      // 磁盘索引文件路径
+    std::string medoids_path = disk_index_path + "_medoids.bin";          // 质心文件路径
+    std::string centroids_path = disk_index_path + "_centroids.bin";      // 中心点文件路径
 
+    // 设置OpenMP线程数
     if (num_threads != 0) {
       omp_set_num_threads(num_threads);
     }
 
+    // 记录构建参数信息
     LOG(INFO) << "Starting index build: R=" << R << " L=" << L << " Build RAM budget: " << M << "GB T: " << num_threads
               << " bytes per neighbor: " << bytes_per_nbr << " Final index will be in multiple files";
 
+    // 处理余弦相似度度量：需要归一化数据
     std::string normalized_file_path = dataFilePath;
     if (_compareMetric == pipeann::Metric::COSINE) {
       if (std::is_floating_point<T>::value) {
         LOG(INFO) << "Cosine metric chosen. Normalizing vectors and "
                      "changing distance to L2 to boost accuracy.";
 
+        // 创建归一化数据文件
         normalized_file_path = std::string(indexFilePath) + "_data.normalized.bin";
         normalize_data_file(dataFilePath, normalized_file_path);
-        _compareMetric = pipeann::Metric::L2;
+        _compareMetric = pipeann::Metric::L2;  // 归一化后使用L2距离
       } else {
         LOG(ERROR) << "WARNING: Cannot normalize integral data types."
                    << " Using cosine distance with integer data types may "
@@ -595,39 +627,50 @@ namespace pipeann {
       }
     }
 
+    // 开始计时整个构建过程
     auto s = std::chrono::high_resolution_clock::now();
+    
+    // 构建邻居处理器
     nbr_handler->build(index_prefix_path, normalized_file_path, bytes_per_nbr);
 
+    // 构建Vamana索引
     auto start = std::chrono::high_resolution_clock::now();
-    auto p_val = nbr_handler->get_sample_p();
+    auto p_val = nbr_handler->get_sample_p();  // 获取采样率
     pipeann::build_merged_vamana_index<T>(normalized_file_path, _compareMetric, L, R, p_val, M, mem_index_path,
                                           medoids_path, centroids_path, tag_file);
     auto end = std::chrono::high_resolution_clock::now();
     LOG(INFO) << "Vamana index built in: " << std::chrono::duration<double>(end - start).count() << "s.";
 
+    // 创建磁盘布局
     if (tag_file == nullptr) {
+      // 无标签文件的情况
       pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, "", disk_index_path);
     } else {
+      // 有标签文件的情况
       std::string tag_filename = std::string(tag_file);
       pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, tag_filename, disk_index_path);
     }
 
+    // 清理临时文件
     LOG(INFO) << "Deleting memory index file: " << mem_index_path;
     std::remove(mem_index_path.c_str());
     // TODO: This is poor design. The decision to add the ".data" prefix
     // is taken by build_vamana_index. So, we shouldn't repeate it here.
     // Checking to see if we can merge the data and index into one file.
     std::remove((mem_index_path + ".data").c_str());
+    
+    // 如果创建了归一化文件，则删除它
     if (normalized_file_path != dataFilePath) {
       // then we created a normalized vector file. Delete it.
       LOG(INFO) << "Deleting normalized vector file: " << normalized_file_path;
       std::remove(normalized_file_path.c_str());
     }
 
+    // 记录总构建时间
     auto e = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> diff = e - s;
     LOG(INFO) << "Indexing time: " << diff.count();
-    return true;
+    return true;  // 构建成功
   }
 
   template void create_disk_layout<int8_t, uint32_t>(const std::string &mem_index_file, const std::string &base_file,

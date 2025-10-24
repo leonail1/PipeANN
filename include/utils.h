@@ -41,6 +41,16 @@ inline void crash() {
   // #endif
 }
 
+// 获取当前进程的内存使用量（RSS，单位KB）
+inline double get_current_rss() {
+  int tSize = 0, resident = 0, share = 0;
+  std::ifstream buffer("/proc/self/statm");
+  buffer >> tSize >> resident >> share;
+  buffer.close();
+  long page_size_kb = sysconf(_SC_PAGE_SIZE) / 1024;
+  return resident * page_size_kb;
+}
+
 static inline bool file_exists(const std::string &name, bool dirCheck = false) {
   int val;
   struct stat buffer;
