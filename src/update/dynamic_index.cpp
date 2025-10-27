@@ -21,7 +21,9 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <time.h>
+#ifdef USE_TCMALLOC
 #include <gperftools/malloc_extension.h>
+#endif
 
 #include "aux_utils.h"
 #include "ssd_index.h"
@@ -190,7 +192,9 @@ namespace pipeann {
     // reload the disk index
     _disk_index->reload(_disk_index_prefix_in.c_str(), _num_threads);
     LOG(INFO) << "Merge time : " << timer.elapsed() / 1000 << " ms";
+#ifdef USE_TCMALLOC
     MallocExtension::instance()->ReleaseFreeMemory();  // Return free list to OS.
+#endif
   }
 
   template<typename T, typename TagT>

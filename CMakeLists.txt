@@ -4,6 +4,8 @@ project(pipeann)
 set(CMAKE_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(USE_AIO "Use AIO instead of liburing" OFF)
+option(USE_TCMALLOC "Use tcmalloc for better memory allocation performance" ON)
+option(SEARCH_ONLY "Enable search-only mode with READ_ONLY_TESTS and NO_MAPPING" OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_C_COMPILER_LAUNCHER ccache)
@@ -38,10 +40,16 @@ add_definitions(
 	# -DNO_POLLUTE_ORIGINAL
 
 	# optimizations.
-	# -DREAD_ONLY_TESTS
-	# -DNO_MAPPING # starling: must disable this!
 	-DOVERLAP_INIT
 )
+
+if(SEARCH_ONLY)
+	message(STATUS "Search-only mode enabled: READ_ONLY_TESTS and NO_MAPPING")
+	add_definitions(
+		-DREAD_ONLY_TESTS
+		-DNO_MAPPING # starling: must disable this!
+	)
+endif()
 
 include_directories(
 	${PROJECT_SOURCE_DIR}/third_party/liburing/src/include
@@ -59,10 +67,17 @@ else()
 	link_libraries(uring)
 endif()
 
-# Use tcmalloc, as jemalloc does not support python (static TLS block).
-link_libraries(
-	tcmalloc
-)
+# Memory allocator configuration
+# Use tcmalloc for better performance, especially in multi-threaded scenarios.
+# jemalloc is not used as it does not support python bindings (static TLS block issue).
+# For edge devices or minimal dependencies, disable with: cmake -DUSE_TCMALLOC=OFF
+if(USE_TCMALLOC)
+	message(STATUS "Using tcmalloc for optimized memory allocation.")
+	link_libraries(tcmalloc)
+	add_definitions(-DUSE_TCMALLOC)
+else()
+	message(STATUS "Using system default malloc (glibc malloc).")
+endif()
 # add_compile_options(-fsanitize=address,undefined -lasan -lubsan)
 # add_link_options(-fsanitize=address,undefined)
 
