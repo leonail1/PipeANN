@@ -24,7 +24,12 @@ namespace pipeann {
     PQNeighbor() {
     }
 
-    static std::string get_name() {
+    // max size of context needed for a single query.
+    uint64_t query_ctx_size() {
+      return 256 * AbstractNeighbor<T>::MAX_BYTES_PER_NBR * sizeof(float);
+    }
+
+    std::string get_name() {
       return "PQNeighbor";
     }
 

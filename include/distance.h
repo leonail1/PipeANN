@@ -15,7 +15,6 @@ namespace pipeann {
     return std::sqrt(norm);
   }
 
-  //  enum Metric { L2 = 0, INNER_PRODUCT = 1, FAST_L2 = 2, PQ = 3 };
   template<typename T>
   class Distance {
    public:

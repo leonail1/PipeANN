@@ -105,9 +105,7 @@ inline int delete_file(const std::string &fileName) {
 }
 
 namespace pipeann {
-  static const size_t MAX_SIZE_OF_STREAMBUF = 2LL * 1024 * 1024 * 1024;
-
-  enum Metric { L2 = 0, INNER_PRODUCT = 1, FAST_L2 = 2, PQ = 3, COSINE = 4 };
+  enum Metric { L2 = 0, INNER_PRODUCT = 1, COSINE = 2 };
 
   inline void alloc_aligned(void **ptr, size_t size, size_t align) {
     *ptr = nullptr;
@@ -123,18 +121,14 @@ namespace pipeann {
     free(ptr);
   }
 
-  inline void get_bin_metadata_impl(std::basic_istream<char> &reader, size_t &nrows, size_t &ncols, size_t offset = 0) {
+  inline void get_bin_metadata(const std::string &bin_file, size_t &nrows, size_t &ncols, size_t offset = 0) {
+    std::ifstream reader(bin_file.c_str(), std::ios::binary);
     int nrows_32, ncols_32;
     reader.seekg(offset, reader.beg);
     reader.read((char *) &nrows_32, sizeof(int));
     reader.read((char *) &ncols_32, sizeof(int));
     nrows = nrows_32;
     ncols = ncols_32;
-  }
-
-  inline void get_bin_metadata(const std::string &bin_file, size_t &nrows, size_t &ncols, size_t offset = 0) {
-    std::ifstream reader(bin_file.c_str(), std::ios::binary);
-    get_bin_metadata_impl(reader, nrows, ncols, offset);
   }
 
   template<typename T>

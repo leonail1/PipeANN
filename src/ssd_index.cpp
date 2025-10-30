@@ -56,6 +56,7 @@ namespace pipeann {
       LOG(INFO) << "Beamwidth: " << this->beam_width << ", L: " << this->l_index << ", R: " << this->range
                 << ", C: " << this->maxc;
     }
+    LOG(INFO) << "Use " << nbr_handler->get_name() << " as neighbor handler.";
   }
 
   template<typename T, typename TagT>

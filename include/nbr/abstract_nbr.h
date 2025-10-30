@@ -13,7 +13,12 @@ namespace pipeann {
    public:
     static constexpr size_t MAX_TRAINING_SET_SIZE = 256000;
     static constexpr double TRAINING_SET_FRACTION = 0.1;
-    static constexpr uint32_t MAX_BYTES_PER_NBR = 128;
+    static constexpr uint32_t MAX_BYTES_PER_NBR = 256;
+
+    // max size of context needed for a single query.
+    virtual uint64_t query_ctx_size() {
+      return 0;
+    }
 
     virtual double get_sample_p() {
       if (unlikely(this->npoints == 0)) {
@@ -30,7 +35,7 @@ namespace pipeann {
 
     virtual ~AbstractNeighbor() = default;
 
-    static std::string get_name() {
+    virtual std::string get_name() {
       return "AbstractNeighbor";
     }
     // rev_id_map: new_id -> old_id.

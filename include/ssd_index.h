@@ -92,7 +92,7 @@ namespace pipeann {
 
       this->cur_loc = num_points;
       // aligned.
-      if (num_points % nnodes_per_sector != 0) {
+      if (nnodes_per_sector != 0 && num_points % nnodes_per_sector != 0) {
         cur_loc += nnodes_per_sector - (num_points % nnodes_per_sector);
       }
       LOG(INFO) << "Cur location: " << this->cur_loc;
@@ -116,8 +116,7 @@ namespace pipeann {
       pipeann::alloc_aligned((void **) &buf.sector_scratch, MAX_N_SECTOR_READS * size_per_io, SECTOR_LEN);
       pipeann::alloc_aligned((void **) &buf.nbr_vec_scratch,
                              MAX_N_EDGES * AbstractNeighbor<T>::MAX_BYTES_PER_NBR * sizeof(uint8_t), 256);
-      pipeann::alloc_aligned((void **) &buf.nbr_ctx_scratch,
-                             256 * AbstractNeighbor<T>::MAX_BYTES_PER_NBR * sizeof(float), 256);
+      pipeann::alloc_aligned((void **) &buf.nbr_ctx_scratch, ROUND_UP(nbr_handler->query_ctx_size(), 256), 256);
       pipeann::alloc_aligned((void **) &buf.aligned_dist_scratch, MAX_N_EDGES * sizeof(float), 256);
       pipeann::alloc_aligned((void **) &buf.aligned_query_T, this->aligned_dim * sizeof(T), 8 * sizeof(T));
 
