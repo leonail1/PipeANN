@@ -1,6 +1,5 @@
 #include <index.h>
 #include <omp.h>
-#include <string.h>
 #include <numeric>
 #include "utils.h"
 #include <sys/mman.h>

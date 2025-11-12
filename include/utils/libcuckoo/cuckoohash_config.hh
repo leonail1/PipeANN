@@ -12,8 +12,11 @@ namespace libcuckoo {
 constexpr size_t DEFAULT_SLOT_PER_BUCKET = 4;
 
 //! The default number of elements in an empty hash table
+// MODIFIED: Reduced from (1U << 16) to (1U << 6) to save memory
+// Original: 65536 * 4 = 262,144 elements (~10MB per instance)
+// New: 64 * 4 = 256 elements (~10KB per instance)
 constexpr size_t DEFAULT_SIZE =
-    (1U << 16) * DEFAULT_SLOT_PER_BUCKET;
+    (1U << 6) * DEFAULT_SLOT_PER_BUCKET;
 
 //! The default minimum load factor that the table allows for automatic
 //! expansion. It must be a number between 0.0 and 1.0. The table will throw

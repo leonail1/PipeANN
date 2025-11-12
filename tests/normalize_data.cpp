@@ -2,7 +2,6 @@
 #include <cstring>
 #include <ctime>
 #include "utils/timer.h"
-#include "utils/log.h"
 #include "utils.h"
 
 #include <sys/mman.h>

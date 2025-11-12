@@ -1,6 +1,5 @@
 // Check if CPU supports AVX512 and AVX2 instructions
 
-#include <iostream>
 #if defined(_MSC_VER)
 #include <intrin.h>
 #else

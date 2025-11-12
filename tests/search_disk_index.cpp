@@ -23,7 +23,6 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <fstream>
 #include "linux_aligned_file_reader.h"
 
 #define WARMUP false
@@ -368,48 +367,48 @@ int search_disk_index(int argc, char **argv) {
     run_tests(test_id, true);
   }
 
-  // 输出所有 L 的内存分配详情
-  std::cout << "\n=============================================="
-               "==========================================="
-            << std::endl;
-  std::cout << "Memory Allocation Details for Each L:" << std::endl;
-  std::cout << "=============================================="
-               "==========================================="
-            << std::endl;
+//   // 输出所有 L 的内存分配详情
+//   std::cout << "\n=============================================="
+//                "==========================================="
+//             << std::endl;
+//   std::cout << "Memory Allocation Details for Each L:" << std::endl;
+//   std::cout << "=============================================="
+//                "==========================================="
+//             << std::endl;
 
-  for (uint32_t test_id = 0; test_id < Lvec.size(); test_id++) {
-    const LMemoryInfo &mem_info = memory_records[test_id];
+//   for (uint32_t test_id = 0; test_id < Lvec.size(); test_id++) {
+//     const LMemoryInfo &mem_info = memory_records[test_id];
 
-    std::cout << "\nL = " << mem_info.L << ":" << std::endl;
+//     std::cout << "\nL = " << mem_info.L << ":" << std::endl;
 
-    // QueryStats 数组分配
-    std::cout << "  [1] QueryStats Array:" << std::endl;
-    std::cout << "      预计分配: " << std::setw(10) << mem_info.querystats_alloc.expected_kb << " KB" << std::endl;
-    std::cout << "      分配前:   " << std::setw(10) << mem_info.querystats_alloc.before_kb << " KB" << std::endl;
-    std::cout << "      分配后:   " << std::setw(10) << mem_info.querystats_alloc.after_kb << " KB" << std::endl;
-    std::cout << "      实际增长: " << std::setw(10)
-              << (mem_info.querystats_alloc.after_kb - mem_info.querystats_alloc.before_kb) << " KB" << std::endl;
+//     // QueryStats 数组分配
+//     std::cout << "  [1] QueryStats Array:" << std::endl;
+//     std::cout << "      预计分配: " << std::setw(10) << mem_info.querystats_alloc.expected_kb << " KB" << std::endl;
+//     std::cout << "      分配前:   " << std::setw(10) << mem_info.querystats_alloc.before_kb << " KB" << std::endl;
+//     std::cout << "      分配后:   " << std::setw(10) << mem_info.querystats_alloc.after_kb << " KB" << std::endl;
+//     std::cout << "      实际增长: " << std::setw(10)
+//               << (mem_info.querystats_alloc.after_kb - mem_info.querystats_alloc.before_kb) << " KB" << std::endl;
 
-    // 结果数组分配
-    std::cout << "  [2] Result Arrays (ids/dists/tags):" << std::endl;
-    std::cout << "      预计分配: " << std::setw(10) << mem_info.result_arrays_alloc.expected_kb << " KB" << std::endl;
-    std::cout << "      分配前:   " << std::setw(10) << mem_info.result_arrays_alloc.before_kb << " KB" << std::endl;
-    std::cout << "      分配后:   " << std::setw(10) << mem_info.result_arrays_alloc.after_kb << " KB" << std::endl;
-    std::cout << "      实际增长: " << std::setw(10)
-              << (mem_info.result_arrays_alloc.after_kb - mem_info.result_arrays_alloc.before_kb) << " KB" << std::endl;
+//     // 结果数组分配
+//     std::cout << "  [2] Result Arrays (ids/dists/tags):" << std::endl;
+//     std::cout << "      预计分配: " << std::setw(10) << mem_info.result_arrays_alloc.expected_kb << " KB" << std::endl;
+//     std::cout << "      分配前:   " << std::setw(10) << mem_info.result_arrays_alloc.before_kb << " KB" << std::endl;
+//     std::cout << "      分配后:   " << std::setw(10) << mem_info.result_arrays_alloc.after_kb << " KB" << std::endl;
+//     std::cout << "      实际增长: " << std::setw(10)
+//               << (mem_info.result_arrays_alloc.after_kb - mem_info.result_arrays_alloc.before_kb) << " KB" << std::endl;
 
-    // 临时标签数组分配
-    std::cout << "  [3] Temporary Tag Arrays:" << std::endl;
-    std::cout << "      预计分配: " << std::setw(10) << mem_info.temp_tags_alloc.expected_kb << " KB" << std::endl;
-    std::cout << "      分配前:   " << std::setw(10) << mem_info.temp_tags_alloc.before_kb << " KB" << std::endl;
-    std::cout << "      分配后:   " << std::setw(10) << mem_info.temp_tags_alloc.after_kb << " KB" << std::endl;
-    std::cout << "      实际增长: " << std::setw(10)
-              << (mem_info.temp_tags_alloc.after_kb - mem_info.temp_tags_alloc.before_kb) << " KB" << std::endl;
-  }
+//     // 临时标签数组分配
+//     std::cout << "  [3] Temporary Tag Arrays:" << std::endl;
+//     std::cout << "      预计分配: " << std::setw(10) << mem_info.temp_tags_alloc.expected_kb << " KB" << std::endl;
+//     std::cout << "      分配前:   " << std::setw(10) << mem_info.temp_tags_alloc.before_kb << " KB" << std::endl;
+//     std::cout << "      分配后:   " << std::setw(10) << mem_info.temp_tags_alloc.after_kb << " KB" << std::endl;
+//     std::cout << "      实际增长: " << std::setw(10)
+//               << (mem_info.temp_tags_alloc.after_kb - mem_info.temp_tags_alloc.before_kb) << " KB" << std::endl;
+//   }
 
-  std::cout << "\n=============================================="
-               "==========================================="
-            << std::endl;
+//   std::cout << "\n=============================================="
+//                "==========================================="
+//             << std::endl;
 
   return 0;
 }

@@ -1,22 +1,36 @@
 #!/bin/bash
 
-# Usage: ./process_bigann.sh <size>
-# Example: ./process_bigann.sh 10m
+# Usage: ./process_bigann.sh <size> [method]
+# Example: ./process_bigann.sh 10m pq
+# Example: ./process_bigann.sh 10m rabitq
 # Supported units: k (thousand), m (million), b (billion)
 # Maximum size: 1b (1 billion)
+# Method: pq (default) or rabitq
 # 从原始的bigann数据集生成pipeann需要的所有文件（包括索引文件、查询文件、 groundtruth文件）
 
 set -e
 
 # Check if size argument is provided
-if [ $# -ne 1 ]; then
-    echo "Usage: $0 <size>"
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+    echo "Usage: $0 <size> [method]"
     echo "Example: $0 10m"
+    echo "Example: $0 10m pq"
+    echo "Example: $0 10m rabitq"
     echo "Supported formats: 10k, 10m, 1b (max 1b)"
+    echo "Supported methods: pq (default), rabitq"
     exit 1
 fi
 
 SIZE_ARG="$1"
+METHOD="${2:-pq}"  # Default to pq if not specified
+
+# Validate method
+if [[ "$METHOD" != "pq" && "$METHOD" != "rabitq" ]]; then
+    echo "Error: Invalid method '$METHOD'. Supported methods: pq, rabitq"
+    exit 1
+fi
+
+echo "Using method: $METHOD"
 
 # Parse the size argument
 parse_size() {
@@ -67,13 +81,13 @@ fi
 echo "Processing BigANN dataset with $NUM_VECS vectors ($SIZE_ARG)"
 
 # Define paths
-DATA_DIR="/data"
+DATA_DIR="/data/lzg"
 BIGANN_DIR="${DATA_DIR}/bigann"
 BIGANN_QUERY_VECS="${BIGANN_DIR}/bigann_query.bvecs"
 BIGANN_BASE_BIN="${BIGANN_DIR}/bigann.bin"
 
-# Create output directory name
-OUTPUT_DIR="${DATA_DIR}/sift-pipeann/sift${SIZE_ARG}"
+# Create output directory name with method suffix
+OUTPUT_DIR="${DATA_DIR}/sift-pipeann/sift${SIZE_ARG}_${METHOD}"
 INDICES_DIR="${OUTPUT_DIR}/indices"
 
 # Check if output directory exists
@@ -101,7 +115,7 @@ GROUNDTRUTH="${OUTPUT_DIR}/groundtruth_${SIZE_ARG}.bin"
 INDEX_PREFIX="${INDICES_DIR}/${SIZE_ARG}"
 
 # Build directory
-BUILD_DIR="/home/dell/PipeANN/build"
+BUILD_DIR="/home/lzg/PipeANN/build"
 
 # Step 1: Convert query vecs to bin
 echo ""
@@ -162,8 +176,8 @@ MAX_MEM_GB=64
 NUM_THREADS=32
 BYTES_PER_NBR=32
 
-echo "Building disk index with R=$R, L=$L, bytes_per_nbr=$BYTES_PER_NBR, max_mem=${MAX_MEM_GB}GB, threads=$NUM_THREADS"
-${BUILD_DIR}/tests/build_disk_index uint8 "$DATA_SUBSET" "$INDEX_PREFIX" $R $L $BYTES_PER_NBR $MAX_MEM_GB $NUM_THREADS l2 pq
+echo "Building disk index with R=$R, L=$L, bytes_per_nbr=$BYTES_PER_NBR, max_mem=${MAX_MEM_GB}GB, threads=$NUM_THREADS, method=$METHOD"
+${BUILD_DIR}/tests/build_disk_index uint8 "$DATA_SUBSET" "$INDEX_PREFIX" $R $L $BYTES_PER_NBR $MAX_MEM_GB $NUM_THREADS l2 $METHOD
 echo "Disk index built with prefix: $INDEX_PREFIX"
 
 # Step 5: Build memory index
@@ -194,4 +208,4 @@ echo "  - Disk index: ${INDEX_PREFIX}_disk.index"
 echo "  - Memory index: ${INDEX_PREFIX}_mem.index"
 echo ""
 echo "You can now search using:"
-echo "${BUILD_DIR}/tests/search_disk_index uint8 ${INDEX_PREFIX} 1 32 ${QUERY_BIN} ${GROUNDTRUTH} 10 l2 pq 2 10 10 20 30 40"
+echo "${BUILD_DIR}/tests/search_disk_index uint8 ${INDEX_PREFIX} 1 32 ${QUERY_BIN} ${GROUNDTRUTH} 10 l2 $METHOD 2 10 10 20 30 40"

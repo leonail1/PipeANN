@@ -2,6 +2,8 @@ build/
 .vscode/
 indices/
 .cache/
+.claude/
+.qoder/
 data/*
 data-example/*
 figures/*
@@ -10,3 +12,5 @@ pipeann/*.so
 pipeann/__pycache__/*
 pipeann.egg-info/
 dist/
+
+compile_commands.json

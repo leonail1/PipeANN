@@ -4,10 +4,10 @@ echo "This script tests OdinANN insert performance on sift1m dataset."
 echo "Starting from 100k index, incrementally inserting to 1M"
 
 # 清理之前的索引文件
-rm -f /data/sift-pipeann/sift100k/indices/100k_shadow*
-rm -f /data/sift-pipeann/sift100k/indices/100k_merge*
-rm -f /data/sift-pipeann/sift100k/indices/100ktemp0*
-rm -f /data/sift-pipeann/sift100k/indices/100k_mem*
+rm -f /data/lzg/sift-pipeann/sift100k/indices/100k_shadow*
+rm -f /data/lzg/sift-pipeann/sift100k/indices/100k_merge*
+rm -f /data/lzg/sift-pipeann/sift100k/indices/100ktemp0*
+rm -f /data/lzg/sift-pipeann/sift100k/indices/100k_mem*
 
 # 创建数据输出目录
 mkdir -p ./data-insert-search
@@ -15,17 +15,17 @@ mkdir -p ./data-insert-search
 CWD=$(pwd)
 
 # 设置环境变量 - 使用100k索引
-INDEX_PREFIX="/data/sift-pipeann/sift100k/indices/100k"
+INDEX_PREFIX="/data/lzg/sift-pipeann/sift100k/indices/100k"
 
 # 构建内存索引 (从100k索引的1%采样)
 echo "Building memory index from 100k dataset..."
 ${CWD}/build/tests/build_memory_index uint8 ${INDEX_PREFIX}_SAMPLE_RATE_0.01_data.bin ${INDEX_PREFIX}_SAMPLE_RATE_0.01_ids.bin ${INDEX_PREFIX}_mem.index 0 0 32 64 1.2 24 l2
 
 echo "Starting OdinANN insert test: 100k -> 1M"
-echo "Data file: /data/sift-pipeann/sift1m/bigann_1m.bin (1M vectors, will use 100k-1M range)"
-echo "Query file: /data/sift-pipeann/sift1m/bigann_query.bin"
-echo "Initial index: /data/sift-pipeann/sift100k/indices/100k (100k vectors)"
-echo "Ground truth folder: /data/sift-pipeann/indices_upd/5m_topk"
+echo "Data file: /data/lzg/sift-pipeann/sift1m_pq/bigann_1m.bin (1M vectors, will use 100k-1M range)"
+echo "Query file: /data/lzg/sift-pipeann/sift1m_pq/bigann_query.bin"
+echo "Initial index: /data/lzg/sift-pipeann/sift100k/indices/100k (100k vectors)"
+echo "Ground truth folder: /data/lzg/sift-pipeann/indices_upd/5m_topk"
 
 # 运行OdinANN插入测试
 # 用法示例：
@@ -60,15 +60,15 @@ echo "Ground truth folder: /data/sift-pipeann/indices_upd/5m_topk"
 # - ...
 # - Batch 8: 插入索引 900000-999999 (第10个100k)
 # - 总共9个batch,从100k增长到1M
-/home/dell/PipeANN/build/tests/test_insert_search uint8 /data/sift-pipeann/sift1m/bigann_1m.bin 128 100000 10 1 1 0 ${INDEX_PREFIX} /data/sift-pipeann/sift1m/bigann_query.bin /data/sift-pipeann/indices_upd/5m_topk 0 10 4 4 10 20 25 30 40 50 |& tee $CWD/data-insert-search/OdinANN-insert-sift1m.txt
+~/PipeANN/build/tests/test_insert_search uint8 /data/lzg/sift-pipeann/sift1m_pq/bigann_1m.bin 128 100000 10 1 1 0 ${INDEX_PREFIX} /data/lzg/sift-pipeann/sift1m_pq/bigann_query.bin /data/lzg/sift-pipeann/indices_upd/5m_topk 0 10 4 4 10 20 25 30 40 50 |& tee $CWD/data-insert-search/OdinANN-insert-sift1m.txt
 
 echo "OdinANN sift1m insert test completed."
 echo "Results saved to: $CWD/data-insert-search/OdinANN-insert-sift1m.txt"
 
 # 清理测试后的临时文件（保留内存索引文件）
-rm -f /data/sift-pipeann/sift100k/indices/100k_shadow*
-rm -f /data/sift-pipeann/sift100k/indices/100k_merge*
-# rm -f /data/sift-pipeann/sift100k/indices/100k_mem*  # 保留内存索引文件，避免下次重新构建
-rm -f /data/sift-pipeann/sift100k/indices/100ktemp0*
+rm -f /data/lzg/sift-pipeann/sift100k/indices/100k_shadow*
+rm -f /data/lzg/sift-pipeann/sift100k/indices/100k_merge*
+# rm -f /data/lzg/sift-pipeann/sift100k/indices/100k_mem*  # 保留内存索引文件，避免下次重新构建
+rm -f /data/lzg/sift-pipeann/sift100k/indices/100ktemp0*
 
 echo "Cleanup completed."

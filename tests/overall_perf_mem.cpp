@@ -1,4 +1,3 @@
-#include "v2/dynamic_index.h"
 
 #include <index.h>
 #include <neighbor.h>
@@ -14,14 +13,11 @@
 #include <iomanip>
 #include <iostream>
 #include <fstream>
-#include <unordered_map>
 #include <dirent.h>
 #include <sys/stat.h>
 
 #include "aux_utils.h"
 #include "index.h"
-#include "math_utils.h"
-#include "partition.h"
 #include "utils.h"
 
 #include <sys/mman.h>

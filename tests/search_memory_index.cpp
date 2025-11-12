@@ -1,7 +1,6 @@
 #include <cstring>
 #include <iomanip>
 #include <omp.h>
-#include <set>
 #include <string.h>
 
 #include <sys/mman.h>
