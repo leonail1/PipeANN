@@ -323,7 +323,7 @@ int partition_with_ram_budget(const std::string data_file, const double sampling
     LOG(INFO) << "Processing global k-means (kmeans_partitioning Step)";
     kmeans::kmeanspp_selecting_pivots(train_data_float, num_train, train_dim, pivot_data, num_parts);
 
-    kmeans::run_lloyds(train_data_float, num_train, train_dim, pivot_data, num_parts, max_k_means_reps, NULL, NULL);
+    kmeans::run_elkan(train_data_float, num_train, train_dim, pivot_data, num_parts, max_k_means_reps, NULL, NULL);
 
     // now pivots are ready. need to stream base points and assign them to
     // closest clusters.

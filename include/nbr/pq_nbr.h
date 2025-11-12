@@ -3,9 +3,6 @@
 #include "utils/libcuckoo/cuckoohash_map.hh"
 #include "utils.h"
 #include <immintrin.h>
-#include <sstream>
-#include <string_view>
-#include <shared_mutex>
 #include "nbr/pq_table.h"
 #include "ssd_index_defs.h"
 #include "nbr/abstract_nbr.h"
@@ -283,57 +280,25 @@ namespace pipeann {
         }
       }
 
-      std::vector<uint32_t> rearrangement;
+      // Simplified: no longer using rearrangement, dimensions are processed in natural order
       std::vector<uint32_t> chunk_offsets;
 
       size_t low_val = (size_t) std::floor((double) dim / (double) num_pq_chunks);
       size_t high_val = (size_t) std::ceil((double) dim / (double) num_pq_chunks);
       size_t max_num_high = dim - (low_val * num_pq_chunks);
-      size_t cur_num_high = 0;
-      size_t cur_bin_threshold = high_val;
 
-      std::vector<std::vector<uint32_t>> bin_to_dims(num_pq_chunks);
-      tsl::robin_map<uint32_t, uint32_t> dim_to_bin;
-      std::vector<float> bin_loads(num_pq_chunks, 0);
-
-      // Process dimensions not inserted by previous loop
-      for (uint32_t d = 0; d < dim; d++) {
-        if (dim_to_bin.find(d) != dim_to_bin.end())
-          continue;
-        auto cur_best = num_pq_chunks + 1;
-        float cur_best_load = std::numeric_limits<float>::max();
-        for (uint32_t b = 0; b < num_pq_chunks; b++) {
-          if (bin_loads[b] < cur_best_load && bin_to_dims[b].size() < cur_bin_threshold) {
-            cur_best = b;
-            cur_best_load = bin_loads[b];
-          }
-        }
-        bin_to_dims[cur_best].push_back(d);
-        if (bin_to_dims[cur_best].size() == high_val) {
-          cur_num_high++;
-          if (cur_num_high == max_num_high)
-            cur_bin_threshold = low_val;
-        }
-      }
-
-      rearrangement.clear();
-      chunk_offsets.clear();
+      // Build chunk_offsets directly - distribute dimensions evenly
       chunk_offsets.push_back(0);
-
       for (uint32_t b = 0; b < num_pq_chunks; b++) {
-        for (auto p : bin_to_dims[b]) {
-          rearrangement.push_back(p);
-        }
-        if (b > 0)
-          chunk_offsets.push_back(chunk_offsets[b - 1] + (unsigned) bin_to_dims[b - 1].size());
+        size_t chunk_size = (b < max_num_high) ? high_val : low_val;
+        chunk_offsets.push_back(chunk_offsets[b] + chunk_size);
       }
-      chunk_offsets.push_back(dim);
 
       full_pivot_data.reset(new float[num_centers * dim]);
 
-      // DEBUG ONLY
-      double kmeans_time = 0.0, lloyds_time = 0.0, copy_time = 0.0;
-
+      // Every thread compute one chunk, fast enough.
+      auto st = std::chrono::high_resolution_clock::now();
+#pragma omp parallel for
       for (size_t i = 0; i < num_pq_chunks; i++) {
         size_t cur_chunk_size = chunk_offsets[i + 1] - chunk_offsets[i];
 
@@ -345,45 +310,28 @@ namespace pipeann {
 
         memset((void *) cur_pivot_data.get(), 0, num_centers * cur_chunk_size * sizeof(float));
 
-        auto start = std::chrono::high_resolution_clock::now();
-#pragma omp parallel for schedule(static, 65536)
         for (int64_t j = 0; j < (int64_t) num_train; j++) {
-          std::memcpy(cur_data.get() + j * cur_chunk_size, train_data.get() + j * dim + chunk_offsets[i],
-                      cur_chunk_size * sizeof(float));
+          memcpy(cur_data.get() + j * cur_chunk_size, train_data.get() + j * dim + chunk_offsets[i],
+                 cur_chunk_size * sizeof(float));
         }
-        auto end = std::chrono::high_resolution_clock::now();
-        copy_time += std::chrono::duration<double>(end - start).count();
 
-        start = std::chrono::high_resolution_clock::now();
-        // kmeans::kmeanspp_selecting_pivots(cur_data.get(), num_train,
-        // cur_chunk_size,
-        //                                  cur_pivot_data.get(), num_centers);
-        kmeans::selecting_pivots(cur_data.get(), num_train, cur_chunk_size, cur_pivot_data.get(), num_centers);
+        kmeans::kmeanspp_selecting_pivots(cur_data.get(), num_train, cur_chunk_size, cur_pivot_data.get(), num_centers);
+        kmeans::run_elkan(cur_data.get(), num_train, cur_chunk_size, cur_pivot_data.get(), num_centers,
+                          max_k_means_reps, nullptr, closest_center.get());
 
-        unsigned k_means_reps = max_k_means_reps;
-
-        kmeans::run_lloyds(cur_data.get(), num_train, cur_chunk_size, cur_pivot_data.get(), num_centers, k_means_reps,
-                           nullptr, closest_center.get());
-        end = std::chrono::high_resolution_clock::now();
-        kmeans_time += std::chrono::duration<double>(end - start).count();
-
-        start = std::chrono::high_resolution_clock::now();
-        if (num_train > 2 * num_centers) {
-          kmeans::run_lloyds(cur_data.get(), num_train, cur_chunk_size, cur_pivot_data.get(), num_centers,
-                             max_k_means_reps, NULL, closest_center.get());
-        }
-        end = std::chrono::high_resolution_clock::now();
-        lloyds_time += std::chrono::duration<double>(end - start).count();
-
-        start = std::chrono::high_resolution_clock::now();
         for (uint64_t j = 0; j < num_centers; j++) {
-          std::memcpy(full_pivot_data.get() + j * dim + chunk_offsets[i], cur_pivot_data.get() + j * cur_chunk_size,
-                      cur_chunk_size * sizeof(float));
+          memcpy(full_pivot_data.get() + j * dim + chunk_offsets[i], cur_pivot_data.get() + j * cur_chunk_size,
+                 cur_chunk_size * sizeof(float));
         }
-        end = std::chrono::high_resolution_clock::now();
-        copy_time += std::chrono::duration<double>(end - start).count();
       }
-      LOG(INFO) << "Kmeans time: " << kmeans_time << " Lloyds time: " << lloyds_time << " Copy time: " << copy_time;
+      auto ed = std::chrono::high_resolution_clock::now();
+      LOG(INFO) << "Kmeans time: " << std::chrono::duration<double>(ed - st).count() << "s.";
+
+      // Create dummy identity rearrangement for backward compatibility
+      std::vector<uint32_t> dummy_rearrangement(dim);
+      for (uint32_t d = 0; d < dim; d++) {
+        dummy_rearrangement[d] = d;
+      }
 
       std::vector<size_t> cumul_bytes(5, 0);
       cumul_bytes[0] = METADATA_SIZE;
@@ -391,14 +339,13 @@ namespace pipeann {
                                                                  (size_t) num_centers, dim, cumul_bytes[0]);
       cumul_bytes[2] = cumul_bytes[1] + pipeann::save_bin<float>(pq_pivots_path.c_str(), centroid.get(), (size_t) dim,
                                                                  1, cumul_bytes[1]);
-      cumul_bytes[3] = cumul_bytes[2] + pipeann::save_bin<uint32_t>(pq_pivots_path.c_str(), rearrangement.data(),
-                                                                    rearrangement.size(), 1, cumul_bytes[2]);
+      cumul_bytes[3] = cumul_bytes[2] + pipeann::save_bin<uint32_t>(pq_pivots_path.c_str(), dummy_rearrangement.data(),
+                                                                    dummy_rearrangement.size(), 1, cumul_bytes[2]);
       cumul_bytes[4] = cumul_bytes[3] + pipeann::save_bin<uint32_t>(pq_pivots_path.c_str(), chunk_offsets.data(),
                                                                     chunk_offsets.size(), 1, cumul_bytes[3]);
       pipeann::save_bin<uint64_t>(pq_pivots_path.c_str(), cumul_bytes.data(), cumul_bytes.size(), 1, 0);
 
-      LOG(INFO) << "Saved pq pivot data to " << pq_pivots_path << " of size " << cumul_bytes[cumul_bytes.size() - 1]
-                << "B.";
+      LOG(INFO) << "Saved pq pivot to " << pq_pivots_path << " of size " << cumul_bytes[cumul_bytes.size() - 1] << "B.";
 
       return 0;
     }
@@ -459,6 +406,7 @@ namespace pipeann {
           crash();
         }
 
+        // Load rearrangement for backward compatibility, but don't use it (should be identity mapping)
         pipeann::load_bin<uint32_t>(pq_pivots_path.c_str(), rearrangement, nr, nc, file_offset_data[2]);
 
         if ((nr != dim) || (nc != 1)) {
@@ -491,7 +439,6 @@ namespace pipeann {
 
       std::unique_ptr<T[]> block_data_T = std::make_unique<T[]>(block_size * dim);
       std::unique_ptr<float[]> block_data_float = std::make_unique<float[]>(block_size * dim);
-      std::unique_ptr<float[]> block_data_tmp = std::make_unique<float[]>(block_size * dim);
 
       size_t num_blocks = DIV_ROUND_UP(num_points, block_size);
 
@@ -501,20 +448,18 @@ namespace pipeann {
         size_t cur_blk_size = end_id - start_id;
 
         base_reader.read((char *) (block_data_T.get()), sizeof(T) * (cur_blk_size * dim));
-        pipeann::convert_types<T, float>(block_data_T.get(), block_data_tmp.get(), cur_blk_size, dim);
+        pipeann::convert_types<T, float>(block_data_T.get(), block_data_float.get(), cur_blk_size, dim);
 
+        // Subtract centroid directly from block_data_float (parallel over points)
+#pragma omp parallel for schedule(static, 512)
         for (uint64_t p = 0; p < cur_blk_size; p++) {
           for (uint64_t d = 0; d < dim; d++) {
-            block_data_tmp[p * dim + d] -= centroid[d];
+            block_data_float[p * dim + d] -= centroid[d];
           }
         }
 
-        for (uint64_t p = 0; p < cur_blk_size; p++) {
-          for (uint64_t d = 0; d < dim; d++) {
-            block_data_float[p * dim + d] = block_data_tmp[p * dim + rearrangement[d]];
-          }
-        }
-
+        // Parallelize over PQ chunks - each chunk is independent
+#pragma omp parallel for schedule(dynamic, 1)
         for (size_t i = 0; i < num_pq_chunks; i++) {
           size_t cur_chunk_size = chunk_offsets[i + 1] - chunk_offsets[i];
           if (cur_chunk_size == 0)
@@ -524,21 +469,23 @@ namespace pipeann {
           std::unique_ptr<float[]> cur_data = std::make_unique<float[]>(cur_blk_size * cur_chunk_size);
           std::unique_ptr<uint32_t[]> closest_center = std::make_unique<uint32_t[]>(cur_blk_size);
 
-#pragma omp parallel for schedule(static, 8192)
+          // Extract chunk data from block
           for (int64_t j = 0; j < (int64_t) cur_blk_size; j++) {
-            for (uint64_t k = 0; k < cur_chunk_size; k++)
-              cur_data[j * cur_chunk_size + k] = block_data_float[j * dim + chunk_offsets[i] + k];
+            std::memcpy(cur_data.get() + j * cur_chunk_size, block_data_float.get() + j * dim + chunk_offsets[i],
+                        cur_chunk_size * sizeof(float));
           }
 
-#pragma omp parallel for schedule(static, 1)
+          // Extract chunk pivots
           for (int64_t j = 0; j < (int64_t) num_centers; j++) {
             std::memcpy(cur_pivot_data.get() + j * cur_chunk_size, full_pivot_data.get() + j * dim + chunk_offsets[i],
                         cur_chunk_size * sizeof(float));
           }
 
+          // Compute closest centers for this chunk
           math_utils::compute_closest_centers(cur_data.get(), cur_blk_size, cur_chunk_size, cur_pivot_data.get(),
                                               num_centers, 1, closest_center.get());
-#pragma omp parallel for schedule(static, 8192)
+
+          // Write results to output
           for (int64_t j = 0; j < (int64_t) cur_blk_size; j++) {
             block_compressed_base[j * num_pq_chunks + i] = closest_center[j];
           }
@@ -553,10 +500,8 @@ namespace pipeann {
                                                     num_pq_chunks);
           compressed_file_writer.write((char *) (pVec.get()), cur_blk_size * num_pq_chunks * sizeof(uint8_t));
         }
-        // LOG(INFO) << ".done.";
       }
-      // Splittng diskann_dll into separate DLLs for search and build.
-      // This code should only be available in the "build" DLL.
+      auto ed = std::chrono::high_resolution_clock::now();
       compressed_file_writer.close();
       return 0;
     }

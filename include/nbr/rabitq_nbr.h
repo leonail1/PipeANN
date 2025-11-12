@@ -336,8 +336,8 @@ namespace pipeann {
       std::vector<float> pivot_data(num_centers * dim);
       kmeans::kmeanspp_selecting_pivots(const_cast<float *>(train_data), num_train, dim, pivot_data.data(),
                                         num_centers);
-      kmeans::run_lloyds(const_cast<float *>(train_data), num_train, dim, pivot_data.data(), num_centers,
-                         max_k_means_reps, nullptr, nullptr);
+      kmeans::run_elkan(const_cast<float *>(train_data), num_train, dim, pivot_data.data(), num_centers,
+                        max_k_means_reps, nullptr, nullptr);
       return pivot_data;
     }
 

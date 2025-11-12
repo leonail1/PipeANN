@@ -17,7 +17,6 @@ namespace pipeann {
     float *tables = nullptr;  // pq_tables = float* [[2^8 * [chunk_size]] * n_chunks]
     float *centroid = nullptr;
     uint32_t *chunk_offsets = nullptr;
-    uint32_t *rearrangement = nullptr;
     float *tables_T = nullptr;  // same as pq_tables, but col-major
     float *all_to_all_dists = nullptr;
 
@@ -38,14 +37,12 @@ namespace pipeann {
         this->n_chunks = other.n_chunks;
         this->tables = other.tables;
         this->tables_T = other.tables_T;
-        this->rearrangement = other.rearrangement;
         this->chunk_offsets = other.chunk_offsets;
         this->centroid = other.centroid;
         this->all_to_all_dists = other.all_to_all_dists;
 
         other.tables = nullptr;
         other.tables_T = nullptr;
-        other.rearrangement = nullptr;
         other.chunk_offsets = nullptr;
         other.centroid = nullptr;
         other.all_to_all_dists = nullptr;
@@ -65,10 +62,6 @@ namespace pipeann {
       if (tables_T != nullptr) {
         delete[] tables_T;
         tables_T = nullptr;
-      }
-      if (rearrangement != nullptr) {
-        delete[] rearrangement;
-        rearrangement = nullptr;
       }
       if (chunk_offsets != nullptr) {
         delete[] chunk_offsets;
@@ -115,7 +108,9 @@ namespace pipeann {
         crash();
       }
 
-      pipeann::load_bin_impl<uint32_t>(reader, rearrangement, nr, nc, file_offset_data[2] + offset);
+      // Load and discard rearrangement for backward compatibility (no longer used)
+      std::vector<uint32_t> dummy_rearrangement(this->ndims);
+      pipeann::load_bin_impl<uint32_t>(reader, dummy_rearrangement, nr, nc, file_offset_data[2] + offset);
       if ((nr != this->ndims) || (nc != 1)) {
         LOG(ERROR) << "Rearrangement incorrect: row " << nr << ", col " << nc << " expecting " << this->ndims;
         crash();
@@ -134,11 +129,18 @@ namespace pipeann {
     }
 
     void save_pq_pivots(const char *pq_pivots_path) {
+      // Create dummy identity rearrangement for backward compatibility
+      std::vector<uint32_t> dummy_rearrangement(this->ndims);
+      for (uint32_t d = 0; d < this->ndims; d++) {
+        dummy_rearrangement[d] = d;
+      }
+
       std::vector<size_t> offs(NUM_PQ_OFFSETS, 0);
       offs[0] = METADATA_SIZE;
       offs[1] = offs[0] + pipeann::save_bin<float>(pq_pivots_path, tables, NUM_PQ_CENTROIDS, this->ndims, offs[0]);
       offs[2] = offs[1] + pipeann::save_bin<float>(pq_pivots_path, centroid, this->ndims, 1, offs[1]);
-      offs[3] = offs[2] + pipeann::save_bin<uint32_t>(pq_pivots_path, rearrangement, this->ndims, 1, offs[2]);
+      offs[3] =
+          offs[2] + pipeann::save_bin<uint32_t>(pq_pivots_path, dummy_rearrangement.data(), this->ndims, 1, offs[2]);
       offs[4] = offs[3] + pipeann::save_bin<uint32_t>(pq_pivots_path, chunk_offsets, this->n_chunks + 1, 1, offs[3]);
       pipeann::save_bin<uint64_t>(pq_pivots_path, offs.data(), offs.size(), 1, 0);
     }
@@ -191,10 +193,10 @@ namespace pipeann {
         // sum (q-c)^2 for the dimensions associated with this chunk
         float *chunk_dists = dist_vec + (256 * chunk);
         for (uint64_t j = chunk_offsets[chunk]; j < chunk_offsets[chunk + 1]; j++) {
-          uint64_t permuted_dim_in_query = rearrangement[j];
+          // No longer using rearrangement - dimensions are processed in natural order
           const float *centers_dim_vec = tables_T + (256 * j);
           for (uint64_t idx = 0; idx < 256; idx++) {
-            double diff = centers_dim_vec[idx] - (query_vec[permuted_dim_in_query] - centroid[permuted_dim_in_query]);
+            double diff = centers_dim_vec[idx] - (query_vec[j] - centroid[j]);
             chunk_dists[idx] += (float) (diff * diff);
           }
         }
@@ -209,12 +211,12 @@ namespace pipeann {
         // sum (q-c)^2 for the dimensions associated with this chunk
         float *chunk_dists = dist_vec + (256 * chunk);
         for (uint64_t j = chunk_offsets[chunk]; j < chunk_offsets[chunk + 1]; j++) {
-          uint64_t permuted_dim_in_query = rearrangement[j];
+          // No longer using rearrangement - dimensions are processed in natural order
           float *centers_dim_vec = tables_T + (256 * j);
           for (uint64_t idx = 0; idx < 256; idx += 16) {
             __m512i center_i = _mm512_stream_load_si512(centers_dim_vec + idx);  // avoid cache thrashing
             __m512 center_f = _mm512_castsi512_ps(center_i);
-            __m512 query_f = _mm512_set1_ps(query_vec[permuted_dim_in_query] - centroid[permuted_dim_in_query]);
+            __m512 query_f = _mm512_set1_ps(query_vec[j] - centroid[j]);
             __m512 diff = _mm512_sub_ps(center_f, query_f);
             __m512 diff_sq = _mm512_mul_ps(diff, diff);
             __m512 chunk_dists_v = _mm512_load_ps(chunk_dists + idx);
@@ -248,14 +250,14 @@ namespace pipeann {
     // fp_vec: [ndims]
     // out_pq_vec : [nchunks]
     void deflate_vec(const float *fp_vec, uint8_t *out_pq_vec) {
-      // permute the vector according to PQ rearrangement, compute all distances
-      // to 256 centroids and choose the closest (for each chunk)
+      // No longer using rearrangement - dimensions are processed in natural order
+      // Compute all distances to 256 centroids and choose the closest (for each chunk)
       for (uint32_t c = 0; c < n_chunks; c++) {
         float closest_dist = std::numeric_limits<float>::max();
         for (uint32_t i = 0; i < 256; i++) {
           float cur_dist = 0;
           for (uint64_t d = chunk_offsets[c]; d < chunk_offsets[c + 1]; d++) {
-            float diff = (tables[i * ndims + d] - ((float) fp_vec[rearrangement[d]] - centroid[rearrangement[d]]));
+            float diff = (tables[i * ndims + d] - ((float) fp_vec[d] - centroid[d]));
             cur_dist += diff * diff;
           }
           if (cur_dist < closest_dist) {
