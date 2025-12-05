@@ -1,6 +1,6 @@
 #pragma once
 
-#include "journal.h"
+#include "utils/journal.h"
 #include "utils/tsl/robin_set.h"
 #include "ssd_index.h"
 #include "index.h"
@@ -19,16 +19,16 @@ namespace pipeann {
    public:
     /*
     Params:
-    - parameters: Parameters object with configuration of on-disk index.
+    - parameters: IndexBuildParameters object with configuration of on-disk index.
     */
-    DynamicSSDIndex(Parameters &parameters, const std::string disk_prefix_in, const std::string disk_prefix_out,
-                    Distance<T> *dist, pipeann::Metric disk_metric, int search_mode = BEAM_SEARCH,
-                    bool use_mem_index = false);
+    DynamicSSDIndex(IndexBuildParameters &parameters, const std::string disk_prefix_in,
+                    const std::string disk_prefix_out, Distance<T> *dist, pipeann::Metric disk_metric,
+                    int search_mode = BEAM_SEARCH, bool use_mem_index = false);
 
     ~DynamicSSDIndex();
 
     void checkpoint();
-    v2::Journal<TagT> *journal;
+    pipeann::Journal<TagT> *journal;
 
     // in-place
     int insert(const T *point, const TagT &tag);
@@ -56,8 +56,8 @@ namespace pipeann {
     pipeann::Metric _dist_metric;
     Distance<T> *_dist_comp;
 
-    pipeann::Parameters _paras_mem;
-    pipeann::Parameters _paras_disk;
+    pipeann::IndexBuildParameters _paras_mem;
+    pipeann::IndexBuildParameters _paras_disk;
 
     int active_index = 0;                 // reflects value of writable index
     int active_delete_set = 0;            // reflects active _deletion_set
@@ -71,9 +71,7 @@ namespace pipeann {
     std::string _disk_index_prefix_in;
     std::string _disk_index_prefix_out;
 
-    bool _use_page_search = false;
     bool _use_mem_index = false;
-    double _mem_index_ratio = 1.0;  // mem index size / disk index size
     int search_mode = BEAM_SEARCH;
   };
-};  // namespace pipeann
+}  // namespace pipeann

@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     // Normally: partition_nums (200000) * C (5) for SIFT1M
     part.read((char *) tmp_arr, sizeof(unsigned) * s);
     for (uint32_t j = s; j < C; ++j) {
-      tmp_arr[j] = pipeann::SSDIndex<uint8_t>::kInvalidID;
+      tmp_arr[j] = pipeann::kInvalidID;
     }
     out_part.write((char *) &s, sizeof(unsigned));
     out_part.write((char *) tmp_arr, sizeof(unsigned) * C);

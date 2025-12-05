@@ -1,4 +1,4 @@
-#include "v2/pyindex.h"
+#include "pyindex.h"
 #include <pybind11/stl.h>
 
 using pipeann::Metric;

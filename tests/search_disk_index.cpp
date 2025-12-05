@@ -6,32 +6,14 @@
 #include <iomanip>
 
 #include "utils/log.h"
-#include "nbr/abstract_nbr.h"
-#include "nbr/pq_nbr.h"
-#include "nbr/rabitq_nbr.h"
+#include "nbr/nbr.h"
 #include "utils/timer.h"
 #include "utils.h"
-#include "aux_utils.h"
 
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "linux_aligned_file_reader.h"
-
-#define WARMUP false
-
-void print_stats(std::string category, std::vector<float> percentiles, std::vector<float> results) {
-  std::cout << std::setw(20) << category << ": " << std::flush;
-  for (uint32_t s = 0; s < percentiles.size(); s++) {
-    std::cout << std::setw(8) << percentiles[s] << "%";
-  }
-  std::cout << std::endl;
-  std::cout << std::setw(22) << " " << std::flush;
-  for (uint32_t s = 0; s < percentiles.size(); s++) {
-    std::cout << std::setw(9) << results[s];
-  }
-  std::cout << std::endl;
-}
 
 template<typename T>
 int search_disk_index(int argc, char **argv) {
@@ -58,10 +40,7 @@ int search_disk_index(int argc, char **argv) {
   bool use_page_search = search_mode != 0;
   uint32_t mem_L = std::atoi(argv[index++]);
 
-  pipeann::Metric m = dist_metric == "cosine" ? pipeann::Metric::COSINE : pipeann::Metric::L2;
-  if (dist_metric != "l2" && m == pipeann::Metric::L2) {
-    std::cout << "Unknown distance metric: " << dist_metric << ". Using default(L2) instead." << std::endl;
-  }
+  pipeann::Metric m = pipeann::get_metric(dist_metric);
 
   std::string disk_index_tag_file = index_prefix_path + "_disk.index.tags";
 
@@ -96,26 +75,18 @@ int search_disk_index(int argc, char **argv) {
 
   std::shared_ptr<AlignedFileReader> reader = nullptr;
   reader.reset(new LinuxAlignedFileReader());
-  pipeann::AbstractNeighbor<T> *nbr_handler = nullptr;
-  if (nbr_type == "pq") {
-    nbr_handler = new pipeann::PQNeighbor<T>();
-  } else if (nbr_type == "rabitq") {
-    nbr_handler = new pipeann::RaBitQNeighbor<T>();
-  } else {
-    std::cout << "Unknown nbr type: " << nbr_type << std::endl;
-    return -1;
-  }
+  pipeann::AbstractNeighbor<T> *nbr_handler = pipeann::get_nbr_handler<T>(m, nbr_type);
   std::unique_ptr<pipeann::SSDIndex<T>> _pFlashIndex(new pipeann::SSDIndex<T>(m, reader, nbr_handler, tags_flag));
 
-  int res = _pFlashIndex->load(index_prefix_path.c_str(), num_threads, true, use_page_search);
+  int res = _pFlashIndex->load(index_prefix_path.c_str(), num_threads, use_page_search);
   if (res != 0) {
     return res;
   }
 
   if (mem_L != 0) {
     auto mem_index_path = index_prefix_path + "_mem.index";
-    LOG(INFO) << "Load memory index " << mem_index_path << " " << query_dim;
-    _pFlashIndex->load_mem_index(m, query_dim, mem_index_path);
+    LOG(INFO) << "Load memory index from " << mem_index_path;
+    _pFlashIndex->load_mem_index(mem_index_path);
   }
 
   omp_set_num_threads(num_threads);
@@ -259,7 +230,7 @@ int main(int argc, char **argv) {
               << " <index_type (float/int8/uint8)>  <index_prefix_path>"
                  " <num_threads>  <pipeline width> "
                  " <query_file.bin>  <truthset.bin (use \"null\" for none)> "
-                 " <K> <similarity (cosine/l2)> <nbr_type (pq/rabitq)>"
+                 " <K> <similarity (cosine/l2/mips)> <nbr_type (pq/rabitq)>"
                  " <search_mode(0 for beam search / 1 for page search / 2 for pipe search)> <mem_L (0 means not "
                  "using mem index)> <L1> [L2] etc."
               << std::endl;

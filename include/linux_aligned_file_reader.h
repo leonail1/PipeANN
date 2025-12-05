@@ -50,7 +50,7 @@ class LinuxAlignedFileReader : public AlignedFileReader {
   void deregister_all_threads();
 };
 
-namespace v2 {
+namespace pipeann {
   inline std::vector<uint64_t> lockReqs(SparseLockTable<uint64_t> &lock_table, std::vector<IORequest> &reqs) {
     std::vector<uint64_t> ret;
     for (auto &req : reqs) {
@@ -71,4 +71,4 @@ namespace v2 {
       lock_table.unlock(x);
     }
   }
-};  // namespace v2
+};  // namespace pipeann

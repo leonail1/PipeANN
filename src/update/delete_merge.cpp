@@ -1,10 +1,9 @@
 #include "aligned_file_reader.h"
 #include "utils/libcuckoo/cuckoohash_map.hh"
-#include "nbr/pq_nbr.h"
+#include "nbr/nbr.h"
 #include "ssd_index.h"
 #include <malloc.h>
 #include <algorithm>
-#include <filesystem>
 
 #include <omp.h>
 #include <chrono>
@@ -16,13 +15,13 @@
 #include "utils/tsl/robin_map.h"
 #include "utils.h"
 #include "utils/page_cache.h"
+#include "utils/prune_neighbors.h"
 
 #include <unistd.h>
 #include <sys/syscall.h>
 #include "linux_aligned_file_reader.h"
 
 namespace pipeann {
-#define SECTORS_PER_MERGE 65536
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::merge_deletes(const std::string &in_path_prefix, const std::string &out_path_prefix,
                                         const std::vector<TagT> &deleted_nodes,
@@ -45,22 +44,39 @@ namespace pipeann {
     std::atomic<uint64_t> new_npoints = 0;
     Timer delete_timer;
 
-    char *rbuf = nullptr, *wbuf = nullptr;
-    alloc_aligned((void **) &rbuf, SECTORS_PER_MERGE * SECTOR_LEN, SECTOR_LEN);
-    alloc_aligned((void **) &wbuf, 2 * SECTORS_PER_MERGE * SECTOR_LEN, SECTOR_LEN);  // sliding window buffer.
-    uint64_t n_sectors = (cur_loc + nnodes_per_sector - 1) / nnodes_per_sector;
-    LOG(INFO) << "Cur loc: " << cur_loc.load() << ", cur ID: " << cur_id << ", n_sectors: " << n_sectors
-              << ", nnodes_per_sector: " << nnodes_per_sector;
+    constexpr uint64_t LOC_PER_POPULATE = 128 * 8;  // small to avoid blocking search threads.
+    // process this many locs per iteration
+    const uint64_t LOC_PER_MERGE = meta_.nnodes_per_sector > 0 ? ROUND_UP(131072, meta_.nnodes_per_sector) : 131072;
+    const uint64_t VEC_IN_WBUF = 2 * LOC_PER_MERGE;  // sliding window buffer holds 2 batches
 
-    constexpr int SECTORS_PER_POPULATE = 128;             // small to avoid blocking search threads.
+    // Calculate buffer size based on whether we have large or small nodes
+    uint64_t sectors_per_batch = meta_.nnodes_per_sector > 0
+                                     ? LOC_PER_MERGE / meta_.nnodes_per_sector
+                                     : LOC_PER_MERGE * DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN);
+    uint64_t buf_size_per_batch = sectors_per_batch * SECTOR_LEN;
+
+    char *rbuf = nullptr, *wbuf = nullptr;
+    alloc_aligned((void **) &rbuf, buf_size_per_batch, SECTOR_LEN);
+    alloc_aligned((void **) &wbuf, 2 * buf_size_per_batch, SECTOR_LEN);  // sliding window buffer.
+    LOG(INFO) << "Cur loc: " << cur_loc.load() << ", cur ID: " << cur_id
+              << ", nnodes_per_sector: " << meta_.nnodes_per_sector
+              << ", buf_size_per_batch: " << buf_size_per_batch / 1024 / 1024 << "MB";
+
     uint32_t populate_nthreads = std::min(nthreads, 4u);  // restrict the flow.
 
-    for (uint64_t in_sector = 0; in_sector < n_sectors; in_sector += SECTORS_PER_POPULATE) {
-      uint64_t st_sector = in_sector, ed_sector = std::min(in_sector + SECTORS_PER_POPULATE, n_sectors);
-      uint64_t loc_st = st_sector * nnodes_per_sector, loc_ed = std::min(cur_loc.load(), ed_sector * nnodes_per_sector);
-      uint64_t n_sectors_to_read = ed_sector - st_sector;
+    for (uint64_t loc_st = 0; loc_st < cur_loc; loc_st += LOC_PER_POPULATE) {
+      uint64_t loc_ed = std::min(cur_loc.load(), loc_st + LOC_PER_POPULATE);
+
+      // Calculate sector range to read for [loc_st, loc_ed)
+      uint64_t st_sector = loc_sector_no(loc_st);
+      uint64_t ed_sector = loc_sector_no(loc_ed > 0 ? loc_ed - 1 : 0);
+      if (meta_.nnodes_per_sector == 0) {
+        ed_sector += DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN) - 1;
+      }
+      uint64_t n_sectors_to_read = ed_sector - st_sector + 1;
+
       std::vector<IORequest> read_reqs;
-      read_reqs.push_back(IORequest(loc_sector_no(loc_st) * SECTOR_LEN, n_sectors_to_read * size_per_io, rbuf, 0, 0));
+      read_reqs.push_back(IORequest(st_sector * SECTOR_LEN, n_sectors_to_read * SECTOR_LEN, rbuf, 0, 0));
       reader->read(read_reqs, ctx, false);
 
 #pragma omp parallel for num_threads(populate_nthreads)
@@ -81,9 +97,9 @@ namespace pipeann {
         }
 
         // 3. deleted, populate nhoods.
-        auto page_rbuf = rbuf + (loc / nnodes_per_sector - st_sector) * SECTOR_LEN;
-        auto node_rbuf = offset_to_loc(page_rbuf, loc);
-        DiskNode<T> node(id, offset_to_node_coords(node_rbuf), offset_to_node_nhood(node_rbuf));
+        uint64_t loc_sector = loc_sector_no(loc);
+        auto page_rbuf = rbuf + (loc_sector - st_sector) * SECTOR_LEN;
+        DiskNode<T> node = node_from_page(page_rbuf, loc);
         std::vector<uint32_t> nhood;
         for (uint32_t i = 0; i < node.nnbrs; ++i) {
           uint32_t nbr_tag = id2tag(node.nbrs[i]);
@@ -105,17 +121,24 @@ namespace pipeann {
 
     // Step 2: prune neighbors, populate PQ and tags.
     int fd = open(disk_index_out.c_str(), O_DIRECT | O_LARGEFILE | O_RDWR | O_CREAT, 0755);
-    const uint64_t kVecInWBuf = 2 * SECTORS_PER_MERGE * nnodes_per_sector;
     uint64_t wb_id = 0;
     std::atomic<uint64_t> n_used_id = 0;
     auto write_back = [&]() {
       // write one buffer.
-      uint64_t buf_id = (wb_id % kVecInWBuf) / (nnodes_per_sector * SECTORS_PER_MERGE);
-      auto b = wbuf + buf_id * SECTORS_PER_MERGE * SECTOR_LEN;
+      uint64_t buf_id = (wb_id % VEC_IN_WBUF) / LOC_PER_MERGE;
+      auto b = wbuf + buf_id * buf_size_per_batch;
       std::vector<IORequest> write_reqs;
-      uint64_t id_delta = std::min((uint64_t) SECTORS_PER_MERGE * nnodes_per_sector, n_used_id - wb_id);
-      write_reqs.push_back(IORequest(loc_sector_no(wb_id) * SECTOR_LEN,
-                                     ROUND_UP(id_delta, nnodes_per_sector) / nnodes_per_sector * size_per_io, b, 0, 0));
+      uint64_t id_delta = std::min(LOC_PER_MERGE, n_used_id - wb_id);
+
+      // Calculate write length: from wb_id to wb_id + id_delta - 1
+      uint64_t st_sector = loc_sector_no(wb_id);
+      uint64_t ed_sector = loc_sector_no(wb_id + id_delta - 1);
+      if (meta_.nnodes_per_sector == 0) {
+        ed_sector += DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN) - 1;
+      }
+      uint64_t write_len = (ed_sector - st_sector + 1) * SECTOR_LEN;
+
+      write_reqs.push_back(IORequest(st_sector * SECTOR_LEN, write_len, b, 0, 0));
       reader->write_fd(fd, write_reqs, ctx);
       wb_id += id_delta;
       LOG(INFO) << "Write back " << wb_id << "/" << n_used_id << " IDs.";
@@ -123,12 +146,19 @@ namespace pipeann {
 
     std::vector<TagT> new_tags(new_npoints);
 
-    for (uint64_t in_sector = 0; in_sector < n_sectors; in_sector += SECTORS_PER_MERGE) {
-      uint64_t st_sector = in_sector, ed_sector = std::min(in_sector + SECTORS_PER_MERGE, n_sectors);
-      uint64_t loc_st = st_sector * nnodes_per_sector, loc_ed = std::min(cur_loc.load(), ed_sector * nnodes_per_sector);
-      uint64_t n_sectors_to_read = ed_sector - st_sector;
+    for (uint64_t loc_st = 0; loc_st < cur_loc; loc_st += LOC_PER_MERGE) {
+      uint64_t loc_ed = std::min(cur_loc.load(), loc_st + LOC_PER_MERGE);
+
+      // Calculate sector range to read for [loc_st, loc_ed)
+      uint64_t st_sector = loc_sector_no(loc_st);
+      uint64_t ed_sector = loc_sector_no(loc_ed > 0 ? loc_ed - 1 : 0);
+      if (meta_.nnodes_per_sector == 0) {
+        ed_sector += DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN) - 1;
+      }
+      uint64_t n_sectors_to_read = ed_sector - st_sector + 1;
+
       std::vector<IORequest> read_reqs;
-      read_reqs.push_back(IORequest(loc_sector_no(loc_st) * SECTOR_LEN, n_sectors_to_read * size_per_io, rbuf, 0, 0));
+      read_reqs.push_back(IORequest(st_sector * SECTOR_LEN, n_sectors_to_read * SECTOR_LEN, rbuf, 0, 0));
       reader->read(read_reqs, ctx, false);  // read in fd
 
 #pragma omp parallel for num_threads(nthreads)
@@ -143,9 +173,9 @@ namespace pipeann {
           continue;
         }
 
-        auto page_rbuf = rbuf + (loc / nnodes_per_sector - st_sector) * SECTOR_LEN;
-        auto loc_rbuf = offset_to_loc(page_rbuf, loc);
-        DiskNode<T> node(id, offset_to_node_coords(loc_rbuf), offset_to_node_nhood(loc_rbuf));
+        uint64_t loc_sector = loc_sector_no(loc);
+        auto page_rbuf = rbuf + (loc_sector - st_sector) * SECTOR_LEN;
+        DiskNode<T> node = node_from_page(page_rbuf, loc);
         // prune neighbors.
         std::unordered_set<uint32_t> nhood_set;
         for (uint32_t i = 0; i < node.nnbrs; ++i) {
@@ -162,7 +192,7 @@ namespace pipeann {
         nhood_set.erase(id);  // remove self.
         std::vector<uint32_t> nhood(nhood_set.begin(), nhood_set.end());
 
-        if (nhood.size() > this->range) {
+        if (nhood.size() > this->params.R) {
           std::vector<float> dists(nhood.size(), 0.0f);
           std::vector<Neighbor> pool(nhood.size());
           // Use dynamic buffer instead of pre-initialized buffer to save space.
@@ -174,12 +204,12 @@ namespace pipeann {
             pool[k].id = nhood[k];
             pool[k].distance = dists[k];
           }
-          std::sort(pool.begin(), pool.end());
-          if (pool.size() > this->maxc) {
-            pool.resize(this->maxc);
-          }
-          nhood.clear();
-          this->prune_neighbors_pq(pool, nhood, pq_buf);
+          auto nbr = this->nbr_handler;
+          pipeann::prune_neighbors(pool, nhood, params, metric, [nbr, pq_buf](uint32_t a, uint32_t b) {
+            float dist;
+            nbr->compute_dists(a, &b, 1, &dist, pq_buf);
+            return dist;
+          });
           pipeann::aligned_free(pq_buf);
         }
 
@@ -193,11 +223,12 @@ namespace pipeann {
 
         // write neighbors.
         uint64_t new_id = id_map.find(id);
-        uint64_t off = new_id % kVecInWBuf;
-        auto page_wbuf = wbuf + (off / nnodes_per_sector) * SECTOR_LEN;
-        auto loc_wbuf = offset_to_loc(page_wbuf, off);
-        DiskNode<T> w_node(new_id, offset_to_node_coords(loc_wbuf), offset_to_node_nhood(loc_wbuf));
-        memcpy(w_node.coords, node.coords, data_dim * sizeof(T));
+        uint64_t off = new_id % VEC_IN_WBUF;
+        // loc_sector_no(off) - loc_sector_no(0) == loc_sector_no(new_id) - loc_sector_no(start_id)
+        auto page_wbuf = wbuf + (loc_sector_no(off) - loc_sector_no(0)) * SECTOR_LEN;
+        DiskNode<T> w_node = node_from_page(page_wbuf, new_id);
+
+        memcpy(w_node.coords, node.coords, meta_.data_dim * sizeof(T));
         w_node.nnbrs = nhood.size();
         *(w_node.nbrs - 1) = w_node.nnbrs;
         memcpy(w_node.nbrs, nhood.data(), w_node.nnbrs * sizeof(uint32_t));
@@ -206,8 +237,8 @@ namespace pipeann {
         new_tags[new_id] = id2tag(id);
       }
 
-      LOG(INFO) << "Processed " << ed_sector << "/" << n_sectors << " sectors, n_used_id: " << n_used_id << ".";
-      if (n_used_id - wb_id >= SECTORS_PER_MERGE * nnodes_per_sector) {
+      LOG(INFO) << "Processed " << loc_ed << "/" << cur_loc << " locs, n_used_id: " << n_used_id << ".";
+      if (n_used_id - wb_id >= LOC_PER_MERGE) {
         write_back();
       }
     }
@@ -220,10 +251,11 @@ namespace pipeann {
     // duplicate neighbor handler.
     auto new_nbr_handler = this->nbr_handler->shuffle(rev_id_map, new_npoints, nthreads);
 
-    while (deleted_nodes_set.find(id2tag(medoid)) != deleted_nodes_set.end()) {
-      LOG(INFO) << "Medoid deleted. Choosing another start node. Medoid ID: " << medoid << " tag: " << id2tag(medoid);
-      const auto &nhoods = deleted_nhoods.find(medoid);
-      medoid = nhoods[0];
+    while (deleted_nodes_set.find(id2tag(meta_.entry_point)) != deleted_nodes_set.end()) {
+      LOG(INFO) << "Medoid deleted. Choosing another start node. Medoid ID: " << meta_.entry_point
+                << " tag: " << id2tag(meta_.entry_point);
+      const auto &nhoods = deleted_nhoods.find(meta_.entry_point);
+      meta_.entry_point = nhoods[0];
     }
     close(fd);
     // free buf
@@ -233,8 +265,8 @@ namespace pipeann {
     // set metadata, PQ and tags.
     merge_lock.lock();  // unlock in reload().
     // metadata.
-    this->num_points = new_npoints;
-    this->medoid = id_map.find(medoid);
+    this->meta_.npoints = new_npoints;
+    this->meta_.entry_point = id_map.find(meta_.entry_point);
     // PQ.
     auto tmp = this->nbr_handler;
     this->nbr_handler = new_nbr_handler;
@@ -250,29 +282,28 @@ namespace pipeann {
       set_loc2id(i, i);
     }
 
-    this->write_metadata_and_pq(in_path_prefix, out_path_prefix, new_npoints, medoid, &new_tags);
+    this->write_metadata_and_pq(in_path_prefix, out_path_prefix, &new_tags);
     LOG(INFO) << "Write metadata and PQ finished, totally elapsed " << delete_timer.elapsed() / 1e3 << "ms.";
   }
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::write_metadata_and_pq(const std::string &in_path_prefix, const std::string &out_path_prefix,
-                                                const uint64_t &new_npoints, const uint64_t &new_medoid,
                                                 std::vector<TagT> *new_tags) {
-    SSDIndexMetadata<T> meta(new_npoints, this->data_dim, new_medoid, this->max_node_len, this->nnodes_per_sector);
-    meta.print();
+    // Use meta_ directly since it's already been updated
+    meta_.print();
     std::string disk_index_out = out_path_prefix + "_disk.index";
-    meta.save_to_disk_index(disk_index_out);
+    meta_.save_to_disk_index(disk_index_out);
 
     // Step 3. Write tags and PQ.
     std::vector<TagT> tags_vec;
     if (new_tags == nullptr) {
-      tags_vec.resize(new_npoints);
-      for (uint64_t i = 0; i < new_npoints; ++i) {
+      tags_vec.resize(meta_.npoints);
+      for (uint64_t i = 0; i < meta_.npoints; ++i) {
         tags_vec[i] = id2tag(i);
       }
       new_tags = &tags_vec;
     }
-    pipeann::save_bin<TagT>(out_path_prefix + "_disk.index.tags", new_tags->data(), new_npoints, 1, 0);
+    pipeann::save_bin<TagT>(out_path_prefix + "_disk.index.tags", new_tags->data(), meta_.npoints, 1, 0);
     nbr_handler->save(out_path_prefix.c_str());
   }
 
@@ -280,7 +311,7 @@ namespace pipeann {
   void SSDIndex<T, TagT>::reload(const char *index_prefix, uint32_t num_threads) {
     std::string iprefix = std::string(index_prefix);
     std::string disk_index_file = iprefix + "_disk.index";
-    this->_disk_index_file = disk_index_file;
+    this->disk_index_file = disk_index_file;
     this->max_nthreads = num_threads;
 
     reader->close();
@@ -292,7 +323,7 @@ namespace pipeann {
     this->init_metadata(meta);
 
     // No need to reload PQ, as it is already reloaded in merge_deletes.
-    for (uint32_t i = this->num_points; i < this->cur_loc; ++i) {
+    for (uint32_t i = this->meta_.npoints; i < this->cur_loc; ++i) {
       set_loc2id(i, kInvalidID);  // reset loc2id.
     }
     while (!this->empty_pages.empty()) {

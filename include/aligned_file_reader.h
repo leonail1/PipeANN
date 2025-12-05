@@ -43,13 +43,13 @@ class AlignedFileReader {
 
   virtual void read_alloc(std::vector<IORequest> &read_reqs, void *ctx, std::vector<uint64_t> *page_ref = nullptr) = 0;
   inline void wbc_write(std::vector<IORequest> &write_reqs, void *ctx, std::vector<uint64_t> *page_ref = nullptr) {
-    // auto locked_reqs = v2::lockReqs(v2::cache.lock_table, write_reqs);
+    // auto locked_reqs = pipeann::lockReqs(pipeann::cache.lock_table, write_reqs);
     for (auto &req : write_reqs) {
       for (uint64_t i = 0; i < req.len; i += SECTOR_LEN) {
-        v2::cache.put((req.offset + i) / SECTOR_LEN, (uint8_t *) req.buf + i, true);
+        pipeann::cache.put((req.offset + i) / SECTOR_LEN, (uint8_t *) req.buf + i, true);
       }
     }
-    // v2::unlockReqs(v2::cache.lock_table, locked_reqs);
+    // pipeann::unlockReqs(pipeann::cache.lock_table, locked_reqs);
     if (page_ref != nullptr) {
       for (auto &req : write_reqs) {
         for (uint64_t i = 0; i < req.len; i += SECTOR_LEN) {
@@ -64,7 +64,7 @@ class AlignedFileReader {
       return;
     }
     for (auto &x : *page_ref) {
-      v2::cache.deref(x);
+      pipeann::cache.deref(x);
     }
 #endif
   }

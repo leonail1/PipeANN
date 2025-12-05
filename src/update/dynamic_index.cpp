@@ -1,15 +1,14 @@
-#include "neighbor.h"
 #include "utils/timer.h"
 #include "utils/tsl/robin_set.h"
 #include "utils.h"
-#include "v2/dynamic_index.h"
+#include "dynamic_index.h"
 #include <csignal>
 #include <cstdint>
 #include <mutex>
 #include <vector>
+#include <utility>
 
 #include <algorithm>
-#include <filesystem>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -23,22 +22,21 @@
 #include <time.h>
 #include <gperftools/malloc_extension.h>
 
-#include "aux_utils.h"
 #include "ssd_index.h"
 
 #include "linux_aligned_file_reader.h"
 
 namespace pipeann {
   template<typename T, typename TagT>
-  DynamicSSDIndex<T, TagT>::DynamicSSDIndex(Parameters &parameters, const std::string disk_prefix_in,
+  DynamicSSDIndex<T, TagT>::DynamicSSDIndex(IndexBuildParameters &parameters, const std::string disk_prefix_in,
                                             const std::string disk_prefix_out, Distance<T> *dist,
                                             pipeann::Metric dist_metric, int search_mode, bool use_mem_index) {
     // check if file exists.
-    if (!std::filesystem::exists(disk_prefix_in + "_disk.index")) {
+    if (!file_exists(disk_prefix_in + "_disk.index")) {
       LOG(ERROR) << "Disk index file does not exist: " << disk_prefix_in << "_disk.index";
       exit(-1);
     }
-    if (use_mem_index && !std::filesystem::exists(disk_prefix_in + "_mem.index")) {
+    if (use_mem_index && !file_exists(disk_prefix_in + "_mem.index")) {
       LOG(ERROR) << "In-memory index file does not exist: " << disk_prefix_in << "_mem.index";
       exit(-1);
     }
@@ -46,7 +44,7 @@ namespace pipeann {
     this->active_del[0] = true;
     this->active_del[1] = false;
     this->_dist_metric = dist_metric;
-    this->journal = new v2::Journal<TagT>(disk_prefix_out + "_journal");
+    this->journal = new pipeann::Journal<TagT>(disk_prefix_out + "_journal");
 
     _paras_disk = parameters;
     _num_threads = parameters.num_threads;
@@ -57,7 +55,7 @@ namespace pipeann {
     _dist_comp = dist;
 
     reader.reset(new LinuxAlignedFileReader());
-    AbstractNeighbor<T> *nbr_handler = new PQNeighbor<T>();
+    AbstractNeighbor<T> *nbr_handler = new PQNeighbor<T>(this->_dist_metric);
     _disk_index = new pipeann::SSDIndex<T, TagT>(this->_dist_metric, reader, nbr_handler, true, &_paras_disk);
 
 #ifndef NO_POLLUTE_ORIGINAL
@@ -75,7 +73,7 @@ namespace pipeann {
       exit(-1);
     }
     bool use_page_search = (search_mode == PAGE_SEARCH);
-    int res = _disk_index->load(_disk_index_prefix_in.c_str(), _num_threads, true, use_page_search);
+    int res = _disk_index->load(_disk_index_prefix_in.c_str(), _num_threads, use_page_search);
     if (res != 0) {
       LOG(INFO) << "Failed to load disk index in DynamicSSDIndex constructor";
       exit(-1);
@@ -85,7 +83,7 @@ namespace pipeann {
     if (use_mem_index) {
       std::string mem_index_path = disk_prefix_in + "_mem.index";  // use the original one.
       LOG(INFO) << "Use static in-memory index for acceleration, path: " << mem_index_path;
-      _disk_index->load_mem_index(this->_dist_metric, _disk_index->data_dim, mem_index_path);
+      _disk_index->load_mem_index(mem_index_path);
     }
   }
 
@@ -103,7 +101,7 @@ namespace pipeann {
   template<typename T, typename TagT>
   int DynamicSSDIndex<T, TagT>::insert(const T *point, const TagT &tag) {
     std::shared_lock<std::shared_timed_mutex> lock(_merge_lock);  // prevent merge during insert
-    journal->append(v2::TxType::kInsert, tag);
+    journal->append(pipeann::TxType::kInsert, tag);
     auto *deletion_set = &deletion_sets[active_delete_set];
     return _disk_index->insert_in_place(point, tag, deletion_set);
   }
@@ -126,7 +124,8 @@ namespace pipeann {
       n = _disk_index->pipe_search(query, search_L, mem_L, search_L, result_tags.data(), result_distances.data(),
                                    beam_width, stats);
     }
-    std::vector<NeighborTag<TagT>> best_vec;
+
+    std::vector<std::pair<TagT, float>> best_vec;  // <tag, distance>
     for (size_t i = 0; i < n; i++) {
       best_vec.emplace_back(result_tags[i], result_distances[i]);
     }
@@ -134,9 +133,9 @@ namespace pipeann {
     size_t pos = 0;
 
     for (auto iter : best_vec) {
-      if (deletion_set->find(iter.tag) == deletion_set->end()) {
-        tags[pos] = iter.tag;
-        distances[pos] = iter.dist;
+      if (deletion_set->find(iter.first) == deletion_set->end()) {
+        tags[pos] = iter.first;
+        distances[pos] = iter.second;
         pos++;
       }
       if (pos == K) {
@@ -149,7 +148,7 @@ namespace pipeann {
   template<typename T, typename TagT>
   void DynamicSSDIndex<T, TagT>::lazy_delete(const TagT &tag) {
     std::unique_lock<std::shared_timed_mutex> lock(delete_lock);
-    journal->append(v2::TxType::kDelete, tag);
+    journal->append(pipeann::TxType::kDelete, tag);
 
     if (active_del[active_delete_set].load() == false) {
       LOG(ERROR) << "Active deletion set indicated as _deletion_set_" << active_delete_set

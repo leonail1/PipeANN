@@ -3,7 +3,6 @@
 #include "ssd_index.h"
 #include <malloc.h>
 #include <algorithm>
-#include <filesystem>
 
 #include <omp.h>
 #include <chrono>
@@ -59,17 +58,17 @@ namespace pipeann {
     std::vector<Neighbor> full_retset;
     full_retset.reserve(4096);
 
-    auto compute_exact_dists_and_push = [&](const char *node_buf, const unsigned id) -> float {
+    auto compute_exact_dists_and_push = [&](const DiskNode<T> &node, const unsigned id) -> float {
       T *node_fp_coords_copy = data_buf;
-      memcpy(node_fp_coords_copy, node_buf, data_dim * sizeof(T));
+      memcpy(node_fp_coords_copy, node.coords, meta_.data_dim * sizeof(T));
       float cur_expanded_dist = dist_cmp->compare(query, node_fp_coords_copy, (unsigned) aligned_dim);
       full_retset.push_back(Neighbor(id, cur_expanded_dist, true));
       return cur_expanded_dist;
     };
 
-    auto compute_and_push_nbrs = [&](const char *node_buf, unsigned &nk) {
-      unsigned *node_nbrs = offset_to_node_nhood(node_buf);
-      unsigned nnbrs = *(node_nbrs++);
+    auto compute_and_push_nbrs = [&](DiskNode<T> &node, unsigned &nk) {
+      unsigned *node_nbrs = node.nbrs;
+      unsigned nnbrs = node.nnbrs;
       unsigned nbors_cand_size = 0;
       for (unsigned m = 0; m < nnbrs; ++m) {
         if (visited.find(node_nbrs[m]) == visited.end()) {
@@ -120,7 +119,7 @@ namespace pipeann {
       mem_index_->search_with_tags(query, mem_L, mem_L, mem_tags.data(), mem_dists.data());
       compute_and_add_to_retset(mem_tags.data(), std::min((unsigned) mem_L, (unsigned) l_search));
     } else {
-      compute_and_add_to_retset(&medoid, 1);
+      compute_and_add_to_retset(&meta_.entry_point_id, 1);
     }
 
     std::sort(retset.begin(), retset.begin() + cur_list_size);
@@ -208,26 +207,23 @@ namespace pipeann {
         char *sector_buf = last_pages.data() + i * SECTOR_LEN;
 
         // minus one for the vector that is computed previously
-        std::vector<std::pair<float, const char *>> vis_cand;
-        vis_cand.reserve(nnodes_per_sector);
+        std::vector<std::pair<float, DiskNode<T>>> vis_cand;  // <dist, node>
+        vis_cand.reserve(meta_.nnodes_per_sector);
 
         // compute exact distances of the vectors within the page
-        for (unsigned j = 0; j < nnodes_per_sector; ++j) {
+        for (unsigned j = 0; j < meta_.nnodes_per_sector; ++j) {
           const unsigned id = page_layout[j];
           if (id == last_io_id || id == kAllocatedID || id == kInvalidID) {
             continue;
           }
-          const char *node_buf = sector_buf + j * max_node_len;
-          float dist = compute_exact_dists_and_push(node_buf, id);
-          vis_cand.emplace_back(dist, node_buf);
-        }
-        if (vis_cand.size() > 0) {
-          std::sort(vis_cand.begin(), vis_cand.end());
+          DiskNode<T> node = node_from_page(sector_buf, j);
+          float dist = compute_exact_dists_and_push(node, id);
+          vis_cand.emplace_back(dist, node);
         }
 
         // compute PQ distances for neighbours of the vectors in the page
-        for (unsigned j = 0; j < vis_cand.size(); ++j) {
-          compute_and_push_nbrs(vis_cand[j].second, nk);
+        for (unsigned k = 0; k < vis_cand.size(); ++k) {
+          compute_and_push_nbrs(vis_cand[k].second, nk);
         }
       }
       last_io_snapshot.clear();
@@ -254,12 +250,12 @@ namespace pipeann {
         memcpy(last_pages.data() + last_io_snapshot.size() * SECTOR_LEN, sector_buf, SECTOR_LEN);
         last_io_snapshot.emplace_back(std::make_tuple(id, pid, layout));
 
-        for (unsigned j = 0; j < nnodes_per_sector; ++j) {
+        for (unsigned j = 0; j < meta_.nnodes_per_sector; ++j) {
           unsigned cur_id = layout[j];
           if (cur_id == id) {
-            char *node_buf = sector_buf + j * max_node_len;
-            compute_exact_dists_and_push(node_buf, id);
-            compute_and_push_nbrs(node_buf, nk);
+            DiskNode<T> node = node_from_page(sector_buf, j);
+            compute_exact_dists_and_push(node, id);
+            compute_and_push_nbrs(node, nk);
           }
         }
       }

@@ -3,7 +3,6 @@
 #include "ssd_index.h"
 #include <malloc.h>
 #include <algorithm>
-#include <filesystem>
 
 #include <omp.h>
 #include <chrono>
@@ -76,7 +75,7 @@ namespace pipeann {
       compute_and_add_to_retset(mem_tags.data(), std::min((unsigned) mem_L, (unsigned) l_search));
     } else {
       // Do not use optimized start point.
-      compute_and_add_to_retset(&medoid, 1);
+      compute_and_add_to_retset(&meta_.entry_point_id, 1);
     }
 
     std::sort(retset.begin(), retset.begin() + cur_list_size);
@@ -133,7 +132,7 @@ namespace pipeann {
           sector_scratch_idx++;
           frontier_nhoods.push_back(fnhood);
           frontier_read_reqs.emplace_back(
-              IORequest(offset, size_per_io, sector_buf, u_loc_offset(loc), max_node_len, sector_scratch));
+              IORequest(offset, size_per_io, sector_buf, u_loc_offset(loc), meta_.max_node_len, sector_scratch));
           if (stats != nullptr) {
             stats->n_4k++;
             stats->n_ios++;
@@ -151,41 +150,36 @@ namespace pipeann {
 
       for (auto &frontier_nhood : frontier_nhoods) {
         auto [id, loc, sector_buf] = frontier_nhood;
-        char *node_disk_buf = offset_to_loc(sector_buf, loc);
-        unsigned *node_buf = offset_to_node_nhood(node_disk_buf);
-        uint64_t nnbrs = (uint64_t) (*node_buf);
-        T *node_fp_coords = offset_to_node_coords(node_disk_buf);
+        DiskNode<T> node = node_from_page(sector_buf, loc);
 
         T *node_fp_coords_copy = data_buf;
-        memcpy(node_fp_coords_copy, node_fp_coords, data_dim * sizeof(T));
+        memcpy(node_fp_coords_copy, node.coords, meta_.data_dim * sizeof(T));
         float cur_expanded_dist = dist_cmp->compare(query, node_fp_coords_copy, (unsigned) aligned_dim);
 
         if (coord_map != nullptr) {
-          if (unlikely(coord_buf == nullptr || coord_buf_idx > this->l_index * 10)) {
+          if (unlikely(coord_buf == nullptr || coord_buf_idx > this->params.L * 10)) {
             LOG(ERROR) << "Please allocate larger coord_buf.";
             crash();
           }
           T *coord_ptr = coord_buf + coord_buf_idx * aligned_dim;
-          memcpy(coord_ptr, node_fp_coords, data_dim * sizeof(T));
+          memcpy(coord_ptr, node.coords, meta_.data_dim * sizeof(T));
           coord_map->insert(std::make_pair(id, node_fp_coords_copy));
           coord_buf_idx++;
         }
         full_retset.push_back(Neighbor(id, cur_expanded_dist, true));
 
-        unsigned *node_nbrs = (node_buf + 1);
-
         // compute node_nbrs <-> query dist in PQ space
         cpu_timer.reset();
-        nbr_handler->compute_dists(query_buf, node_nbrs, nnbrs);
+        nbr_handler->compute_dists(query_buf, node.nbrs, node.nnbrs);
         if (stats != nullptr) {
-          stats->n_cmps += (double) nnbrs;
+          stats->n_cmps += (double) node.nnbrs;
           stats->cpu_us += (double) cpu_timer.elapsed();
         }
 
         cpu_timer.reset();
         // process prefetch-ed nhood
-        for (uint64_t m = 0; m < nnbrs; ++m) {
-          unsigned id = node_nbrs[m];
+        for (uint64_t m = 0; m < node.nnbrs; ++m) {
+          unsigned id = node.nbrs[m];
           if (unlikely(id > this->cur_id)) {
             LOG(ERROR) << "ID is larger than current ID, " << id << " vs " << this->cur_id;
             crash();

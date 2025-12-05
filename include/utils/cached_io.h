@@ -33,7 +33,7 @@ class cached_ifstream {
     reader.seekg(initial_offset, reader.beg);
     assert(reader.is_open());
     assert(cacheSize > 0);
-    cacheSize = (std::min)(cacheSize, fsize - initial_offset);
+    cacheSize = std::min(cacheSize, fsize - initial_offset);
     LOG(INFO) << "Opened: " << filename.c_str() << ", size: " << fsize << ", cache_size: " << cacheSize;
     this->cache_size = cacheSize;
     cache_buf = new char[cacheSize];

@@ -6,10 +6,10 @@
 #include "nbr/pq_table.h"
 #include "ssd_index_defs.h"
 #include "nbr/abstract_nbr.h"
-#include "partition.h"
+#include "utils/partition.h"
 #include "utils/lock_table.h"
 #include "utils/tsl/robin_map.h"
-#include "math_utils.h"
+#include "utils/kmeans_utils.h"
 #include "utils/cached_io.h"
 
 namespace pipeann {
@@ -18,7 +18,7 @@ namespace pipeann {
     static constexpr uint32_t NUM_KMEANS = 15;
 
    public:
-    PQNeighbor() {
+    PQNeighbor(pipeann::Metric metric) : AbstractNeighbor<T>(metric), pq_table(metric) {
     }
 
     // max size of context needed for a single query.
@@ -34,7 +34,7 @@ namespace pipeann {
     AbstractNeighbor<T> *shuffle(const libcuckoo::cuckoohash_map<uint32_t, uint32_t> &rev_id_map, uint64_t new_npoints,
                                  uint32_t nthreads) {
       AbstractNeighbor<T> *abs_nbr_handler;
-      PQNeighbor<T> *pq_nbr_handler = new PQNeighbor<T>();
+      PQNeighbor<T> *pq_nbr_handler = new PQNeighbor<T>(this->metric);
       abs_nbr_handler = pq_nbr_handler;
 
       pq_nbr_handler->data.resize(new_npoints * this->pq_table.n_chunks);
@@ -52,6 +52,7 @@ namespace pipeann {
     void initialize_query(const T *query, QueryBuffer<T> *query_buf) {
       return pq_table.populate_chunk_distances(query, query_buf->nbr_ctx_scratch);
     }
+
     // call initialize_query first!
     // output to query_buf->aligned_dist_scratch
     void compute_dists(QueryBuffer<T> *query_buf, const uint32_t *ids, const uint64_t n_ids) {
@@ -102,6 +103,7 @@ namespace pipeann {
       pq_table.save_pq_pivots(pq_pivot_out.c_str());
     }
 
+    // During build, we use L2 for both L2 and MIPS.
     void build(const std::string &index_prefix_path, const std::string &data_bin, uint32_t bytes_per_nbr) {
       std::string pq_pivots_path = index_prefix_path + "_pq_pivots.bin";
       std::string pq_compressed_vectors_path = index_prefix_path + "_pq_compressed.bin";
@@ -164,7 +166,7 @@ namespace pipeann {
     // data: uint8_t * pq_table.n_chunks
     // chunk_size = chunk size of each dimension chunk
     // pq_tables = float* [[2^8 * [chunk_size]] * pq_table.n_chunks]
-    v2::ReaderOptSharedMutex pq_mu;
+    pipeann::ReaderOptSharedMutex pq_mu;
     std::vector<uint8_t> data;
     FixedChunkPQTable<T> pq_table;
 
@@ -334,7 +336,7 @@ namespace pipeann {
       }
 
       std::vector<size_t> cumul_bytes(5, 0);
-      cumul_bytes[0] = METADATA_SIZE;
+      cumul_bytes[0] = SECTOR_LEN;
       cumul_bytes[1] = cumul_bytes[0] + pipeann::save_bin<float>(pq_pivots_path.c_str(), full_pivot_data.get(),
                                                                  (size_t) num_centers, dim, cumul_bytes[0]);
       cumul_bytes[2] = cumul_bytes[1] + pipeann::save_bin<float>(pq_pivots_path.c_str(), centroid.get(), (size_t) dim,
@@ -367,7 +369,7 @@ namespace pipeann {
       size_t num_points = npts32;
       size_t dim = basedim32;
 
-      size_t BLOCK_SIZE = (std::min)((size_t) 16384, num_points);  // hard-coded max block size.
+      size_t BLOCK_SIZE = std::min((size_t) 16384, num_points);  // hard-coded max block size.
 
       std::unique_ptr<float[]> full_pivot_data;
       std::unique_ptr<float[]> centroid;
@@ -444,7 +446,7 @@ namespace pipeann {
 
       for (size_t block = 0; block < num_blocks; block++) {
         size_t start_id = block * block_size;
-        size_t end_id = (std::min)((block + 1) * block_size, num_points);
+        size_t end_id = std::min((block + 1) * block_size, num_points);
         size_t cur_blk_size = end_id - start_id;
 
         base_reader.read((char *) (block_data_T.get()), sizeof(T) * (cur_blk_size * dim));
@@ -482,8 +484,8 @@ namespace pipeann {
           }
 
           // Compute closest centers for this chunk
-          math_utils::compute_closest_centers(cur_data.get(), cur_blk_size, cur_chunk_size, cur_pivot_data.get(),
-                                              num_centers, 1, closest_center.get());
+          kmeans::compute_closest_centers(cur_data.get(), cur_blk_size, cur_chunk_size, cur_pivot_data.get(),
+                                          num_centers, 1, closest_center.get());
 
           // Write results to output
           for (int64_t j = 0; j < (int64_t) cur_blk_size; j++) {

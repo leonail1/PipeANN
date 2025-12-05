@@ -178,6 +178,9 @@ namespace rabitqlib {
           case 11:
             this->fht_float_ = helper_float_11;
             break;
+          case 12:
+            this->fht_float_ = helper_float_12;
+            break;
           default:
             // TODO(lib): should we do more?
             std::cerr << "dimension of vector is too big\n";

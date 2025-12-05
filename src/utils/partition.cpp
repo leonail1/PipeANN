@@ -1,4 +1,4 @@
-#include <math_utils.h>
+#include <utils/kmeans_utils.h>
 #include <omp.h>
 #include <algorithm>
 #include <chrono>
@@ -18,9 +18,9 @@
 #include "utils/tsl/robin_map.h"
 
 #include <cassert>
-#include "partition.h"
+#include "utils/partition.h"
 
-#define MAX_BLOCK_SIZE 16384  // 64MB for 1024-dim float vectors, 2MB for 128-dim uint8 vectors.
+static constexpr uint64_t MAX_BLOCK_SIZE = 16384;  // 64MB for 1024-dim float vectors, 2MB for 128-dim uint8 vectors.
 
 template<typename T>
 void gen_random_slice(const std::string base_file, const std::string output_prefix, double sampling_rate,
@@ -80,17 +80,6 @@ void gen_random_slice(const std::string base_file, const std::string output_pref
   LOG(INFO) << "Wrote " << num_sampled_pts_u32 << " points to sample file: " << output_prefix + "_data.bin";
 }
 
-// streams data from the file, and samples each vector with probability p_val
-// and returns a matrix of size slice_size* ndims as floating point type.
-// the slice_size and ndims are set inside the function.
-
-template<typename T>
-void gen_random_slice(const std::string data_file, double p_val, std::unique_ptr<float[]> &sampled_data,
-                      size_t &slice_size, size_t &ndims) {
-  float *sampled_ptr = sampled_data.get();
-  gen_random_slice<T>(data_file, p_val, sampled_ptr, slice_size, ndims);
-  sampled_data.reset(sampled_ptr);
-}
 template<typename T>
 void gen_random_slice(const std::string data_file, double p_val, float *&sampled_data, size_t &slice_size,
                       size_t &ndims) {
@@ -165,7 +154,7 @@ int estimate_cluster_sizes(const std::string data_file, float *pivots, const siz
     shard_counts[i] = 0;
   }
 
-  size_t BLOCK_SIZE = (std::min)((size_t) MAX_BLOCK_SIZE, num_test);
+  size_t BLOCK_SIZE = std::min((size_t) MAX_BLOCK_SIZE, num_test);
   size_t num_points = 0, num_dim = 0;
   pipeann::get_bin_metadata(data_file, num_points, num_dim);
   size_t block_size = num_points <= BLOCK_SIZE ? num_points : BLOCK_SIZE;
@@ -176,13 +165,13 @@ int estimate_cluster_sizes(const std::string data_file, float *pivots, const siz
 
   for (size_t block = 0; block < num_blocks; block++) {
     size_t start_id = block * block_size;
-    size_t end_id = (std::min)((block + 1) * block_size, num_test);
+    size_t end_id = std::min((block + 1) * block_size, num_test);
     size_t cur_blk_size = end_id - start_id;
 
     block_data_float = test_data_float + start_id * test_dim;
 
-    math_utils::compute_closest_centers(block_data_float, cur_blk_size, dim, pivots, num_centers, k_base,
-                                        block_closest_centers);
+    kmeans::compute_closest_centers(block_data_float, cur_blk_size, dim, pivots, num_centers, k_base,
+                                    block_closest_centers);
 
     for (size_t p = 0; p < cur_blk_size; p++) {
       for (size_t p1 = 0; p1 < k_base; p1++) {
@@ -239,7 +228,7 @@ int shard_data_into_clusters(const std::string data_file, float *pivots, const s
     shard_counts[i] = 0;
   }
 
-  size_t BLOCK_SIZE = (std::min)((size_t) MAX_BLOCK_SIZE, num_points);
+  size_t BLOCK_SIZE = std::min((size_t) MAX_BLOCK_SIZE, num_points);
   size_t block_size = num_points <= BLOCK_SIZE ? num_points : BLOCK_SIZE;
   std::unique_ptr<uint32_t[]> block_closest_centers = std::make_unique<uint32_t[]>(block_size * k_base);
   std::unique_ptr<T[]> block_data_T = std::make_unique<T[]>(block_size * dim);
@@ -249,14 +238,14 @@ int shard_data_into_clusters(const std::string data_file, float *pivots, const s
 
   for (size_t block = 0; block < num_blocks; block++) {
     size_t start_id = block * block_size;
-    size_t end_id = (std::min)((block + 1) * block_size, num_points);
+    size_t end_id = std::min((block + 1) * block_size, num_points);
     size_t cur_blk_size = end_id - start_id;
 
     base_reader.read((char *) block_data_T.get(), sizeof(T) * (cur_blk_size * dim));
     pipeann::convert_types<T, float>(block_data_T.get(), block_data_float.get(), cur_blk_size, dim);
 
-    math_utils::compute_closest_centers(block_data_float.get(), cur_blk_size, dim, pivots, num_centers, k_base,
-                                        block_closest_centers.get());
+    kmeans::compute_closest_centers(block_data_float.get(), cur_blk_size, dim, pivots, num_centers, k_base,
+                                    block_closest_centers.get());
 
     for (size_t p = 0; p < cur_blk_size; p++) {
       for (size_t p1 = 0; p1 < k_base; p1++) {
@@ -353,14 +342,6 @@ int partition_with_ram_budget(const std::string data_file, const double sampling
   delete[] train_data_float;
   return num_parts;
 }
-
-// Instantations of supported templates
-template void gen_random_slice<int8_t>(const std::string data_file, double p_val,
-                                       std::unique_ptr<float[]> &sampled_data, size_t &slice_size, size_t &ndims);
-template void gen_random_slice<uint8_t>(const std::string data_file, double p_val,
-                                        std::unique_ptr<float[]> &sampled_data, size_t &slice_size, size_t &ndims);
-template void gen_random_slice<float>(const std::string data_file, double p_val, std::unique_ptr<float[]> &sampled_data,
-                                      size_t &slice_size, size_t &ndims);
 
 template void gen_random_slice<int8_t>(const std::string base_file, const std::string output_prefix,
                                        double sampling_rate, size_t offset);

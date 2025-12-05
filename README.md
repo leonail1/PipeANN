@@ -1,93 +1,133 @@
 # PipeANN
 
-PipeANN is a **low-latency, billion-scale, and updatable** graph-based vector store on SSD. Features:
+**PipeANN** is a **low-latency**, **billion-scale**, and **updatable** graph-based vector store on SSD.
 
-* **Extremely low search latency**: <1ms in billion-scale vectors (top-10, 90% recall), only 1.14x-2.02x of in-memory graph-based index but **>10x** less memory usage (e.g., **40GB** for billion-scale datasets).
+## ✨ Key Features
 
-* **High search throughput**: 20K QPS in billion-scale vectors (top-10, 90% recall), higher than [DiskANN](https://github.com/microsoft/DiskANN) with `beam_width = 8` (latency-optimal) and [SPANN](https://github.com/microsoft/SPTAG).
+| Feature | Description |
+|---------|-------------|
+| ⚡ **Ultra-Low Latency** | <1ms for 1 billion vectors (top-10, 90% recall), only 1.14x-2.02x of in-memory index |
+| 📈 **High Throughput** | 20K QPS for 1 billion vectors, outperforming DiskANN and SPANN |
+| 🔄 **Efficient Updates** | Insert/delete with minimal search interference (1.07x fluctuation) |
+| 🎯 **User-Defined Filters** | Supports arbitrary filtered ANNS via user-defined `Label` and `Selector` |
+| 💾 **Memory Efficient** | >10x less memory than in-memory indexes (~40GB for 1B vectors) |
+| 🐍 **Easy-to-Use** | Both Python (`faiss`-like) and C++ interfaces supported |
 
-* **Efficient vector updates**: `insert` and `delete` are supported with minimal interference with concurrent search (fluctuates only **1.07X**) and reduced memory usage (only **<90GB** for billion-scale datasets).
-
-* **Easy-to-use interface**: Both Python and C++ are supported. Python interfaces are `faiss`-like and easy-to-use. C++ interfaces are suiltable for performance-critical scenarios.
-
-## Why Use PipeANN?
+## 📊 Performance Comparison
 
 PipeANN is suitable for both **large-scale** and **memory-constraint** scenarios.
 
-| #Vecs | Mem | Lat | QPS | PipeANN | Traditional |
-| ----- | --- | --- | --- | ------- | ----------- |
-| 1B (SPACEV) | 40GB | 2ms | 5K | ✅ | ❌ (1TB mem / 6ms)  |
-| 80M (Wiki) | 10GB | 1.5ms | 5K | ✅ | ❌ (300GB mem / 4ms) |
-| 10M (SIFT) | 550MB | <1ms | 10K | ✅ | ❌ (4GB mem / 3ms) |
 
-Recall@10 = 0.99. Index is stored in a single Samsung PM9A3 (3.84TB) SSD.
-We use 128B PQ-compressed vector for 768-dimensional Wiki, and 32B PQ-compressed vector for SIFT and SPACEV. `NO_MAPPING` is disabled.
+| Dataset | Dimension | Memory | Latency | QPS | PipeANN | HNSW | DiskANN |
+|---------|-----|--------|---------|-----|---------|-------------| -------- |
+| 1B (SPACEV) | 100 | 40GB | 2ms | 5K | ✅ | ❌ 1TB | ❌ 6ms |
+| 80M (Wiki) | 768 | 10GB | 1.5ms | 5K | ✅ | ❌ 300GB | ❌ 4ms |
+| 10M (SIFT) | 128 | 550MB | <1ms | 10K | ✅ | ❌ 4GB | ❌ 3ms |
 
-## Updates
+> Recall@10 = 0.99, Samsung PM9A3 SSD, 32B PQ-compressed vectors (128B for Wiki).
 
-* **Oct 14, 2025**: [RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library) (1-bit-per-dimension quantization) is supported.
-* **Sep 29, 2025**: Python interface is supported. 
-* **Jul 16, 2025**: Vector update (insert and delete) is supported.
+---
 
-## Prerequisites
+## 📰 Updates
 
-### Basic Configurations
+- **Dec 4, 2025**: Inner product and filtered ANNS (*arbitrary filter*) supported
+- **Oct 14, 2025**: [RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library) (1-bit quantization) supported
+- **Sep 29, 2025**: Python interface released
+- **Jul 16, 2025**: Vector update (insert/delete) supported
 
-* CPU: X86 and ARM CPUs are tested. SIMD (e.g., AVX2, AVX512) will boost performance.
+---
 
-* DRAM: ~40GB (search-only) or ~90GB (search-update) per billion vectors, which may increase for larger product quantization (PQ) table size (Here we assume 32B per vector).
+## 🔧 Prerequisites
 
-* SSD: ~700GB for SIFT with 1B vectors, ~900GB for SPACEV with 1.4B vectors.
+### Hardware Requirements
 
-* OS: Linux kernel supporting `io_uring` (e.g., >= 5.15) delivers best performance. Otherwise, set `USE_AIO` option to `ON` to use `libaio` instead. We recommend using `Ubuntu 22.04`, but `Ubuntu 18.04` and `20.04` are also tested (`USE_AIO` option should be enabled).
+| Component | Requirement |
+|-----------|-------------|
+| **CPU** | x86 or ARM with SIMD (AVX2/AVX512 recommended) |
+| **DRAM** | ~40GB (search) or ~90GB (search+update) per billion vectors |
+| **SSD** | ~700GB for 1B SIFT, ~900GB for 1.4B SPACEV |
 
-* Compiler: `c++17` should be supported.
+### Software Requirements
 
-* Vector dataset: less than 2B vectors to avoid integer overflow, each record size (`vector_size + 4 + 4 * num_neighbors`) is less than 4KB (>= 4KB is supported by search-only workloads but not well-tested, and not supported by updates).
+- **OS**: Linux with `io_uring` (fast) or `libaio` (compatible) support, Ubuntu 22.04 recommended
+- **Compiler**: C++17 support required
+- **Constraints**: <2B vectors to avoid integer overflow
 
-### Software Dependencies
-
-For `Ubuntu >= 22.04`, the command to install them:
+### Install Dependencies
 
 ```bash
-sudo apt install make cmake g++ libaio-dev libgoogle-perftools-dev clang-format libmkl-full-dev libeigen3-dev
-pip3 install "pybind11[global]" # for Python interface.
+# Ubuntu >= 22.04
+sudo apt install make cmake g++ libaio-dev libgoogle-perftools-dev \
+                 clang-format libmkl-full-dev libeigen3-dev
+
+# For Python interface
+pip3 install "pybind11[global]"
 ```
 
-The `libmkl` could be replaced by other `BLAS` libraries (e.g., OpenBlas).
+`libmkl` could be replaced by other BLAS libraries (e.g., `openblas`).
 
+---
 
-## Build PipeANN
+## 🏗️ Build PipeANN
 
-First, build `liburing`. The compiled `liburing` library is in its `src` folder.
+### Step 1: Build liburing
 
 ```bash
 cd third_party/liburing
-./configure
-make -j
+./configure && make -j
+cd ../..
 ```
 
+### Step 2: Build PipeANN
 
-Then, build PipeANN. For Python interface, Python 3.12 is tested.
-
+**For Python interface:**
 ```bash
-python setup.py install
+python setup.py install  # Installs `pipeann` wheel
 ```
-This installs a wheel named `pipeann` to your current Python environment.
 
-
-For C++ interface:
+**For C++ interface:**
 ```bash
-bash ./build.sh
+bash ./build.sh  # Binaries in build/
 ```
 
-The C++ programs built are in `build` folder.
-For performance-critical benchmarks, we recommend to use C++ interfaces.
+For performance-critical scenarios, we recommend using C++ interface.
 
-## Quick Start (Python interface)
+---
 
-PipeANN now supports Python using `faiss`-like interfaces. An example is in `tests_py/index_example.py`. It builds an on-SSD index, and then searches and inserts vectors.
+## 🚀 Quick Start
 
+### 🐍 Python Interface
+
+```python
+from pipeann import IndexPipeANN, Metric
+
+# Create index
+idx = IndexPipeANN(data_dim=128, data_type='float32', metric=Metric.L2)
+idx.omp_set_num_threads(32) # the number of search/insert/delete threads.
+idx.set_index_prefix(index_prefix) # the index is stored to {index_prefix}_disk.index
+
+# Insert vectors in memory (auto-converts to disk index when >100K vectors)
+idx.add(vectors, tags)
+
+# For SSD index initialized using idx.add, out-neighbor number is fixed to 64.
+# For large-scale datasets (>= 10M), we recommend using idx.build for initialization.
+# idx.build(data_path, index_prefix)
+# idx.load(index_prefix) # load the pre-built index from disk.
+
+# Search using PipeSearch (on-SSD) or best-first search (in-memory)
+results = idx.search(queries, topk=10, L=50)
+
+idx.remove(tags) # remove vectors from the index with corresponding tags.
+# The index should be saved after updates.
+idx.save(index_prefix) # save the index.
+```
+
+Run an example (hard-coded paths should be modified):
+```bash
+cd tests_py && python index_example.py
+```
+
+Example result:
 ```bash
 python setup.py install
 cd tests_py
@@ -132,64 +172,25 @@ Search time: 0.8907 seconds for 10000 queries, throughput: 11227.508131590563 QP
 Recall@10 with L=50: 0.9720
 ```
 
+### ⚡ C++ Interface (Search-Only)
 
-An explanation to the interfaces:
+Enable `-DREAD_ONLY_TESTS` and `-DNO_MAPPING` in `CMakeLists.txt`. This disables updates but achieves higher search performance.
 
-```python
-from pipeann import IndexPipeANN, Metric
-
-idx = IndexPipeANN(data_dim, data_type, Metric.L2)
-idx.omp_set_num_threads(32) # the number of search/insert/delete threads.
-idx.set_index_prefix(index_prefix) # the index is stored to {index_prefix}_disk.index
-
-# The index is in-memory at first.
-# If its capacity exceeds build_threshold (100000), 
-# it is automatically transformed into on-disk index.
-idx.add(vectors, tags) # insert vectors into the index. 
-
-# For SSD index initialized using idx.add, out-neighbor number is fixed to 64.
-# For large-scale datasets (>= 10M), we recommend using idx.build for initialization.
-# It ensures higher search accuracy with more (automatically configured) out-neighbors.
-# idx.build(data_path, index_prefix)
-# idx.load(index_prefix) # load the pre-built index from disk.
-
-# Search the index using PipeSearch (on-SSD) 
-# or best-first search (in-memory)
-idx.search(queries, topk, L) 
-
-idx.remove(tags) # remove vectors from the index with corresponding tags.
-# The index should be saved after updates.
-idx.save(index_prefix) # save the index.
-```
-
-We also implemented a simple client for `open_webui` at `webui_client.py`.
-However, it is not well-tested. 
-We welcome any **contributions to support more applications** (e.g., langchain)!
-
-## Quick Start (Search-Only)
-
-This section introduces how to build disk index and search using PipeANN.
-To maximize search performance, `-DREAD_ONLY_TESTS` and `-DNO_MAPPING` definitions should be enabled in `CMakeLists.txt`.
-
-### For DiskANN Users
-
-For DiskANN users with on-disk indexes, enabling PipeANN only requires building an in-memory index (<10min for billion-scale datasets).
-An example for SIFT100M (the hard-coded paths should be modified):
-
+**For DiskANN users** (existing on-disk index):
 ```bash
-# Build in-memory index. Modify the INDEX_PREFIX and DATA_PATH beforehand.
-export INDEX_PREFIX=/mnt/nvme2/indices/bigann/100m # on-disk index file name prefix.
+# Build in-memory entry point index (~10min for 1B vectors)
+export INDEX_PREFIX=/mnt/nvme2/indices/bigann/100m # on-disk index filename is 100m_disk.index
 export DATA_PATH=/mnt/nvme/data/bigann/100M.bbin
-build/tests/utils/gen_random_slice uint8 ${DATA_PATH} ${INDEX_PREFIX}_SAMPLE_RATE_0.01 0.01
-build/tests/build_memory_index uint8 ${INDEX_PREFIX}_SAMPLE_RATE_0.01_data.bin ${INDEX_PREFIX}_SAMPLE_RATE_0.01_ids.bin ${INDEX_PREFIX}_mem.index 0 0 32 64 1.2 24 l2
 
-# Search the on-disk index. Modify the query and ground_truth path beforehand.
-# build/tests/search_disk_index <data_type> <index_prefix> <nthreads> <I/O pipeline width (max for PipeANN)> <query file> <truth file> <top-K> <similarity> <nbr_type(pq/rabitq)> <search_mode (2 for PipeANN)> <L of in-memory index> <Ls for on-disk index> 
-build/tests/search_disk_index uint8 ${INDEX_PREFIX} 1 32 /mnt/nvme/data/bigann/bigann_query.bbin /mnt/nvme/data/bigann/100M_gt.bin 10 l2 pq 2 10 10 20 30 40
+build/tests/utils/gen_random_slice uint8 ${DATA_PATH} ${INDEX_PREFIX}_SAMPLE_RATE_0.01 0.01
+build/tests/build_memory_index uint8 ${INDEX_PREFIX}_SAMPLE_RATE_0.01_data.bin \
+    ${INDEX_PREFIX}_SAMPLE_RATE_0.01_ids.bin ${INDEX_PREFIX}_mem.index 32 64 1.2 $(nproc) l2
+
+# Search with PipeANN
+build/tests/search_disk_index uint8 ${INDEX_PREFIX} 1 32 query.bin gt.bin 10 l2 pq 2 10 10 20 30 40
 ```
 
-Then, you should see results like this:
-
+Example results:
 ```
 Search parameters: #threads: 1,  beamwidth: 32
 ... some outputs during index loading ...
@@ -203,33 +204,19 @@ Search parameters: #threads: 1,  beamwidth: 32
     40          32     1420.46      655.24     1270.00        0.00       52.50       94.23
 ```
 
-### For Others Starting from Scratch
+**Starting from scratch:**
 
-This part introduces how to download the datasets, build the on-disk index, and then search on it using PipeANN.
+**1. Download datasets**: [SIFT](http://corpus-texmex.irisa.fr/), [DEEP1B](https://github.com/matsui528/deep1b_gt), [SPACEV](https://github.com/microsoft/SPTAG). 
 
-#### Download the Datasets
+If the links are not available, you could get the datasets from [Big ANN benchmarks](https://big-ann-benchmarks.com/neurips21.html).
 
-* SIFT100M and SIFT1B from [BIGANN](http://corpus-texmex.irisa.fr/);
-* DEEP1B using [deep1b_gt repository](https://github.com/matsui528/deep1b_gt) (Thanks, matsui528!);
-* SPACEV100M and SPACEV1B from [SPTAG](https://github.com/microsoft/SPTAG).
-
-If the links above are not available, you could get the datasets from [Big ANN benchmarks](https://big-ann-benchmarks.com/neurips21.html).
-
-If the datasets follow `ivecs` or `fvecs` format, you could transfer them into `bin` format using:
-```bash
-build/tests/utils/vecs_to_bin int8 bigann_base.bvecs bigann.bin # for int8/uint8 vecs (SIFT), bigann_base.bvecs -> bigann.bin
-build/tests/utils/vecs_to_bin float base.fvecs deep.bin # for float vecs (DEEP) base.fvecs -> deep.bin
-build/tests/utils/vecs_to_bin int32 idx_1000M.ibin # for int32/uint32 vecs (SIFT groundtruth) idx_1000M.ivecs -> idx_1000M.ibin
-```
-
-We need the `bin` files for `base`, `query`, and `groundtruth`.
-
-The SPACEV1B dataset is divided into several sub-files in SPTAG. You could follow [SPTAG SPACEV1B](https://github.com/microsoft/SPTAG/tree/main/datasets/SPACEV1B) for how to read the dataset.
-To concatenate them, just save the dataset's numpy `array` to `bin` format (the following Python code might be used).
+SPACEV1B may comprises several sub-files. To concatenate them, save the dataset's numpy `array` to `bin` format (the following Python 
+code might be used).
 
 ```py
 # bin format:
-# | 4 bytes for num_vecs | 4 bytes for vector dimension (e.g., 100 for SPACEV) | flattened vectors |
+# | 4 bytes for num_vecs | 4 bytes for vector dimension (e.g., 100 for SPACEV) | flattened 
+vectors |
 def bin_write(vectors, filename):
     with open(filename, 'wb') as f:
         num_vecs, vector_dim = vectors.shape
@@ -247,215 +234,364 @@ def bin_read(filename):
 ```
 
 The dataset should contain a ground truth file for its full set.
-Some datasets also contain the ground truth of subsets (first $k$ vectors). For example, SIFT100M's (the first 100M vectors of SIFT1B) ground truth could be found in `idx_100M.ivecs` of SIFT1B dataset.
+Some datasets also contain the ground truth of subsets (first $k$ vectors). For example, 
+SIFT100M's (the first 100M vectors of SIFT1B) ground truth could be found in `idx_100M.ivecs` of 
+SIFT1B dataset.
 
-#### Prepare the 100M Subsets
-
-To generate the 100M subsets (SIFT100M, SPACEV100M, and DEEP100M) using the 1B datasets, use `change_pts` (for `bin`) and `pickup_vecs.py` (in the `deep1b_gt` repository, for `fvecs`).
+**2. Convert format** (if needed):
 ```bash
-# for SIFT, assume that the dataset is converted into bigann.bin
-build/tests/change_pts uint8 /mnt/nvme/data/bigann/bigann.bin 100000000
-mv /mnt/nvme/data/bigann/bigann.bin100000000 /mnt/nvme/data/bigann/100M.bbin
+# convert .vecs to .bin
+build/tests/utils/vecs_to_bin unt8 bigann_base.bvecs bigann.bin # for int8/uint8 vecs (SIFT)
+build/tests/utils/vecs_to_bin float base.fvecs deep.bin # for float vecs (DEEP)
+build/tests/utils/vecs_to_bin int32 idx_1000M.ibin # for int32/uint32 vecs (groundtruth) 
 
-# for DEEP, assume that the dataset is in fvecs format.
-python pickup_vecs.py --src ../base.fvecs --dst ../100M.fvecs --topk 100000000
-# If DEEP is already in fbin format, change_pts also works.
+# Generate 100M subsets (e.g., for SIFT and DEEP).
+build/tests/utils/change_pts uint8 bigann.bin 100000000 # bigann.bin -> bigann.bin100000000
+mv bigann.bin100000000 bigann_100M.bin
+build/tests/utils/change_pts float deep.bin 100000000 # deep.bin -> deep.bin100000000
+mv deep.bin100000000 deep_100M.bin
 
-# for SPACEV, assume that the dataset is concatenated into a huge file vectors.bin
-build/tests/change_pts int8 /mnt/nvme/data/SPACEV1B/vectors.bin 100000000
-mv /mnt/nvme/data/SPACEV1B/vectors.bin100000000 /mnt/nvme/data/SPACEV1B/100M.bin
+# Calculate Ground Truth for 100M subsets (SIFT100M example)
+# compute_groundtruth <type> <metric> <data> <query> <topk> <output> null null
+build/tests/utils/compute_groundtruth uint8 l2 bigann_100M.bin query.bin 1000 100M_gt.bin null null
+```
+  
+**3. Build on-disk index**:
+```bash
+# build_disk_index <type> <data> <prefix> <R> <L> <PQ_bytes> <M_GB> <threads> <metric> <nbr_type>
+build/tests/build_disk_index uint8 data.bin index 96 128 32 256 112 l2 pq
 ```
 
-Then, use `compute_groundtruth` to calculate the ground truths of 100M subsets. (DEEP100M's ground truth could be calculated using deep1b_gt).
-If you want to evaluate **search-update workloads**, please **calculate top-1000 vectors** instead of top-100, from which we will pickup top-k vectors for different intervals.
+**Parameter explanation:**
+- `R`: Maximum out-neighbors.
+- `L`: Candidate pool size during build.
+- `PQ_bytes`: Bytes per PQ vector (32 recommended, use a larger value if accuracy is low).
+- `M`: Max memory (GB).
+- `nbr_type`: `pq` (product quantization, supports update) or `rabitq` (1-bit quantization, search-only).
 
-Take SIFT100M as an example (in fact, its ground truth could also be found in SIFT1B):
-```bash
-# for SIFT100M, assume that the dataset is at /mnt/nvme/data/bigann/100M.bbin, the query is at /mnt/nvme/data/bigann/bigann_query.bbin 
-# output: /mnt/nvme/data/bigann/100M_gt.bin
-build/tests/utils/compute_groundtruth uint8 /mnt/nvme/data/bigann/100M.bbin /mnt/nvme/data/bigann/bigann_query.bbin 1000 /mnt/nvme/data/bigann/100M_gt.bin
-```
+**Recommended Parameters:**
 
-#### Build On-Disk Index
+| Dataset | Type | R | L | PQ_bytes | Memory | Threads |
+|---------|------|---|---|----------|--------|---------|
+| 100M subsets | uint8/float/int8 | 96 | 128 | 32 | 256GB | 112 |
+| SIFT1B | uint8 | 128 | 200 | 32 | 500GB | 112 |
+| SPACEV1B | int8 | 128 | 200 | 32 | 500GB | 112 |
 
-PipeANN uses the same on-disk index as DiskANN.
+This requires ~5h for 100M-scale datasets, and ~1d for billion-scale datasets.
 
-```bash
-# Usage:
-# build/tests/build_disk_index <data_type (float/int8/uint8)> <data_file.bin> <index_prefix_path> <R>  <L>  <bytes_per_nbr>  <M>  <T> <similarity metric (cosine/l2) case sensitive>. <nbr_type (pq/rabitq)>
-build/tests/build_disk_index uint8 /mnt/nvme/data/bigann/100M.bbin /mnt/nvme2/indices/bigann/100m 96 128 32 256 112 l2 pq
-```
+**4. Build in-memory index** (optional but recommended):
 
-The final index files will share a prefix of `/mnt/nvme2/indices/bigann/100m`.
-
-Parameter explanation:
-
-* R: maximum out-neighbors
-* L: candidate pool size during build (build in fact conducts vector searches to optimize graph edges)
-* bytes_per_nbr: Bytes per in-memory neighbor. We use 32 bytes for the three datasets; higher-dimensional vectors might require more bytes.
-* M: maximum memory used during build, 256GB is sufficient for the 100M index to be built totally in memory.
-* T: number of threads used during build. Our machine has 112 threads.
-* nbr_type: PQ (`pq`) and RaBitQ (`rabitq`) are supported. We recommend using PQ in most cases.
-  * PQ uses `bytes_per_nbr` bytes for each vector. It supports both vector search and update.
-  * RaBitQ uses 1 bit per vector dimension (plus 9 byte metadata). Its quantization speed is faster than PQ, while its performance could be better or worse than PQ. Vector search is supported; update is not supported.
-
-We use the following parameters when building indexes:
-
-| Dataset       | type | R  | L | PQ_bytes | M | T | similarity
-|---------------|---|---|---|---|---| --- | --- 
-| SIFT/DEEP/SPACEV100M | uint8/float/int8 | 96 | 128 | 32 | 256 | 112 | L2
-| SIFT1B   | uint8 | 128 |  200 | 32 | 500 | 112 | L2
-| SPACEV1B | int8 | 128 | 200  | 32 | 500 | 112 | L2
-
-#### Build In-Memory Entry-Point Index (Optional)
-
-An in-memory index is optional but could significantly improve performance by optimizing the entry point. By selecting `mem_L` to 0 in `search_disk_index`, the in-memory index is automatically skipped.
-
-You could build it in the following way (take SIFT100M as an example):
+An in-memory index optimizes the entry point. Skip it by setting `mem_L=0` in search.
 
 ```bash
-# dataset: SIFT100M, {output prefix}: {INDEX_PREFIX}_SAMPLE_RATE_0.01
-export INDEX_PREFIX=/mnt/nvme2/indices/bigann/100m # on-disk index file name prefix.
-# first, generate random slice, sample rate is 0.01.
-build/tests/utils/gen_random_slice uint8 /mnt/nvme/data/bigann/100M.bbin ${INDEX_PREFIX}_SAMPLE_RATE_0.01 0.01
-# output files: {output prefix}_data.bin and {outputprefix}_ids.bin
-# mem index: {INDEX_PREFIX}_mem.index
-# All the in-memory indexes are built using R = 32, L = 64.
-build/tests/build_memory_index uint8 ${INDEX_PREFIX}_SAMPLE_RATE_0.01_data.bin ${INDEX_PREFIX}_SAMPLE_RATE_0.01_ids.bin ${INDEX_PREFIX}_mem.index 0 0 32 64 1.2 24 l2
+build/tests/utils/gen_random_slice uint8 data.bin index_SAMPLE_RATE_0.01 0.01
+build/tests/build_memory_index uint8 index_SAMPLE_RATE_0.01_data.bin \
+    index_SAMPLE_RATE_0.01_ids.bin index_mem.index 32 64 1.2 $(nproc) l2
 ```
 
-The output in-memory index should reside in three files: `100m_mem.index`, `100m_mem.index.data`, and `100m_mem.index.tags`.
+The output in-memory index should reside in three files: `index_mem.index`, `index_mem.index.data`, and 
+`index_mem.index.tags`.
 
-## Quick Start (Search-Update)
+**5. Search**:
+```bash
+# search_disk_index <type> <prefix> <threads> <beam_width> <query> <gt> <topk> <metric> <nbr_type> <mode> <mem_L> <Ls...>
+build/tests/search_disk_index uint8 index_prefix 1 32 query.bin gt.bin 10 l2 pq 2 10 10 20 30 40
+```
 
-This part shows how to evaluate these two workloads:
+**Search Modes (`mode`):**
+- `0` (DiskANN): Best-first search.
+- `1` (Starling): Page-reordered search. Requires reordered index using the original Starling code and use `build/tests/pad_partition` to align the generated partition file.
+- `2` (PipeANN): Pipelined search (**Recommended**).
+- `3` (CoroSearch): Coroutine-based inter-query parallel  search.
 
-* **Search-insert workload**: Insert the second 100M vectors into an index built with the first 100M vectors in a dataset, with concurrent search.
+### 🔄 Search + Update
 
-* **Search-insert-delete workload**: Insert the second 100M vectors and delete the first 100M vectors in a dataset, with concurrent search.
+Disable `-DREAD_ONLY_TESTS` and `-DNO_MAPPING` flags in `CMakeLists.txt` for update support.
 
-The recall is calculated after every 1M vectors are inserted/deleted.
+**1. Prepare Tags (Optional)**
 
-### Prerequisites
-
-* Prepare datasets and run search-only PipeANN, by referring to [Quick Start (Search-Only)](#quick-start-search-only).
-* Disable `-DREAD_ONLY_TESTS` and `-DNO_MAPPING` flags.
-* The in-memory index is optional.
-
-### Generate Ground-Truths
-
-In our evaluation, we insert the second 100M vectors in SIFT1B/DEEP1B into the initial index built using its first 100M vectors.
-We require ground truth for every `[0, 100M+iM)` vectors, where `0 <= i <= 100`.
-The trivial approach is to calculate all of them, but it is costly.
-
-We take a tricky approach: **select top-10 vectors for each interval** from the **top-1000** in SIFT1B (or the first 200M vectors in SIFT). 
-Thus, only one top-1000 of the whole dataset should be calculated.
-Amazingly, this approach is very likely to succeed.
+Each vector corresponds to one tag. PipeANN uses identity mapping (ID -> tag) by default. Use `gen_tags` to generate explicit mapping (necessary for FreshDiskANN).
 
 ```bash
-# build/tests/gt_update <file> <index_npts> <tot_npts> <batch_npts> <target_topk> <target_dir> <insert_only>
-# /mnt/nvme/data/bigann/truth.bin is the top-1000 for SIFT.
-# 100M vectors in the index, 200M vectors in total, each batch contains 1M vectors.
-build/tests/gt_update /mnt/nvme/data/bigann/truth.bin 100000000 200000000 1000000 10 /mnt/nvme/indices_upd/bigann_gnd/1B_topk 1
+# gen_tags <type> <data> <output_prefix>
+build/tests/utils/gen_tags uint8 data.bin index_prefix
 ```
 
-The output files will be stored in `/mnt/nvme/indices_upd/bigann_gnd/1B_topk/gt_{i * batch_npts}.bin`, each `bin` contains the ground truth for `[0, index_npts + i*batch_npts)`.
+**2. Generate Ground-Truths for Updates**
 
-For workload change (insert the second 100M, delete the first 100M), set the last parameter `insert_only` to `false`.
-Then, it generates ground truth for every `[i*batch_npts, index_npts + i*batch_npts)` vectors.
-
-### Prepare Tags (Optional)
-
-Each vector corresponds to one tag, which does not change during updates (but its ID may change during `merge`, and location on disk may change during `insert`).
-
-Use `gen_tags` to generate an identity mapping (vector ID -> tag) for the vector dataset.
-For PipeANN, this is optional, but this is necessary for FreshDiskANN.
+Calculating exact ground truth for every insertion step is costly. We use a tricky approach: select top-10 vectors for each interval from the top-1000 (or more) of the whole dataset (or a larger subset).
 
 ```bash
-# build/tests/gen_tags <type[int8/uint8/float]> <base_data_file> <index_file_prefix> <false>
-build/tests/gen_tags uint8 /mnt/nvme/data/bigann/100M.bbin /mnt/nvme/indices_upd/bigann/100M false
+# gt_update <gt_file> <index_pts> <total_pts> <batch_pts> <topk> <output_dir> <insert_only>
+# Example: Insert 100M vectors (batch=1M) into 100M index. 
+# truth.bin contains top-1000 for the 200M dataset.
+build/tests/utils/gt_update truth.bin 100000000 200000000 1000000 10 /path/to/gt 1
+# Example: Insert 100M vectors and delete the original 100M vectors.
+build/tests/utils/gt_update truth.bin 100000000 200000000 1000000 10 /path/to/gt 0
 ```
 
-Other mappings could also be generated by modifying the `gen_tags.cpp`.
+**3. Run Benchmarks**
 
-### Run The Benchmark
-
-**Search-insert workload.** Please run `test_insert_search`. Its workflow:
-
-* Copy the original index to `_shadow.index`, to avoid polluting it.
-* Execute `num_step` steps, each step inserts `vecs_per_step` vector and calculate recall.
-* Concurrent search with the `Ls` are executed.
-
-An example to insert the second 100M vectors into the SIFT100M dataset:
+**Search-Insert Workload (`test_insert_search`):**
+Inserts vectors while concurrently searching.
 
 ```bash
-# build/tests/test_insert_search <type[int8/uint8/float]> <data_bin> <L_disk> <vecs_per_step> <num_steps> <insert_threads> <search_threads> <search_mode> <index_prefix> <query_file> <truthset_prefix> <truthset_l_offset> <recall@> <#beam_width> <search_beam_width> <mem_L> <Lsearch> <L2>
-# 500M_topk stores the above-mentioned ground truth.
-build/tests/test_insert_search uint8 /mnt/nvme/data/bigann/bigann_200M.bbin 128 1000000 100 10 32 0 /mnt/nvme/indices_upd/bigann/100M /mnt/nvme/data/bigann/bigann_query.bbin /mnt/nvme/indices_upd/bigann_gnd_insert/500M_topk 0 10 4 4 0 20 30 40 50 60 80 100
+# Usage: test_insert_search <type> <data> <L_disk> <step_size> <steps> <ins_thds> <srch_thds> <mode> ...
+build/tests/test_insert_search uint8 data_200M.bin 128 1000000 100 10 32 2 \
+    index_prefix query.bin /path/to/gt 0 10 4 32 10 20 30 40 50
 ```
 
-Notes:
-
-* This test takes ~1 day to complete. To reduce the evaluation time, set `num_step` to a smaller value (e.g., 10) or use a smaller dataset (e.g., SIFT2M).
-* `data_bin` should contain all the data (200M vectors in this setup), or larger (e.g., SIFT1B).
-* `search_mode` is set to `0` for best-first search. **If you are evaluating OdinANN, use `2` (PipeANN) instead**.
-* `L_disk` is set to `128` for 100M-scale datasets and `160` for billion-scale datasets.
-* Set `mem_L` to non-zero when using the [in-memory index](#build-in-memory-entry-point-index-optional).
-
-**Search-insert-delete workload.** Please run `overall_performance`. Its workflow:
-* Copy the original index to `_shadow.index`, to avoid polluting it.
-* Execute `step` steps, each step inserts and deletes `index_points / step` vector and calculate recall.
-* Concurrent search with the `Ls` are executed.
-
-An example to insert the second 100M vectors and delete the first 100M in SIFT100M dataset:
+**Search-Insert-Delete Workload (`overall_performance`):**
+Inserts new vectors and deletes old ones (sliding window).
 
 ```bash
-# tests/overall_performance <type[int8/uint8/float]> <data_bin> <L_disk> <indice_path> <query_file> <truthset_prefix> <recall@> <#beam_width> <step> <Lsearch> <L2>
-build/tests/overall_performance uint8 /mnt/nvme/data/bigann/bigann_200M.bbin 128 /mnt/nvme/indices_upd/bigann/100M /mnt/nvme/data/bigann/bigann_query.bbin /mnt/nvme/indices_upd/bigann_gnd/500M_topk 10 4 100 20 30
+# Usage: overall_performance <type> <data> <L_disk> <index> <query> <gt> <recall> <beam> <steps> <Ls...>
+build/tests/overall_performance uint8 data_200M.bin 128 index_prefix query.bin \
+    /path/to/gt 10 4 100 20 30
 ```
 
-### Notes
+**Notes:**
+- Index is **not crash-consistent** after updates; use `final_merge` for consistent snapshots
+- For update workloads, use `search_mode=2` (PipeANN) with `search_beam_width=32` for best performance
+- In-memory index is immutable during updates but still useful for entry point optimization
 
-* The index is **not crash-consistent** after updates currently, journaling could be adopted for it.
+### 🧠 In-Memory Workloads (Load SSD Index to DRAM)
 
-* To save a **consistent index snapshot** after updates, use `final_merge` similar to `test_insert_search`.
+PipeANN supports loading the entire SSD index into DRAM to use as an in-memory baseline (e.g., Vamana).
 
-* For better performance, please select the `search_mode` to `2` (PipeANN) in `test_insert_search`, and set the `search_beam_width` to 32.
-The in-memory index could also be used (but it is immutable during updates).
+**Search-Only (`search_disk_index_mem`)**
 
+Usage is identical to `search_disk_index`, but loads the index to memory first.
 
-## Reproduce Results in Our Papers
-
-The scripts we use for evaluation are placed in the `scripts/` directory. For details, please refer to:
-
-* [PipeANN](./README-PipeANN.md) for search-only scripts in `tests-pipeann`.
-* [OdinANN](./README-OdinANN.md) for search-update scripts in `tests-odinann`.
-
-
-## Cite Our Paper
-
-If you use this repository in your research, please cite our papers:
+```bash
+# search_disk_index_mem <type> <prefix> <threads> <beam_width> <query> <gt> <topk> <metric> <nbr_type> <mode> <mem_L> <Ls...>
+build/tests/search_disk_index_mem uint8 index_prefix 1 32 query.bin gt.bin 10 l2 pq 2 10 10 20 30 40
 ```
-@inproceedings {fast26odinann,
-  author = {Hao Guo and Youyou Lu},
-  title = {OdinANN: Direct Insert for Consistently Stable Performance in Billion-Scale Graph-Based Vector Search},
+
+**Search-Insert-Delete (`overall_perf_mem`)**
+
+Usage is identical to `overall_performance`, but operates entirely in memory.
+
+```bash
+# overall_perf_mem <type> <data> <L_disk> <index> <query> <gt> <recall> <beam> <steps> <Ls...>
+build/tests/overall_perf_mem uint8 data_200M.bin 128 index_prefix query.bin \
+    /path/to/gt 10 4 100 20 30
+```
+
+### 🏷️ Filtered Search
+
+PipeANN supports filtered search using post-filtering.
+
+To achieve this, two new classes are introduced:
+* `AbstractLabel` class stores the labels for each data, used for filtering.
+* `AbstractSelector` class filters the labels given a query label and a target label (as well as the target ID), using `is_member` function.
+
+We implemented some example `Label`s and `Selector`s, including spmat `Label` and (range) filtered `Selectors`.
+If arbitrary label or selector is required, you could implement them by deriving from the `Abstract` classes.
+
+The labels are directly stored at the end of each record, so in the graph:
+* Each record contains `[ Vector | R | R neighbors | labels ]`. 
+* The total size is fixed to `max_node_len`, which may be larger than `vector_size` + (1 + R) * `sizeof(uint32_t)`.
+* A new metadata, `label_size`, is introduced to the metadata page.
+
+`build_disk_index` and `pipe_search` are extended to support building and searching a filtered graph index. An example for [YFCC10M in NIPS'23 BigANN benchmark](https://big-ann-benchmarks.com/neurips23.html):
+
+**1. Build Filtered Index**
+
+Two new arguments: `label_type` (e.g., `spmat`) and `label_file`.
+
+```bash
+# Build index with labels
+# For yfcc10M, the labels should be with filename base.metadata.10M.spmat
+build/tests/build_disk_index uint8 data.bin index 64 96 32 500 112 l2 pq spmat labels.spmat
+```
+
+**2. Search with Filter**
+
+Use `search_disk_index_filtered`. Requires `selector_type` (e.g., `subset`) and `query_label_file`.
+
+```bash
+# Search with filter
+# For yfcc10M, the query_labels should be with filename query.metadata.public.100K.spmat.
+build/tests/search_disk_index_filtered uint8 index 16 32 query.bin gt.bin 10 l2 pq \
+    subset query_labels.spmat 0 0 20 50 100 200 300
+```
+
+Example result on YFCC10M:
+```
+     L   I/O Width         QPS  AvgLat(us)     P99 Lat   Mean Hops    Mean IOs   Recall@10
+==========================================================================================
+    20          32     8836.26     1777.56     3402.00        0.00       49.59       13.87
+    50          32     6357.16     2465.66     4110.00        0.00       77.99       21.00
+   100          32     4164.85     3758.77     5982.00        0.00      126.23       27.96
+   200          32     2423.22     6490.44     9512.00        0.00      223.67       36.13
+   300          32     1697.97     9250.71    12881.00        0.00      321.85       41.19
+```
+
+---
+
+## 📁 Code Structure
+
+```bash
+PipeANN/
+├── src/                          # Core implementation
+│   ├── index.cpp                    # In-memory Vamana index
+│   ├── ssd_index.cpp                # On-disk index (search-only)
+│   ├── search/                   # Search algorithms
+│   │   ├── pipe_search.cpp          # 🌟 PipeANN search (main algorithm)
+│   │   ├── beam_search.cpp          # DiskANN best-first search
+│   │   ├── page_search.cpp          # Starling page-based search
+│   │   └── coro_search.cpp          # Coroutine-based multi-query search
+│   ├── update/                   # Update operations
+│   │   ├── direct_insert.cpp        # 🌟 OdinANN direct insert
+│   │   ├── delete_merge.cpp         # Delete and merge logic
+│   │   └── dynamic_index.cpp        # Dynamic index wrapper (search-update)
+│   └── utils/                    # Utilities
+│       ├── distance.cpp             # Distance computation (L2/IP/cosine)
+│       ├── linux_aligned_file_reader.cpp  # io_uring/AIO support
+│       └── ...
+├── include/                      # Header files
+│   ├── index.h                      # In-memory index interface
+│   ├── ssd_index.h                  # On-disk index interface
+│   ├── dynamic_index.h              # Dynamic index interface
+│   └── filter/                   # Filtered search support
+├── tests/                        # Test programs & benchmarks
+│   ├── build_disk_index.cpp         # Build on-disk index
+│   ├── build_memory_index.cpp       # Build in-memory index
+│   ├── search_disk_index.cpp        # Search benchmark (SSD)
+│   ├── search_disk_index_mem.cpp    # Search benchmark (Load SSD index to RAM)
+│   ├── search_disk_index_filtered.cpp # Filtered search benchmark
+│   ├── test_insert_search.cpp       # Insert-search benchmark
+│   ├── overall_performance.cpp      # Insert-delete-search benchmark
+│   ├── pad_partition.cpp            # Pad partition file (for Starling)
+│   └── utils/                    # Data utilities
+├── tests_py/                     # Python examples
+├── pipeann/                      # Python package
+├── scripts/                      # Evaluation scripts
+└── third_party/                  # Dependencies (liburing)
+```
+
+## 📂 Directory Structure & Path Assumptions
+
+The provided scripts in `scripts/` assume a specific directory structure for datasets and indexes. 
+**Please modify the hard-coded paths in the scripts** (or create symlinks) if your environment differs.
+
+```bash
+/mnt/nvme/data/                  # Dataset Directory
+├── bigann/
+│   ├── 100M.bbin                # SIFT100M dataset
+│   ├── 100M_gt.bin              # SIFT100M ground truth
+│   ├── truth.bin                # SIFT1B ground truth
+│   ├── bigann_200M.bbin         # SIFT200M (for updates)
+│   └── bigann_query.bbin        # SIFT query
+├── deep/
+│   ├── 100M.fbin                # DEEP100M dataset
+│   ├── 100M_gt.bin              # DEEP100M ground truth
+│   └── queries.fbin             # DEEP query
+└── SPACEV1B/
+    ├── 100M.bin                 # SPACEV100M dataset
+    ├── 100M_gt.bin              # SPACEV100M ground truth
+    ├── query.bin                # SPACEV query
+    └── truth.bin                # SPACEV1B ground truth
+
+/mnt/nvme2/indices/              # Search-Only Indexes
+├── bigann/100m                  # SIFT100M index prefix
+├── deep/100M                    # DEEP100M index prefix
+└── spacev/100M                  # SPACEV100M index prefix
+
+/mnt/nvme/indices_upd/           # Search-Update Indexes
+├── bigann/100M                  # SIFT100M index for updates
+├── bigann_gnd_insert/           # GT for insert-search workload
+└── bigann_gnd/                  # GT for insert-delete-search workload
+```
+
+---
+
+## 📜 Scripts Reference
+
+The scripts are designed to reproduce the figures in our papers.
+> **Note**: Before running, ensure your data paths match the [Directory Structure](#-directory-structure--path-assumptions) above, or edit the scripts (`eval_f.sh`, `fig*.sh`) to point to your locations.
+
+### Directory Structure
+
+```
+scripts/
+├── tests-pipeann/                # PipeANN (OSDI'25) evaluation
+│   ├── hello_world.sh               # Quick functionality test
+│   ├── fig11.sh ~ fig18.sh          # Paper figure reproduction
+│   ├── plotting.py                  # Generate figures
+│   └── plotting.ipynb               # Jupyter notebook for plotting
+├── tests-odinann/                # OdinANN (FAST'26) evaluation  
+│   ├── hello_world.sh               # Quick functionality test
+│   ├── fig6.sh ~ fig12.sh           # Paper figure reproduction
+│   └── plotting.ipynb               # Jupyter notebook for plotting
+├── run_all_pipeann.sh               # Run all PipeANN experiments
+└── validate_index_structure.py      # Index validation tool
+```
+
+### Usage Examples
+
+**Hello World (verify installation):**
+```bash
+# PipeANN search-only test (~1 min)
+bash scripts/tests-pipeann/hello_world.sh
+
+# OdinANN update test (~1 min)
+bash scripts/tests-odinann/hello_world.sh
+```
+
+**Run individual experiments:**
+
+*   **PipeANN (Search-Only)**:
+    *   `fig11.sh`: Latency vs Recall (100M datasets)
+    *   `fig12.sh`: Throughput vs Recall (100M datasets)
+    *   `fig13.sh`: Latency breakdown
+    *   `fig14.sh` ~ `fig18.sh`: Other evaluations (ablation, scalability, etc.)
+
+*   **OdinANN (Search-Update)**:
+    *   `fig6.sh`: Insert-search on SIFT100M (~4d)
+    *   `fig7.sh`: Insert-search on DEEP100M (~4d)
+    *   `fig8.sh`: Insert-search on SIFT1B (~8d)
+    *   `fig12.sh`: Insert-delete-search (~6d)
+
+**Plot results:**
+```bash
+cd scripts/tests-pipeann && python plotting.py
+# Or use Jupyter: plotting.ipynb
+```
+
+
+---
+
+## 📖 Citation
+
+If you use PipeANN in your research, please cite our papers:
+
+```bibtex
+@inproceedings{fast26odinann,
+  author    = {Hao Guo and Youyou Lu},
+  title     = {OdinANN: Direct Insert for Consistently Stable Performance 
+               in Billion-Scale Graph-Based Vector Search},
   booktitle = {24th USENIX Conference on File and Storage Technologies (FAST 26)},
-  year = {2026},
-  address = {Santa Clara, CA},
+  year      = {2026},
+  address   = {Santa Clara, CA},
   publisher = {USENIX Association}
 }
 
-@inproceedings {osdi25pipeann,
-  author = {Hao Guo and Youyou Lu},
-  title = {Achieving Low-Latency Graph-Based Vector Search via Aligning Best-First Search Algorithm with SSD},
+@inproceedings{osdi25pipeann,
+  author    = {Hao Guo and Youyou Lu},
+  title     = {Achieving Low-Latency Graph-Based Vector Search via 
+               Aligning Best-First Search Algorithm with SSD},
   booktitle = {19th USENIX Symposium on Operating Systems Design and Implementation (OSDI 25)},
-  year = {2025},
-  address = {Boston, MA},
-  pages = {171--186},
+  year      = {2025},
+  address   = {Boston, MA},
+  pages     = {171--186},
   publisher = {USENIX Association}
 }
 ```
 
-## Acknowledgments
+---
 
-PipeANN is based on [DiskANN and FreshDiskANN](https://github.com/microsoft/DiskANN/tree/diskv2), we really appreciate it.
+## 🙏 Acknowledgments
+
+PipeANN is based on [DiskANN and FreshDiskANN](https://github.com/microsoft/DiskANN/tree/diskv2). We sincerely appreciate their excellent work!

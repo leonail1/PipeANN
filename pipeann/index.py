@@ -6,6 +6,7 @@ from .C import Metric as _Metric
 
 class Metric:
     L2 = _Metric.L2
+    INNER_PRODUCT = _Metric.INNER_PRODUCT
     COSINE = _Metric.COSINE
 
 

@@ -3,17 +3,8 @@
 #include <vector>
 #include <cblas.h>
 
-namespace math_utils {
-
-  float calc_distance(float *vec_1, float *vec_2, size_t dim);
-
-  // compute l2-squared norms of data stored in row major num_points * dim,
-  // needs
-  // to be pre-allocated
+namespace kmeans {
   void compute_vecs_l2sq(float *vecs_l2sq, float *data, const size_t num_points, const size_t dim);
-
-  void rotate_data_randomly(float *data, size_t num_points, size_t dim, float *rot_mat, float *&new_mat,
-                            bool transpose_rot = false);
 
   // Given data in num_points * dim row major
   // Pivots stored in pivot_data as num_centers * dim row major
@@ -22,9 +13,6 @@ namespace math_utils {
   void compute_closest_centers(float *data, size_t num_points, size_t dim, float *pivot_data, size_t num_centers,
                                size_t k, uint32_t *closest_centers_ivf);
 
-}  // namespace math_utils
-
-namespace kmeans {
   // Run Elkan until max_reps or stopping criterion
   // Elkan's algorithm uses triangle inequality to avoid unnecessary distance computations
   // If you pass NULL for closest_docs and closest_center, it will NOT return the results,

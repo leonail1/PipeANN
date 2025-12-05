@@ -2,37 +2,43 @@
 #include <fcntl.h>
 #include <algorithm>
 #include <cassert>
+#include <cfloat>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <string>
 #include <memory>
 #include <random>
+#include <set>
 #include <sstream>
 #include <malloc.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <immintrin.h>
 
-#include "distance.h"
 #include "utils/log.h"
 
-// taken from
-// https://github.com/Microsoft/BLAS-on-flash/blob/master/include/utils.h
-// round up X to the nearest multiple of Y
+/*
+ * Necessary definitions and
+ * functions used both by both in-memory and on-disk index.
+ * Avoid including other headers in this project!
+ */
+constexpr uint64_t SECTOR_LEN = 4096;
+
 #define ROUND_UP(X, Y) ((((uint64_t) (X) / (Y)) + ((uint64_t) (X) % (Y) != 0)) * (Y))
 
 #define DIV_ROUND_UP(X, Y) (((uint64_t) (X) / (Y)) + ((uint64_t) (X) % (Y) != 0))
 
-// round down X to the nearest multiple of Y
-#define ROUND_DOWN(X, Y) (((uint64_t) (X) / (Y)) * (Y))
+#ifndef likely
+#define likely(x) __builtin_expect(!!(x), 1)
+#endif
 
-// alignment tests
-#define IS_ALIGNED(X, Y) ((uint64_t) (X) % (uint64_t) (Y) == 0)
-#define IS_512_ALIGNED(X) IS_ALIGNED(X, 512)
-#define METADATA_SIZE \
-  4096  // all metadata of individual sub-component files is written in first
-        // 4KB for unified files
+#ifndef unlikely
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#endif
 
 /* Used to replace exception. */
 inline void crash() {
@@ -276,58 +282,47 @@ namespace pipeann {
     }
   }
 
-  template<typename T>
-  inline uint64_t save_data_in_base_dimensions(const std::string &filename, T *data, size_t npts, size_t ndims,
-                                               size_t aligned_dim, size_t offset = 0) {
-    std::ofstream writer;  //(filename, std::ios::binary | std::ios::out);
-    open_file_to_write(writer, filename);
-    int npts_i32 = (int) npts, ndims_i32 = (int) ndims;
-    uint64_t bytes_written = 2 * sizeof(uint32_t) + npts * ndims * sizeof(T);
-    writer.seekp(offset, writer.beg);
-    writer.write((char *) &npts_i32, sizeof(int));
-    writer.write((char *) &ndims_i32, sizeof(int));
-    for (size_t i = 0; i < npts; i++) {
-      writer.write((char *) (data + i * aligned_dim), ndims * sizeof(T));
-    }
-    writer.close();
-    return bytes_written;
-  }
-
-  template<typename T>
-  inline void copy_aligned_data_from_file(const std::string bin_file, T *&data, size_t &npts, size_t &dim,
-                                          const size_t &rounded_dim, size_t offset = 0) {
-    if (data == nullptr) {
-      LOG(INFO) << "Memory was not allocated for " << data << " before calling the load function. Exiting...";
-      exit(-1);
-    }
-    std::ifstream reader(bin_file, std::ios::binary);
-    reader.seekg(offset, reader.beg);
-
-    int npts_i32, dim_i32;
-    reader.read((char *) &npts_i32, sizeof(int));
-    reader.read((char *) &dim_i32, sizeof(int));
-    npts = (unsigned) npts_i32;
-    dim = (unsigned) dim_i32;
-
-    for (size_t i = 0; i < npts; i++) {
-      reader.read((char *) (data + i * rounded_dim), dim * sizeof(T));
-      memset(data + i * rounded_dim + dim, 0, (rounded_dim - dim) * sizeof(T));
-    }
-  }
-
-  // NOTE :: good efficiency when total_vec_size is integral multiple of 64
+  // NOTE: good efficiency when total_vec_size is integral multiple of 64
   inline void prefetch_vector(const char *vec, size_t vecsize) {
     size_t max_prefetch_size = (vecsize / 64) * 64;
     for (size_t d = 0; d < max_prefetch_size; d += 64)
       _mm_prefetch((const char *) vec + d, _MM_HINT_T0);
   }
 
-  void normalize_data_file(const std::string &inFileName, const std::string &outFileName);
+  inline double calculate_recall(unsigned num_queries, unsigned *gold_std, float *gs_dist, unsigned dim_gs,
+                                 unsigned *our_results, unsigned dim_or, unsigned recall_at) {
+    double total_recall = 0;
+    std::set<unsigned> gt, res;
 
-  template<typename T>
-  Distance<T> *get_distance_function(Metric m);
+    for (size_t i = 0; i < num_queries; i++) {
+      gt.clear();
+      res.clear();
+      unsigned *gt_vec = gold_std + dim_gs * i;
+      unsigned *res_vec = our_results + dim_or * i;
+      size_t tie_breaker = recall_at;
+      if (gs_dist != nullptr) {
+        float *gt_dist_vec = gs_dist + dim_gs * i;
+        tie_breaker = recall_at - 1;
+        while (tie_breaker < dim_gs && gt_dist_vec[tie_breaker] == gt_dist_vec[recall_at - 1])
+          tie_breaker++;
+      }
 
-  struct Parameters {
+      gt.insert(gt_vec, gt_vec + tie_breaker);
+      res.insert(res_vec, res_vec + recall_at);
+
+      unsigned cur_recall = 0;
+      for (auto &v : res) {
+        if (gt.find(v) != gt.end()) {
+          cur_recall++;
+        }
+      }
+      total_recall += cur_recall;
+    }
+    return total_recall / (num_queries) * (100.0 / recall_at);
+  }
+
+  /* Parameters for index build. */
+  struct IndexBuildParameters {
     uint32_t R = 0;              // maximum out-neighbors.
     uint32_t L = 0;              // build L.
     uint32_t C = 384;            // delete pruning capacity.
@@ -346,26 +341,118 @@ namespace pipeann {
       this->beam_width = beam_width;
       this->saturate_graph = saturate_graph;
     }
+
+    void print() {
+      LOG(INFO) << "IndexBuildParameters with L: " << L << " R: " << R << " C: " << C << " alpha: " << alpha
+                << " num_threads: " << num_threads << " beam_width: " << beam_width
+                << " saturate_graph: " << saturate_graph;
+    }
   };
+
+  /* Graph neighbor-related definitions. */
+  struct Neighbor {
+    unsigned id;
+    float distance;
+    bool flag;
+    bool visited;
+
+    Neighbor() = default;
+    Neighbor(unsigned id, float distance, bool f) : id{id}, distance{distance}, flag(f), visited(false) {
+    }
+
+    inline bool operator<(const Neighbor &other) const {
+      return (distance < other.distance) || (distance == other.distance && id < other.id);
+    }
+    inline bool operator==(const Neighbor &other) const {
+      return (id == other.id);
+    }
+    inline bool operator>(const Neighbor &other) const {
+      return (distance > other.distance) || (distance == other.distance && id > other.id);
+    }
+  };
+
+  static inline unsigned InsertIntoPool(Neighbor *addr, unsigned K, Neighbor nn) {
+    // find the location to insert
+    unsigned left = 0, right = K - 1;
+    if (addr[left].distance > nn.distance) {
+      memmove((char *) &addr[left + 1], &addr[left], K * sizeof(Neighbor));
+      addr[left] = nn;
+      return left;
+    }
+    if (addr[right].distance < nn.distance) {
+      addr[K] = nn;
+      return K;
+    }
+    while (right > 1 && left < right - 1) {
+      unsigned mid = (left + right) / 2;
+      if (addr[mid].distance > nn.distance)
+        right = mid;
+      else
+        left = mid;
+    }
+    // check equal ID
+
+    while (left > 0) {
+      if (addr[left].distance < nn.distance)
+        break;
+      if (addr[left].id == nn.id)
+        return K + 1;
+      left--;
+    }
+    if (addr[left].id == nn.id || addr[right].id == nn.id)
+      return K + 1;
+    memmove((char *) &addr[right + 1], &addr[right], (K - right) * sizeof(Neighbor));
+    addr[right] = nn;
+    return right;
+  }
+
+  /*
+   * For float, we normalize to 1.
+   * For non-float types, we do not normalize to 1 to avoid underflow.
+   * Instead, we normalize to TYPE_MAX:
+   * - For uint8_t, we normalize to 255.
+   * - For int8_t, we normalize to 127.
+   */
+  template<typename T>
+  inline void normalize_data(T *data_out, const T *data_in, size_t dim) {
+    float norm_sq = 0.0f;
+
+#pragma omp simd reduction(+ : norm_sq) aligned(data_in : 8)
+    for (size_t i = 0; i < dim; i++) {
+      norm_sq += (float) (data_in[i]) * (float) (data_in[i]);
+    }
+
+    if (unlikely(norm_sq < FLT_EPSILON)) {
+      memset(data_out, 0, dim * sizeof(T));
+      return;
+    }
+
+    float norm = std::sqrt(norm_sq);
+    float scale = 1.0f;
+
+    if constexpr (std::is_same_v<T, uint8_t>) {
+      scale = 255.0f / norm;
+    } else if constexpr (std::is_same_v<T, int8_t>) {
+      scale = 127.0f / norm;
+    } else if constexpr (std::is_same_v<T, float>) {
+      scale = 1.0f / norm;
+    } else {
+      LOG(ERROR) << "Unsupported type: " << typeid(T).name();
+      crash();
+    }
+
+    // Round up for integer types.
+#pragma omp simd aligned(data_out, data_in : 8)
+    for (size_t i = 0; i < dim; i++) {
+      float val = (float) data_in[i] * scale;
+      if constexpr (std::is_same_v<T, float>) {
+        data_out[i] = val;
+      } else {
+        data_out[i] = static_cast<T>(std::round(val));
+      }
+    }
+  }
+
+  // We reserve kInvalidID to mark an invalid ID or location.
+  static constexpr uint32_t kInvalidID = std::numeric_limits<uint32_t>::max();
 }  // namespace pipeann
-
-struct PivotContainer {
-  PivotContainer() = default;
-
-  PivotContainer(size_t pivo_id, float pivo_dist) : piv_id{pivo_id}, piv_dist{pivo_dist} {
-  }
-
-  bool operator<(const PivotContainer &p) const {
-    return p.piv_dist < piv_dist;
-  }
-
-  bool operator>(const PivotContainer &p) const {
-    return p.piv_dist > piv_dist;
-  }
-
-  size_t piv_id;
-  float piv_dist;
-};
-
-template<typename T>
-pipeann::Distance<T> *get_distance_function(pipeann::Metric m);

@@ -12,6 +12,9 @@ namespace pipeann {
   template<typename T>
   class DummyNeighbor : public AbstractNeighbor<T> {
    public:
+    DummyNeighbor(pipeann::Metric metric) : AbstractNeighbor<T>(metric) {
+    }
+
     virtual ~DummyNeighbor() = default;
 
     std::string get_name() {

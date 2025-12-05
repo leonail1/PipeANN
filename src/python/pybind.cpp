@@ -1,4 +1,4 @@
-#include "v2/pyindex.h"
+#include "pyindex.h"
 
 PYBIND11_MODULE(C, m) {
   m.doc() = "PipeANN";
@@ -6,6 +6,7 @@ PYBIND11_MODULE(C, m) {
 
   py::enum_<pipeann::Metric>(m, "Metric")
       .value("L2", pipeann::Metric::L2)
+      .value("INNER_PRODUCT", pipeann::Metric::INNER_PRODUCT)
       .value("COSINE", pipeann::Metric::COSINE)
       .export_values();
 

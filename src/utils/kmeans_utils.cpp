@@ -1,44 +1,36 @@
 #include <limits>
 #include <malloc.h>
 #include <cstring>
-#include <math_utils.h>
+#include <utils/kmeans_utils.h>
 #include <queue>
-#include "utils.h"
+#include "distance.h"
 
-namespace math_utils {
+namespace kmeans {
+  struct PivotContainer {
+    PivotContainer() = default;
 
-  float calc_distance(float *vec_1, float *vec_2, size_t dim) {
-    float dist = 0;
-    for (size_t j = 0; j < dim; j++) {
-      dist += (vec_1[j] - vec_2[j]) * (vec_1[j] - vec_2[j]);
+    PivotContainer(size_t pivo_id, float pivo_dist) : piv_id{pivo_id}, piv_dist{pivo_dist} {
     }
-    return dist;
-  }
+
+    bool operator<(const PivotContainer &p) const {
+      return p.piv_dist < piv_dist;
+    }
+
+    bool operator>(const PivotContainer &p) const {
+      return p.piv_dist > piv_dist;
+    }
+
+    size_t piv_id;
+    float piv_dist;
+  };
 
   // compute l2-squared norms of data stored in row major num_points * dim,
-  // needs
-  // to be pre-allocated
+  // needs to be pre-allocated
   void compute_vecs_l2sq(float *vecs_l2sq, float *data, const size_t num_points, const size_t dim) {
 #pragma omp parallel for schedule(static, 8192)
     for (int64_t n_iter = 0; n_iter < (int64_t) num_points; n_iter++) {
-      vecs_l2sq[n_iter] = cblas_snrm2(dim, (data + (n_iter * dim)), 1);
-      vecs_l2sq[n_iter] *= vecs_l2sq[n_iter];
+      vecs_l2sq[n_iter] = cblas_sdot(dim, data + (n_iter * dim), 1, data + (n_iter * dim), 1);
     }
-  }
-
-  void rotate_data_randomly(float *data, size_t num_points, size_t dim, float *rot_mat, float *&new_mat,
-                            bool transpose_rot) {
-    CBLAS_TRANSPOSE transpose = CblasNoTrans;
-    if (transpose_rot) {
-      LOG(INFO) << "Transposing rotation matrix..";
-      transpose = CblasTrans;
-    }
-    LOG(INFO) << "done Rotating data with random matrix..";
-
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, transpose, num_points, dim, dim, 1.0, data, dim, rot_mat, dim, 0, new_mat,
-                dim);
-
-    LOG(INFO) << "done.";
   }
 
   // Given data in num_points * dim row major and pivots in num_centers * dim row major,
@@ -54,8 +46,8 @@ namespace math_utils {
     // Compute L2 squared norms
     std::vector<float> pts_norms_squared(num_points);
     std::vector<float> pivs_norms_squared(num_centers);
-    math_utils::compute_vecs_l2sq(pts_norms_squared.data(), data, num_points, dim);
-    math_utils::compute_vecs_l2sq(pivs_norms_squared.data(), pivot_data, num_centers, dim);
+    compute_vecs_l2sq(pts_norms_squared.data(), data, num_points, dim);
+    compute_vecs_l2sq(pivs_norms_squared.data(), pivot_data, num_centers, dim);
 
     // Use a reasonable block size for good cache locality
     size_t PAR_BLOCK_SIZE = std::min((size_t) 8192, num_points);
@@ -125,9 +117,6 @@ namespace math_utils {
       }
     }
   }
-}  // namespace math_utils
-
-namespace kmeans {
   // run Elkan one iteration
   // Elkan's algorithm uses triangle inequality to avoid unnecessary distance computations
   // Given data in row major num_points * dim, and centers in row major num_centers * dim
@@ -139,6 +128,7 @@ namespace kmeans {
                    std::vector<size_t> *closest_docs, uint32_t *&closest_center, float *lower_bound, float *upper_bound,
                    float *s_dist, float *half_center_dist, float *new_center_dist, float *new_centers, bool *r) {
     // closest_docs and closest_center are assumed to be non-null and allocated by the caller.
+    pipeann::DistanceL2Float dist_cmp;
 
     // Clear the document lists for the new iteration
     for (size_t c = 0; c < num_centers; ++c) {
@@ -150,7 +140,7 @@ namespace kmeans {
     for (int64_t j = 0; j < static_cast<int64_t>(num_centers); j++) {
       s_dist[j] = std::numeric_limits<float>::max();  // Initialize s_dist for finding min
       for (size_t k = j + 1; k < num_centers; k++) {
-        float distance = sqrtf(math_utils::calc_distance(centers + j * dim, centers + k * dim, dim));
+        float distance = sqrtf(dist_cmp.compare(centers + j * dim, centers + k * dim, dim));
         half_center_dist[j * num_centers + k] = 0.5f * distance;
         half_center_dist[k * num_centers + j] = 0.5f * distance;
       }
@@ -184,7 +174,7 @@ namespace kmeans {
       float upper_bound_sq;
       // If r[j] is true, the upper bound is loose. We must recompute it to get a tighter bound.
       if (r[j]) {
-        upper_bound_sq = math_utils::calc_distance(data + j * dim, centers + current_center_idx * dim, dim);
+        upper_bound_sq = dist_cmp.compare(data + j * dim, centers + current_center_idx * dim, dim);
         upper_bound[j] = sqrtf(upper_bound_sq);
         r[j] = false;  // The bound is now tight. Reset the flag.
         // Re-check the first pruning condition with the new tight bound.
@@ -210,7 +200,7 @@ namespace kmeans {
         }
 
         // If pruning fails, we must compute the exact distance.
-        float dist_to_k_sq = math_utils::calc_distance(data + j * dim, centers + k * dim, dim);
+        float dist_to_k_sq = dist_cmp.compare(data + j * dim, centers + k * dim, dim);
         lower_bound[j * num_centers + k] = sqrtf(dist_to_k_sq);
 
         if (dist_to_k_sq < upper_bound_sq) {
@@ -266,7 +256,7 @@ namespace kmeans {
     // Step 5: Update lower bounds using the distance the centers moved.
 #pragma omp parallel for schedule(static, 1)
     for (int64_t j = 0; j < static_cast<int64_t>(num_centers); j++) {
-      new_center_dist[j] = sqrtf(math_utils::calc_distance(centers + j * dim, new_centers + j * dim, dim));
+      new_center_dist[j] = sqrtf(dist_cmp.compare(centers + j * dim, new_centers + j * dim, dim));
     }
 
 #pragma omp parallel for schedule(static, 8192)
@@ -298,7 +288,7 @@ namespace kmeans {
     for (int64_t chunk = 0; chunk < static_cast<int64_t>(nchunks); ++chunk) {
       for (size_t d = chunk * CHUNK_SIZE; d < num_points && d < (chunk + 1) * CHUNK_SIZE; ++d) {
         residuals[chunk * BUF_PAD] +=
-            math_utils::calc_distance(data + (d * dim), centers + (size_t) closest_center[d] * (size_t) dim, dim);
+            dist_cmp.compare(data + (d * dim), centers + (size_t) closest_center[d] * (size_t) dim, dim);
       }
     }
     for (size_t chunk = 0; chunk < nchunks; ++chunk) {
@@ -316,6 +306,7 @@ namespace kmeans {
   // Final centers are output in centers as row major num_centers * dim
   float run_elkan(float *data, size_t num_points, size_t dim, float *centers, const size_t num_centers,
                   const size_t max_reps, std::vector<size_t> *closest_docs, uint32_t *closest_center) {
+    pipeann::DistanceL2Float dist_cmp;
     float residual = std::numeric_limits<float>::max();
     bool ret_closest_docs = (closest_docs != NULL);
     bool ret_closest_center = (closest_center != NULL);
@@ -341,13 +332,12 @@ namespace kmeans {
 
     // Initial assignment: assign each point to its closest initial center
     // and initialize upper_bound with the exact L2 distance.
-#pragma omp parallel for schedule(static, 8192)
     for (int64_t j = 0; j < static_cast<int64_t>(num_points); j++) {
       float min_dist_sq = std::numeric_limits<float>::max();
       uint32_t best_center_idx = 0;
 
       for (size_t k = 0; k < num_centers; k++) {
-        float dist_sq = math_utils::calc_distance(data + j * dim, centers + k * dim, dim);
+        float dist_sq = dist_cmp.compare(data + j * dim, centers + k * dim, dim);
         if (dist_sq < min_dist_sq) {
           min_dist_sq = dist_sq;
           best_center_idx = static_cast<uint32_t>(k);
@@ -399,6 +389,7 @@ namespace kmeans {
       LOG(INFO) << "ERROR: n_pts " << num_points << " currently not supported for k-means++, maximum is 8388608.";
       return;
     }
+    pipeann::DistanceL2Float dist_cmp;
 
     std::vector<size_t> picked;
     std::random_device rd;
@@ -414,9 +405,8 @@ namespace kmeans {
 
     float *dist = new float[num_points];
 
-#pragma omp parallel for schedule(static, 8192)
     for (int64_t i = 0; i < (int64_t) num_points; i++) {
-      dist[i] = math_utils::calc_distance(data + i * dim, data + init_id * dim, dim);
+      dist[i] = dist_cmp.compare(data + i * dim, data + init_id * dim, dim);
     }
 
     double dart_val;
@@ -450,9 +440,8 @@ namespace kmeans {
       picked.push_back(tmp_pivot);
       std::memcpy(pivot_data + num_picked * dim, data + tmp_pivot * dim, dim * sizeof(float));
 
-#pragma omp parallel for schedule(static, 8192)
       for (int64_t i = 0; i < (int64_t) num_points; i++) {
-        dist[i] = (std::min)(dist[i], math_utils::calc_distance(data + i * dim, data + tmp_pivot * dim, dim));
+        dist[i] = std::min(dist[i], dist_cmp.compare(data + i * dim, data + tmp_pivot * dim, dim));
       }
       num_picked++;
     }

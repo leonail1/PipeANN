@@ -493,12 +493,22 @@ void LinuxAlignedFileReader::poll_wait(void *ctx) {
 
 #endif
 
+static bool read_from_cache(IORequest &req, bool ref = false) {
+  uint64_t n_sectors = req.len / SECTOR_LEN;
+  uint64_t base_sector = req.offset / SECTOR_LEN;
+  for (uint64_t i = 0; i < n_sectors; i++) {
+    if (!pipeann::cache.get(base_sector + i, (uint8_t *) req.buf + i * SECTOR_LEN, ref)) {
+      return false;
+    }
+  }
+  req.finished = true;  // mark as finished for cache hit
+  return true;
+}
+
 int LinuxAlignedFileReader::send_read_no_alloc(IORequest &req, void *ring) {
 #ifndef READ_ONLY_TESTS
-  if (!v2::cache.get(req.offset / SECTOR_LEN, (uint8_t *) req.buf)) {
+  if (!read_from_cache(req)) {
     send_io(req, ring, false);
-  } else {
-    req.finished = true;  // mark as finished for cache miss
   }
 #else
   send_io(req, ring, false);
@@ -511,14 +521,16 @@ int LinuxAlignedFileReader::send_read_no_alloc(std::vector<IORequest> &reqs, voi
   std::vector<IORequest> disk_read_reqs;
   // fetch from cache.
   for (auto &req : reqs) {
-    if (req.offset % SECTOR_LEN != 0 || req.len != SECTOR_LEN) {
+    if (req.offset % SECTOR_LEN != 0 || req.len % SECTOR_LEN != 0) {
       LOG(ERROR) << "Unaligned read offset: " << req.offset << ", len: " << req.len;
     }
-    if (!v2::cache.get(req.offset / SECTOR_LEN, (uint8_t *) req.buf)) {
+    if (!read_from_cache(req)) {
       disk_read_reqs.push_back(req);
     }
   }
-  send_io(disk_read_reqs, ring, false);
+  if (disk_read_reqs.size() > 0) {
+    send_io(disk_read_reqs, ring, false);
+  }
   return disk_read_reqs.size();
 #else
   send_io(reqs, ring, false);
@@ -530,13 +542,12 @@ void LinuxAlignedFileReader::read_alloc(std::vector<IORequest> &read_reqs, void 
 #ifndef READ_ONLY_TESTS
   std::vector<IORequest> disk_read_reqs;
 
-  // TODO(gh): introduce size_per_io to cache.
   for (auto &req : read_reqs) {
-    if (req.offset % SECTOR_LEN != 0) {
+    if (req.offset % SECTOR_LEN != 0 || req.len % SECTOR_LEN != 0) {
       LOG(ERROR) << "Unaligned read offset: " << req.offset << ", len: " << req.len;
       crash();
     }
-    if (!v2::cache.get(req.offset / SECTOR_LEN, (uint8_t *) req.buf, true)) {
+    if (!read_from_cache(req, true)) {
       disk_read_reqs.push_back(req);
     }
   }
@@ -544,14 +555,18 @@ void LinuxAlignedFileReader::read_alloc(std::vector<IORequest> &read_reqs, void 
   if (disk_read_reqs.size() > 0) {
     read(disk_read_reqs, ctx);
     for (auto &req : disk_read_reqs) {
-      v2::cache.put(req.offset / SECTOR_LEN, (uint8_t *) req.buf, true);
+      for (uint64_t i = 0; i < req.len / SECTOR_LEN; i++) {
+        pipeann::cache.put(req.offset / SECTOR_LEN + i, (uint8_t *) req.buf + i * SECTOR_LEN, true);
+      }
     }
   }
 
   // ref.
   if (page_ref != nullptr) {
     for (auto &req : read_reqs) {
-      page_ref->push_back(req.offset / SECTOR_LEN);
+      for (uint64_t i = 0; i < req.len / SECTOR_LEN; i++) {
+        page_ref->push_back(req.offset / SECTOR_LEN + i);
+      }
     }
   }
 #else

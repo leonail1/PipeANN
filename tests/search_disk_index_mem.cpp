@@ -8,11 +8,11 @@
 #include <time.h>
 
 #include "distance.h"
+#include "nbr/dummy_nbr.h"
 #include "utils/log.h"
-#include "aux_utils.h"
 #include "index.h"
-#include "math_utils.h"
-#include "partition.h"
+#include "utils/kmeans_utils.h"
+#include "utils/partition.h"
 #include "utils/timer.h"
 #include "utils.h"
 
@@ -20,21 +20,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "linux_aligned_file_reader.h"
-
-#define WARMUP false
-
-void print_stats(std::string category, std::vector<float> percentiles, std::vector<float> results) {
-  std::cout << std::setw(20) << category << ": " << std::flush;
-  for (uint32_t s = 0; s < percentiles.size(); s++) {
-    std::cout << std::setw(8) << percentiles[s] << "%";
-  }
-  std::cout << std::endl;
-  std::cout << std::setw(22) << " " << std::flush;
-  for (uint32_t s = 0; s < percentiles.size(); s++) {
-    std::cout << std::setw(9) << results[s];
-  }
-  std::cout << std::endl;
-}
 
 template<typename T>
 int search_disk_index(int argc, char **argv) {
@@ -48,24 +33,18 @@ int search_disk_index(int argc, char **argv) {
 
   int index = 2;
   std::string index_prefix_path(argv[index++]);
-  std::string warmup_query_file = index_prefix_path + "_sample_data.bin";
-  std::ignore = std::atoi(argv[index++]) != 0;
-  std::ignore = std::atoi(argv[index++]);
   uint32_t num_threads = std::atoi(argv[index++]);
   uint32_t beamwidth = std::atoi(argv[index++]);
   std::string query_bin(argv[index++]);
   std::string truthset_bin(argv[index++]);
   uint64_t recall_at = std::atoi(argv[index++]);
-  std::string result_output_prefix(argv[index++]);
   std::string dist_metric(argv[index++]);
+  std::string nbr_type = argv[index++];
   int search_mode = std::atoi(argv[index++]);
   bool use_page_search = search_mode != 0;
-  std::ignore = std::atoi(argv[index++]);
+  uint32_t mem_L = std::atoi(argv[index++]);
 
-  pipeann::Metric m = dist_metric == "cosine" ? pipeann::Metric::COSINE : pipeann::Metric::L2;
-  if (dist_metric != "l2" && m == pipeann::Metric::L2) {
-    std::cout << "Unknown distance metric: " << dist_metric << ". Using default(L2) instead." << std::endl;
-  }
+  pipeann::Metric m = pipeann::get_metric(dist_metric);
 
   std::string disk_index_tag_file = index_prefix_path + "_disk.index.tags";
 
@@ -101,8 +80,8 @@ int search_disk_index(int argc, char **argv) {
   std::shared_ptr<AlignedFileReader> reader = nullptr;
   reader.reset(new LinuxAlignedFileReader());
 
-  pipeann::Index<T> _pFlashIndex(m, query_dim, (uint64_t) 1e8, false, false, false);
-  _pFlashIndex.load_from_disk_index(index_prefix_path);
+  pipeann::SSDIndex<T> disk_index(m, reader, new pipeann::DummyNeighbor<T>(m), true, nullptr);
+  auto &_pFlashIndex = *disk_index.load_to_mem(index_prefix_path);
 
   LOG(INFO) << "Num threads: " << num_threads;
   omp_set_num_threads(num_threads);
@@ -226,17 +205,15 @@ int search_disk_index(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-  if (argc < 14) {
+  if (argc < 12) {
     // tags == 1!
     std::cout << "Usage: " << argv[0]
               << " <index_type (float/int8/uint8)>  <index_prefix_path>"
-                 " <single_file_index(0/1)>"
-                 " <num_nodes_to_cache>  <num_threads>  <beamwidth (use 0 to "
-                 "optimize internally)> "
+                 " <num_threads>  <pipeline width> "
                  " <query_file.bin>  <truthset.bin (use \"null\" for none)> "
-                 " <K>  <result_output_prefix> <similarity (cosine/l2)> "
-                 " <use_page_search(0/1/2)> <mem_L> <L1> [L2] etc.  See README for "
-                 "more information on parameters."
+                 " <K> <similarity (cosine/l2/mips)> <nbr_type (pq/rabitq)>"
+                 " <search_mode(0 for beam search / 1 for page search / 2 for pipe search)> <mem_L (0 means not "
+                 "using mem index)> <L1> [L2] etc."
               << std::endl;
     exit(-1);
   }

@@ -2,8 +2,7 @@
 
 #include "utils.h"
 #include <immintrin.h>
-#include <sstream>
-#include <string_view>
+#include <vector>
 #include "utils/libcuckoo/cuckoohash_map.hh"
 #include "ssd_index_defs.h"
 
@@ -15,6 +14,13 @@ namespace pipeann {
     static constexpr double TRAINING_SET_FRACTION = 0.1;
     static constexpr uint32_t MAX_BYTES_PER_NBR = 256;
 
+    pipeann::Metric metric;
+
+    AbstractNeighbor(pipeann::Metric metric) : metric(metric) {
+    }
+
+    virtual ~AbstractNeighbor() = default;
+    
     // max size of context needed for a single query.
     virtual uint64_t query_ctx_size() {
       return 0;
@@ -32,8 +38,6 @@ namespace pipeann {
       double p_val = ((double) training_set_size / (double) npoints);
       return p_val;
     }
-
-    virtual ~AbstractNeighbor() = default;
 
     virtual std::string get_name() {
       return "AbstractNeighbor";

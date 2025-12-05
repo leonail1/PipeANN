@@ -1,27 +1,15 @@
 #pragma once
 #include <cassert>
 #include <string>
-#include <memory>
 #include <vector>
-
-const uint32_t NUM_PQ_CENTERS = 256;
-const uint32_t NUM_K_MEANS_ITERS = 15;
 
 template<typename T>
 void gen_random_slice(const std::string base_file, const std::string output_prefix, double sampling_rate,
                       size_t offset = 0);
 
 template<typename T>
-void gen_random_slice(const std::string data_file, double p_val, std::unique_ptr<float[]> &sampled_data,
-                      size_t &slice_size, size_t &ndims);
-
-template<typename T>
 void gen_random_slice(const std::string data_file, double p_val, float *&sampled_data, size_t &slice_size,
                       size_t &ndims);
-
-template<typename T>
-void gen_random_slice(const T *inputdata, size_t npts, size_t ndims, double p_val, float *&sampled_data,
-                      size_t &slice_size);
 
 template<typename T>
 int estimate_cluster_sizes(const std::string data_file, float *pivots, const size_t num_centers, const size_t dim,

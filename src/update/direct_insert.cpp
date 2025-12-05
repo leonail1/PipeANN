@@ -3,7 +3,6 @@
 #include "ssd_index.h"
 #include <malloc.h>
 #include <algorithm>
-#include <filesystem>
 
 #include <omp.h>
 #include <chrono>
@@ -15,6 +14,7 @@
 #include "utils/tsl/robin_map.h"
 #include "utils.h"
 #include "utils/page_cache.h"
+#include "utils/prune_neighbors.h"
 
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -23,10 +23,6 @@
 namespace pipeann {
   template<typename T, typename TagT>
   int SSDIndex<T, TagT>::insert_in_place(const T *point1, const TagT &tag, tsl::robin_set<uint32_t> *deletion_set) {
-    if (unlikely(size_per_io != SECTOR_LEN)) {
-      LOG(ERROR) << "Insert not supported for size_per_io == " << size_per_io;
-    }
-
     QueryBuffer<T> *read_data = this->pop_query_buf(point1);
     T *point = read_data->aligned_query_T;  // normalized point for cosine.
     void *ctx = reader->get_ctx();
@@ -38,16 +34,17 @@ namespace pipeann {
 
     std::vector<Neighbor> exp_node_info;
     tsl::robin_map<uint32_t, T *> coord_map;
-    coord_map.reserve(10 * this->l_index);
+    coord_map.reserve(10 * this->params.L);
     // Dynamic alloc and not using MAX_N_CMPS to reduce memory footprint.
     T *coord_buf = nullptr;
-    alloc_aligned((void **) &coord_buf, 10 * this->l_index * this->aligned_dim, 256);
+    alloc_aligned((void **) &coord_buf, 10 * this->params.L * this->aligned_dim, 256);
     std::vector<uint64_t> page_ref{};
-    // re-normalize point1 to support inner_product search (it adds one more dimension, so not idempotent).
-    this->do_beam_search(point1, 0, l_index, beam_width, exp_node_info, &coord_map, coord_buf, nullptr, deletion_set,
-                         false, &page_ref);
+    this->do_beam_search(point1, 0, params.L, params.beam_width, exp_node_info, &coord_map, coord_buf, nullptr,
+                         deletion_set, false, &page_ref);
     std::vector<uint32_t> new_nhood;
-    prune_neighbors(coord_map, exp_node_info, new_nhood);
+    pipeann::prune_neighbors(exp_node_info, new_nhood, params, metric, [this, &coord_map](uint32_t a, uint32_t b) {
+      return this->dist_cmp->compare(coord_map[a], coord_map[b], this->meta_.data_dim);
+    });
     // locs[new_nhood.size()] is the target, locs[0:new_nhood.size() - 1] are the neighbors.
     // lock the pages to write
     aligned_free(coord_buf);
@@ -57,8 +54,9 @@ namespace pipeann {
 #ifdef IN_PLACE_RECORD_UPDATE
     std::vector<uint64_t> locs;
     for (auto &nbr : new_nhood) {
-      locs.emplace_back(id2loc(nbr));
-      pages_need_to_read.insert(node_sector_no(nbr));
+      auto loc = id2loc(nbr);
+      locs.emplace_back(loc);
+      pages_need_to_read.insert(loc_sector_no(loc));
     }
     locs.push_back(target_id);
     pages_need_to_read.insert(loc_sector_no(target_id));
@@ -68,7 +66,7 @@ namespace pipeann {
     cur_loc++;  // for target ID, atomic update.
     set_loc2id(target_id, target_id);
 #else
-    auto locs = this->alloc_loc(new_nhood.size() + 1, page_ref, pages_need_to_read);
+    std::vector<uint64_t> locs = this->alloc_loc(new_nhood.size() + 1, page_ref, pages_need_to_read);
 #endif
 
     std::set<uint64_t> pages_to_rmw_set;
@@ -81,7 +79,7 @@ namespace pipeann {
       pages_to_rmw.push_back(IORequest(page_no * SECTOR_LEN, size_per_io, nullptr, 0, 0));
     }
     // lock the target and the neighbor ids (ensure that sector_no does not change).
-    auto pages_locked = v2::lockReqs(this->page_lock_table, pages_to_rmw);
+    auto pages_locked = pipeann::lockReqs(this->page_lock_table, pages_to_rmw);
     lock_vec(vec_lock_table, target_id, new_nhood);
 
     // re-read the candidate pages (mostly in the cache).
@@ -96,9 +94,9 @@ namespace pipeann {
     std::vector<IORequest> reads, writes_4k, writes;
     assert(new_nhood.size() < MAX_N_EDGES);
     for (uint32_t i = 0; i < new_nhood.size(); ++i) {
-      reads.push_back(
-          IORequest(node_sector_no(new_nhood[i]) * SECTOR_LEN, size_per_io, update_buf + i * size_per_io, 0, 0));
-      page_buf_map[node_sector_no(new_nhood[i])] = update_buf + i * size_per_io;
+      auto loc = id2loc(new_nhood[i]);
+      reads.push_back(IORequest(loc_sector_no(loc) * SECTOR_LEN, size_per_io, update_buf + i * size_per_io, 0, 0));
+      page_buf_map[loc_sector_no(loc)] = update_buf + i * size_per_io;
     }
 
     for (uint32_t i = new_nhood.size(); i < new_nhood.size() + pages_to_rmw.size(); ++i) {
@@ -131,9 +129,8 @@ namespace pipeann {
 
     // update the target node.
     auto sector = loc_sector_no(locs[new_nhood.size()]);
-    auto node_buf = offset_to_loc(page_buf_map[sector], locs[new_nhood.size()]);
-    DiskNode<T> target_node(target_id, offset_to_node_coords(node_buf), offset_to_node_nhood(node_buf));
-    memcpy(target_node.coords, point, data_dim * sizeof(T));
+    DiskNode<T> target_node = node_from_page(page_buf_map[sector], locs[new_nhood.size()]);
+    memcpy(target_node.coords, point, meta_.data_dim * sizeof(T));
     target_node.nnbrs = new_nhood.size();
     *(target_node.nbrs - 1) = target_node.nnbrs;
     memcpy(target_node.nbrs, new_nhood.data(), new_nhood.size() * sizeof(uint32_t));
@@ -141,51 +138,32 @@ namespace pipeann {
 
     // update the neighbors
     for (uint32_t i = 0; i < new_nhood.size(); ++i) {
-      auto r_sector = node_sector_no(new_nhood[i]);
+      auto loc = id2loc(new_nhood[i]);
+      auto r_sector = loc_sector_no(loc);
       if (page_buf_map.find(r_sector) == page_buf_map.end()) {
         LOG(ERROR) << new_nhood[i] << " " << "Sector " << r_sector << " not found in page_buf_map";
         exit(-1);
       }
-      auto r_node_buf = offset_to_node(page_buf_map[r_sector], new_nhood[i]);
-      DiskNode<T> r_nbr_node(new_nhood[i], offset_to_node_coords(r_node_buf), offset_to_node_nhood(r_node_buf));
+
+      DiskNode<T> r_nbr_node = node_from_page(page_buf_map[r_sector], loc);
       std::vector<uint32_t> nhood(r_nbr_node.nnbrs + 1);
       nhood.assign(r_nbr_node.nbrs, r_nbr_node.nbrs + r_nbr_node.nnbrs);
       nhood.emplace_back(target_id);  // attention: we do not reuse IDs.
 
-      if (nhood.size() > this->range) {  // delta prune neighbors
+      if (nhood.size() > this->params.R) {  // delta prune neighbors
         auto &thread_pq_buf = read_data->nbr_vec_scratch;
-        std::vector<float> tgt_dists(nhood.size(), 0.0f), nbr_dists(nhood.size(), 0.0f);
-        nbr_handler->compute_dists(target_id, nhood.data(), nhood.size(), tgt_dists.data(), thread_pq_buf);
-        nbr_handler->compute_dists(r_nbr_node.id, nhood.data(), nhood.size(), nbr_dists.data(), thread_pq_buf);
-        std::vector<TriangleNeighbor> tri_pool(nhood.size());
-
-        for (uint32_t k = 0; k < nhood.size(); k++) {
-          tri_pool[k].id = nhood[k];
-          tri_pool[k].tgt_dis = tgt_dists[k];
-          tri_pool[k].distance = nbr_dists[k];
-        }
-        std::sort(tri_pool.begin(), tri_pool.end());
-
-        int tgt_idx = -1;
-        for (int k = 0; k < (int) nhood.size(); ++k) {
-          if (tri_pool[k].id == target_id) {
-            tgt_idx = k;
-            break;
-          }
-        }
-        if (unlikely(tgt_idx == -1)) {
-          LOG(ERROR) << "Target ID " << target_id << " not found in tri_pool";
-          exit(-1);
-        }
-        this->delta_prune_neighbors_pq(tri_pool, nhood, thread_pq_buf, tgt_idx);
+        auto nbr = this->nbr_handler;
+        pipeann::delta_prune_neighbors(
+            nhood, new_nhood[i], target_id, params, metric,
+            [nbr, &thread_pq_buf](uint32_t center, const uint32_t *ids, uint32_t n, float *dists_out) {
+              nbr->compute_dists(center, ids, n, dists_out, thread_pq_buf);
+            });
       }
 
       auto w_sector = loc_sector_no(locs[i]);
-      auto w_node_buf = offset_to_loc(page_buf_map[w_sector], locs[i]);
-      DiskNode<T> w_nbr_node(new_nhood[i], offset_to_node_coords(w_node_buf), offset_to_node_nhood(w_node_buf));
-      w_nbr_node.nnbrs = (uint32_t) nhood.size();
-      *(w_nbr_node.nbrs - 1) = (uint32_t) nhood.size();  // write to buf
-      memcpy(w_nbr_node.coords, r_nbr_node.coords, data_dim * sizeof(T));
+      DiskNode<T> w_nbr_node = node_from_page(page_buf_map[w_sector], locs[i]);
+      w_nbr_node.nnbrs = (uint32_t) nhood.size();  // write to nnbrs reference.
+      memcpy(w_nbr_node.coords, r_nbr_node.coords, meta_.data_dim * sizeof(T));
       memcpy(w_nbr_node.nbrs, nhood.data(), w_nbr_node.nnbrs * sizeof(uint32_t));
     }
 
@@ -226,7 +204,7 @@ namespace pipeann {
       bg_tasks.push(bg_task);
       bg_tasks.push_notify_all();
     } else {
-      v2::unlockReqs(this->page_lock_table, pages_locked);
+      pipeann::unlockReqs(this->page_lock_table, pages_locked);
     }
     reader->deref(&page_ref, ctx);
 #else
@@ -234,7 +212,7 @@ namespace pipeann {
     aligned_free(read_data->update_buf);
     read_data->update_buf = nullptr;
 
-    v2::unlockReqs(this->page_lock_table, pages_locked);
+    pipeann::unlockReqs(this->page_lock_table, pages_locked);
     reader->deref(&write_page_ref, ctx);
 
     reader->deref(&page_ref, ctx);
@@ -265,7 +243,7 @@ namespace pipeann {
       aligned_free(task->thread_data->update_buf);
       task->thread_data->update_buf = nullptr;
 
-      v2::unlockReqs(this->page_lock_table, task->pages_to_unlock);
+      pipeann::unlockReqs(this->page_lock_table, task->pages_to_unlock);
       reader->deref(&task->pages_to_deref, ctx);
       this->push_query_buf(task->thread_data);
       delete task;

@@ -11,14 +11,12 @@
 namespace pipeann {
   template<typename T>
   class FixedChunkPQTable {
-    // data_dim = n_chunks * chunk_size;
-    //    uint64_t   n_chunks;    // n_chunks = # of chunks ndims is split into
-    //    uint64_t   chunk_size;  // chunk_size = chunk size of each dimension chunk
     float *tables = nullptr;  // pq_tables = float* [[2^8 * [chunk_size]] * n_chunks]
     float *centroid = nullptr;
     uint32_t *chunk_offsets = nullptr;
     float *tables_T = nullptr;  // same as pq_tables, but col-major
     float *all_to_all_dists = nullptr;
+    pipeann::Metric metric;
 
    public:
     uint64_t ndims;  // ndims = chunk_size * n_chunks
@@ -28,7 +26,7 @@ namespace pipeann {
       return sizeof(float) * n_chunks * NUM_PQ_CENTROIDS * NUM_PQ_CENTROIDS;
     }
 
-    FixedChunkPQTable() {
+    FixedChunkPQTable(pipeann::Metric metric) : metric(metric) {
     }
 
     FixedChunkPQTable &operator=(FixedChunkPQTable &&other) noexcept {
@@ -40,6 +38,7 @@ namespace pipeann {
         this->chunk_offsets = other.chunk_offsets;
         this->centroid = other.centroid;
         this->all_to_all_dists = other.all_to_all_dists;
+        this->metric = other.metric;
 
         other.tables = nullptr;
         other.tables_T = nullptr;
@@ -60,7 +59,7 @@ namespace pipeann {
         tables = nullptr;
       }
       if (tables_T != nullptr) {
-        delete[] tables_T;
+        pipeann::aligned_free(tables_T);
         tables_T = nullptr;
       }
       if (chunk_offsets != nullptr) {
@@ -136,7 +135,7 @@ namespace pipeann {
       }
 
       std::vector<size_t> offs(NUM_PQ_OFFSETS, 0);
-      offs[0] = METADATA_SIZE;
+      offs[0] = SECTOR_LEN;
       offs[1] = offs[0] + pipeann::save_bin<float>(pq_pivots_path, tables, NUM_PQ_CENTROIDS, this->ndims, offs[0]);
       offs[2] = offs[1] + pipeann::save_bin<float>(pq_pivots_path, centroid, this->ndims, 1, offs[1]);
       offs[3] =
@@ -156,19 +155,31 @@ namespace pipeann {
       }
 
       // added this for easy PQ-PQ squared-distance calculations
-      // TODO: Create only for StreamingMerger.
       if (all_to_all_dists != nullptr) {
         delete[] all_to_all_dists;
       }
       all_to_all_dists = new float[256 * 256 * n_chunks];
       std::memset(all_to_all_dists, 0, 256 * 256 * n_chunks * sizeof(float));
-      // should perhaps optimize later
-      for (uint32_t i = 0; i < 256; i++) {
-        for (uint32_t j = 0; j < 256; j++) {
-          for (uint32_t c = 0; c < n_chunks; c++) {
-            for (uint64_t d = chunk_offsets[c]; d < chunk_offsets[c + 1]; d++) {
-              float diff = (tables[i * ndims + d] - tables[j * ndims + d]);
-              all_to_all_dists[i * 256 * n_chunks + j * n_chunks + c] += diff * diff;
+
+      if (metric == pipeann::Metric::INNER_PRODUCT) {
+        for (uint32_t i = 0; i < 256; i++) {
+          for (uint32_t j = 0; j < 256; j++) {
+            for (uint32_t c = 0; c < n_chunks; c++) {
+              for (uint64_t d = chunk_offsets[c]; d < chunk_offsets[c + 1]; d++) {
+                all_to_all_dists[i * 256 * n_chunks + j * n_chunks + c] -=
+                    (tables[i * ndims + d] * tables[j * ndims + d]);
+              }
+            }
+          }
+        }
+      } else {
+        for (uint32_t i = 0; i < 256; i++) {
+          for (uint32_t j = 0; j < 256; j++) {
+            for (uint32_t c = 0; c < n_chunks; c++) {
+              for (uint64_t d = chunk_offsets[c]; d < chunk_offsets[c + 1]; d++) {
+                float diff = (tables[i * ndims + d] - tables[j * ndims + d]);
+                all_to_all_dists[i * 256 * n_chunks + j * n_chunks + c] += diff * diff;
+              }
             }
           }
         }
@@ -186,7 +197,7 @@ namespace pipeann {
       LOG(INFO) << "Finished optimizing for PQ-PQ distance compuation";
     }
 
-    void populate_chunk_distances(const T *query_vec, float *dist_vec) {
+    void populate_chunk_distances_l2_scalar(const T *query_vec, float *dist_vec) {
       memset(dist_vec, 0, 256 * n_chunks * sizeof(float));
       // chunk wise distance computation
       for (uint64_t chunk = 0; chunk < n_chunks; chunk++) {
@@ -203,7 +214,8 @@ namespace pipeann {
       }
     }
 
-    void populate_chunk_distances_nt(const T *query_vec, float *dist_vec) {
+    // For L2 and cosine distances, both converted to L2.
+    void populate_chunk_distances_l2(const T *query_vec, float *dist_vec) {
 #ifdef USE_AVX512
       memset(dist_vec, 0, 256 * n_chunks * sizeof(float));
       // chunk wise distance computation
@@ -226,16 +238,64 @@ namespace pipeann {
         }
       }
 #else
-      // TODO: for non-AVX512 machines, do non-temporal population.
-      return populate_chunk_distances(query_vec, dist_vec);
+      return populate_chunk_distances_l2_scalar(query_vec, dist_vec);
 #endif
+    }
+
+    void populate_chunk_distances_ip_scalar(const T *query_vec, float *dist_vec) {
+      std::memset(dist_vec, 0, 256 * n_chunks * sizeof(float));
+
+      for (uint64_t chunk = 0; chunk < n_chunks; chunk++) {
+        float *chunk_dists = dist_vec + (256 * chunk);
+
+        for (uint64_t j = chunk_offsets[chunk]; j < chunk_offsets[chunk + 1]; j++) {
+          const float *centers_dim_vec = tables_T + (256 * j);
+          float q_val = (float) query_vec[j];
+
+          for (uint64_t idx = 0; idx < 256; idx++) {
+            chunk_dists[idx] -= q_val * centers_dim_vec[idx];
+          }
+        }
+      }
+    }
+
+    void populate_chunk_distances_ip(const T *query_vec, float *dist_vec) {
+#ifdef USE_AVX512
+      std::memset(dist_vec, 0, 256 * n_chunks * sizeof(float));
+
+      for (uint64_t chunk = 0; chunk < n_chunks; chunk++) {
+        float *chunk_dists = dist_vec + (256 * chunk);
+
+        for (uint64_t j = chunk_offsets[chunk]; j < chunk_offsets[chunk + 1]; j++) {
+          float *centers_dim_vec = tables_T + (256 * j);
+          __m512 q_vec = _mm512_set1_ps((float) query_vec[j]);
+
+          for (uint64_t idx = 0; idx < 256; idx += 16) {
+            __m512i center_vals_i = _mm512_stream_load_si512(centers_dim_vec + idx);  // avoid cache thrashing
+            __m512 center_vals = _mm512_castsi512_ps(center_vals_i);
+            __m512 acc = _mm512_load_ps(chunk_dists + idx);
+            acc = _mm512_fnmadd_ps(q_vec, center_vals, acc);
+            _mm512_store_ps(chunk_dists + idx, acc);
+          }
+        }
+      }
+#else
+      populate_chunk_distances_ip_scalar(query_vec, dist_vec);
+#endif
+    }
+
+    void populate_chunk_distances(const T *query_vec, float *dist_vec) {
+      if (metric == pipeann::Metric::INNER_PRODUCT) {
+        populate_chunk_distances_ip(query_vec, dist_vec);
+      } else {
+        populate_chunk_distances_l2(query_vec, dist_vec);
+      }
     }
 
     // computes PQ distance between comp_src and comp_dsts in efficient manner
     // comp_src: [nchunks]
     // comp_dsts: count * [nchunks]
     // dists: [count]
-    // TODO (perf) :: re-order computation to get better locality
     void compute_distances_alltoall(const uint8_t *comp_src, const uint8_t *comp_dsts, float *dists,
                                     const uint32_t count) {
       std::memset(dists, 0, count * sizeof(float));

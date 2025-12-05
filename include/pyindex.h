@@ -5,12 +5,11 @@
 #include <mutex>
 #include <random>
 #include <shared_mutex>
-#include "aux_utils.h"
 #include "index.h"
 #include "linux_aligned_file_reader.h"
-#include "nbr/abstract_nbr.h"
-#include "nbr/pq_nbr.h"
-#include "partition.h"
+#include "nbr/nbr.h"
+#include "utils/partition.h"
+#include "utils/index_build_utils.h"
 #include "ssd_index.h"
 #include "utils.h"
 #include <sys/sysinfo.h>
@@ -44,7 +43,6 @@ class BasePyIndex {
 template<class T>
 class PyIndex : public BasePyIndex {
   static constexpr float kMemIndexP = 0.01;
-  static constexpr int kMemIndexMaxPts = 100000;
   using TagT = uint32_t;
 
  public:
@@ -52,8 +50,8 @@ class PyIndex : public BasePyIndex {
 
   explicit PyIndex(PyIndexParams params) : params_(std::move(params)) {
     reader_.reset(new LinuxAlignedFileReader());
-    nbr_handler_ = new pipeann::PQNeighbor<T>();
-    mem_index_.reset(new pipeann::Index<T, TagT>(params_.metric, params_.data_dim, kMemIndexMaxPts, true, false, true));
+    nbr_handler_ = new pipeann::PQNeighbor<T>(params_.metric);
+    mem_index_.reset(new pipeann::Index<T, TagT>(params_.metric, params_.data_dim));
     disk_index_.reset(new pipeann::SSDIndex<T, TagT>(params_.metric, reader_, nbr_handler_, true, nullptr));
 
     mem_index_params_.set(32, 64, 750, 1.2, params_.max_nthreads, true);
@@ -73,7 +71,7 @@ class PyIndex : public BasePyIndex {
 
   void load(const std::string &index_prefix) {
     auto mem_index_path = index_prefix + "_mem.index";
-    if (std::filesystem::exists(mem_index_path)) {
+    if (file_exists(mem_index_path)) {
       use_mem_index_for_disk_index_ = true;
       mem_index_->load(mem_index_path.c_str());
     } else {
@@ -81,9 +79,9 @@ class PyIndex : public BasePyIndex {
     }
 
     auto disk_index_file = index_prefix + "_disk.index";
-    if (std::filesystem::exists(disk_index_file)) {
+    if (file_exists(disk_index_file)) {
       use_disk_index_ = true;
-      disk_index_->load(index_prefix.c_str(), params_.max_nthreads, true, false);
+      disk_index_->load(index_prefix.c_str(), params_.max_nthreads, false);
       if (use_mem_index_for_disk_index_) {
         // mem_index is disk_index's navigation graph.
         disk_index_->mem_index_.reset(mem_index_.get());
@@ -99,9 +97,9 @@ class PyIndex : public BasePyIndex {
   void transform_mem_index_to_disk_index() {
     auto mu = std::lock_guard<std::shared_mutex>(save_mu_);
     LOG(INFO) << "Transform memory index to disk index.";
-    mem_index_->save_data(cur_index_prefix_ + "_mem_data.bin", 0, false);
+    mem_index_->save_data(cur_index_prefix_ + "_mem_data.bin");
     LOG(INFO) << "Memory index data saved to " << (cur_index_prefix_ + "_mem_data.bin");
-    mem_index_->save_tags(cur_index_prefix_ + "_disk.index.tags", 0, false);
+    mem_index_->save_tags(cur_index_prefix_ + "_disk.index.tags");
     LOG(INFO) << "Memory index tags saved to " << (cur_index_prefix_ + "_disk.index.tags");
     // re-build
     this->build(cur_index_prefix_ + "_mem_data.bin", cur_index_prefix_,
@@ -136,8 +134,8 @@ class PyIndex : public BasePyIndex {
       LOG(INFO) << "Memory use not specified. Using 75% of total memory: " << memory_use_GB << "GB";
     }
     pipeann::build_disk_index<T, TagT>(data_path.c_str(), index_prefix.c_str(), max_nbrs, build_L, memory_use_GB,
-                                       params_.max_nthreads, PQ_bytes, params_.metric, tag_file,
-                                       nbr_handler_);  // create tag later.
+                                       params_.max_nthreads, PQ_bytes, params_.metric, tag_file, nbr_handler_,
+                                       nullptr);  // create tag later.
 
     if (build_mem_index) {
       build_mem(data_path, index_prefix);
@@ -172,7 +170,8 @@ class PyIndex : public BasePyIndex {
     reader.close();
 
     auto s = std::chrono::high_resolution_clock::now();
-    mem_index_.reset(new pipeann::Index<T, TagT>(params_.metric, data_dim, kMemIndexMaxPts, true, false, true));
+    mem_index_.reset(new pipeann::Index<T, TagT>(params_.metric, data_dim));
+    // We should normalize_cosine here, as data is not pre-normalized.
     mem_index_->build(sample_data_bin.c_str(), data_num, mem_index_params_, tags);
     std::chrono::duration<double> diff = std::chrono::high_resolution_clock::now() - s;
 
@@ -323,7 +322,7 @@ class PyIndex : public BasePyIndex {
 
   // if vectors are less than the threshold, use mem index instead.
   std::mt19937 gen;
-  pipeann::Parameters mem_index_params_;
+  pipeann::IndexBuildParameters mem_index_params_;
   std::shared_ptr<pipeann::Index<T, TagT>> mem_index_;
   std::shared_ptr<pipeann::SSDIndex<T, TagT>> disk_index_;
   uint32_t mem_L = 0;      // memory search L in pipe search.

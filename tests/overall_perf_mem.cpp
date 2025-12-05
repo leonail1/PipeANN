@@ -1,7 +1,8 @@
-#include "v2/dynamic_index.h"
+#include "linux_aligned_file_reader.h"
+#include "nbr/dummy_nbr.h"
+#include "dynamic_index.h"
 
 #include <index.h>
-#include <neighbor.h>
 #include <cstddef>
 #include <cstdlib>
 #include <future>
@@ -18,10 +19,9 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-#include "aux_utils.h"
 #include "index.h"
-#include "math_utils.h"
-#include "partition.h"
+#include "utils/kmeans_utils.h"
+#include "utils/partition.h"
 #include "utils.h"
 
 #include <sys/mman.h>
@@ -38,7 +38,7 @@ constexpr uint64_t kMaxPoints = 1.5e8;
 
 int begin_time = 0;
 pipeann::Timer globalTimer;
-pipeann::Parameters params;
+pipeann::IndexBuildParameters params;
 
 // acutually also shows disk size
 void ShowMemoryStatus(const std::string &filename) {
@@ -71,31 +71,6 @@ std::string GetTruthFileName(std::string &truthFilePrefix, int r_start) {
   fileName = fileName + "/gt_" + std::to_string(r_start) + ".bin";
   LOG(INFO) << "Truth file name: " << fileName;
   return fileName;
-}
-
-template<typename T>
-inline uint64_t save_bin_test(const std::string &filename, T *id, float *dist, size_t npts, size_t ndims,
-                              size_t offset = 0) {
-  std::ofstream writer;
-  open_file_to_write(writer, filename);
-
-  std::cout << "Writing bin: " << filename.c_str() << std::endl;
-  writer.seekp(offset, writer.beg);
-  int npts_i32 = (int) npts, ndims_i32 = (int) ndims;
-  size_t bytes_written = npts * ndims * sizeof(T) + 2 * sizeof(uint32_t);
-  writer.write((char *) &npts_i32, sizeof(int));
-  writer.write((char *) &ndims_i32, sizeof(int));
-  std::cout << "bin: #pts = " << npts << ", #dims = " << ndims << ", size = " << bytes_written << "B" << std::endl;
-
-  for (int i = 0; i < npts; i++) {
-    for (int j = 0; j < ndims; j++) {
-      writer.write((char *) (id + i * ndims + j), sizeof(T));
-      writer.write((char *) (dist + i * ndims + j), sizeof(float));
-    }
-  }
-  writer.close();
-  std::cout << "Finished writing bin." << std::endl;
-  return bytes_written;
 }
 
 template<typename T, typename TagT>
@@ -156,9 +131,6 @@ void sync_search_kernel(T *query, size_t query_num, size_t query_dim, const int 
 
   int current_time = globalTimer.elapsed() / 1.0e6f - begin_time;
   if (calRecall) {
-    for (int i = 0; i < recall_at; ++i) {
-      LOG(INFO) << query_result_tags[i] << " " << gt_ids[i];
-    }
     recall = pipeann::calculate_recall(query_num, gt_ids, gt_dists, gt_dim, query_result_tags, recall_at, recall_at);
     delete[] gt_ids;
   }
@@ -299,78 +271,13 @@ void update(const std::string &data_bin, const unsigned L_disk, const unsigned R
   dim = query_dim;
   aligned_dim = query_dim;
   pipeann::Metric metric = pipeann::Metric::L2;
-  pipeann::Index<T, TagT> sync_index(metric, dim, kMaxPoints, true, false, true);
-  sync_index.load_from_disk_index(save_path + "_disk.index");
 
-  // auto dis = [&](uint64_t a, uint64_t b) {
-  //   auto& d = sync_index._aligned_dim;
-  //   auto& data = sync_index._data;
-  //   return sync_index._distance->compare(data + d * a, data + d * b, d);
-  // };
+  std::shared_ptr<AlignedFileReader> reader = nullptr;
+  reader.reset(new LinuxAlignedFileReader());
 
-  // constexpr int L = 30;
-  // constexpr int K = 4;
-  // uint64_t hit_knn = 0, tot_knn = 0;
-  // std::vector<uint32_t> init_ids;
-  // init_ids.push_back(sync_index._ep);
-  // for (int i = 0; i < 10000; ++i) {
-  //   T vec[128];
-  //   for (int i = 0; i < 128; ++i) {
-  //     vec[i] = rand() % UINT8_MAX;
-  //   }
+  pipeann::SSDIndex<T, TagT> disk_index(metric, reader, new pipeann::DummyNeighbor<T>(metric), true, nullptr);
+  auto &sync_index = *disk_index.load_to_mem(save_path);
 
-  //   std::vector<pipeann::Neighbor> best_L_nodes, expanded_nodes_info;
-  //   tsl::robin_set<unsigned> expanded_nodes_ids;
-  //   sync_index.iterate_to_fixed_point(vec, L, init_ids, expanded_nodes_info, expanded_nodes_ids, best_L_nodes);
-  //   std::sort(expanded_nodes_info.begin(), expanded_nodes_info.end());
-  //   // top K nbrs compare similarity.
-  //   std::unordered_set<unsigned> knns_set;
-  //   for (int j = 0; j < expanded_nodes_ids.size(); ++j) {
-  //     knns_set.insert(expanded_nodes_info[j].id);
-  //   }
-
-  //   auto mx_hit_knn = 0, mx_hit_id = 0, mx_tot_knn = 0;
-  //   for (int j = 0; j < 2; ++j) {
-  //     // LOG(INFO) << "Cur id: " << id << " Nbr id: " << nbrs[j] << " Distance: " << dis(id, nbrs[j]);
-  //     int cur_id = expanded_nodes_info[j].id;
-  //     // int cur_id = rand() % sync_index.disk_npts;
-  //     std::vector<pipeann::Neighbor> best_L_nodes, expanded_nodes_info;
-  //     tsl::robin_set<unsigned> expanded_nodes_ids;
-  //     sync_index.iterate_to_fixed_point(sync_index._data + cur_id * sync_index._aligned_dim, L, init_ids,
-  //                                       expanded_nodes_info, expanded_nodes_ids, best_L_nodes);
-  //     std::sort(expanded_nodes_info.begin(), expanded_nodes_info.end());
-
-  //     int cur_hit_knn = 0;
-  //     for (int k = 0; k < L; ++k) {
-  //       auto nbr_knn_id = expanded_nodes_info[k].id;
-  //       bool cur_hit = false;
-  //       if (knns_set.find(nbr_knn_id) != knns_set.end()) {
-  //         ++cur_hit_knn;
-  //         cur_hit = true;
-  //       }
-  //       // LOG(INFO) << "Top " << j << " nbr id: " << cur_id << " Nbr2 id: " << nbr_knn_id
-  //       //           << " Distance: " << dis(cur_id, nbr_knn_id) << " " << dis(id, nbr_knn_id) << " hit " << cur_hit;
-  //     }
-  //     if (mx_hit_knn < cur_hit_knn) {
-  //       mx_hit_knn = cur_hit_knn;
-  //       mx_hit_id = j;
-  //       mx_tot_knn = L;
-  //     }
-  //     // mx_hit_knn = std::max(mx_hit_knn, cur_hit_knn);
-  //     // LOG(INFO) << "Top " << j << " hit rate " << cur_hit_knn << " / " << expanded_nodes_info.size();
-  //     // hit_knn += cur_hit_knn;
-  //     // tot_knn += expanded_nodes_info.size();
-  //     // LOG(INFO) << "Hit knn: " << hit_knn << " Total knn: " << tot_knn;
-  //   }
-  //   LOG(INFO) << "Max hit knn: " << mx_hit_knn << "/" << mx_tot_knn << " top k: " << mx_hit_id;
-  //   hit_knn += mx_hit_knn;
-  //   tot_knn += mx_tot_knn;
-  //   LOG(INFO) << "Hit knn: " << hit_knn << " Total knn: " << tot_knn;
-  // }
-
-  // exit(0);
-
-  sync_index.enable_delete();
   params.set(sync_index.range, 128, 384, 1.2);
 
   std::cout << "Searching before inserts: " << std::endl;
@@ -387,12 +294,11 @@ void update(const std::string &data_bin, const unsigned L_disk, const unsigned R
                        diskio);
     ref_diskio.push_back(diskio);
   }
-  exit(0);
 
   int batch = step * 10;
   int inMemorySize = 0;
   std::future<void> merge_future;
-  uint64_t index_npts = sync_index.disk_npts;
+  uint64_t index_npts = sync_index._nd;
   uint64_t vecs_per_step = index_npts / step;
   for (int i = 0; i < batch; i++) {
     std::cout << "Batch: " << i << " Total Batch : " << step << std::endl;
@@ -508,7 +414,7 @@ int main(int argc, char **argv) {
     update<uint8_t, unsigned>(data_bin, L_disk, R_disk, alpha_disk, step, num_start, nodes_to_cache, save_path,
                               query_file, truthset, recall_at, Lsearch, beam_width, &dist_cmp);
   } else if (std::string(argv[1]) == std::string("float")) {
-    pipeann::DistanceL2 dist_cmp;
+    pipeann::DistanceL2Float dist_cmp;
     update<float, unsigned>(data_bin, L_disk, R_disk, alpha_disk, step, num_start, nodes_to_cache, save_path,
                             query_file, truthset, recall_at, Lsearch, beam_width, &dist_cmp);
   } else

@@ -1,5 +1,5 @@
 #include "ssd_index.h"
-#include "v2/dynamic_index.h"
+#include "dynamic_index.h"
 
 #include <index.h>
 #include <cstddef>
@@ -16,10 +16,9 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-#include "aux_utils.h"
 #include "index.h"
-#include "math_utils.h"
-#include "partition.h"
+#include "utils/kmeans_utils.h"
+#include "utils/partition.h"
 #include "utils.h"
 
 #include <sys/mman.h>
@@ -65,31 +64,6 @@ std::string GetTruthFileName(const std::string &truthFilePrefix, int l_start) {
   fileName = fileName + "/gt_" + std::to_string(l_start) + ".bin";
   LOG(INFO) << "Truth file name: " << fileName;
   return fileName;
-}
-
-template<typename T>
-inline uint64_t save_bin_test(const std::string &filename, T *id, float *dist, size_t npts, size_t ndims,
-                              size_t offset = 0) {
-  std::ofstream writer;
-  open_file_to_write(writer, filename);
-
-  LOG(INFO) << "Writing bin: " << filename.c_str();
-  writer.seekp(offset, writer.beg);
-  int npts_i32 = (int) npts, ndims_i32 = (int) ndims;
-  size_t bytes_written = npts * ndims * sizeof(T) + 2 * sizeof(uint32_t);
-  writer.write((char *) &npts_i32, sizeof(int));
-  writer.write((char *) &ndims_i32, sizeof(int));
-  LOG(INFO) << "bin: #pts = " << npts << ", #dims = " << ndims << ", size = " << bytes_written << "B";
-
-  for (int i = 0; i < npts; i++) {
-    for (int j = 0; j < ndims; j++) {
-      writer.write((char *) (id + i * ndims + j), sizeof(T));
-      writer.write((char *) (dist + i * ndims + j), sizeof(float));
-    }
-  }
-  writer.close();
-  LOG(INFO) << "Finished writing bin.";
-  return bytes_written;
 }
 
 template<typename T, typename TagT>
@@ -242,7 +216,7 @@ void update(const std::string &data_bin, const unsigned L_disk, int vecs_per_ste
             size_t truthset_l_offset, const int recall_at, const std::vector<uint64_t> &Lsearch,
             const unsigned beam_width, const uint32_t search_beam_width, const uint32_t search_mem_L,
             pipeann::Distance<T> *dist_cmp) {
-  pipeann::Parameters paras;
+  pipeann::IndexBuildParameters paras;
   paras.set(0, L_disk, 384, 1.2, NUM_SEARCH_THREADS + NUM_INSERT_THREADS, true, beam_width);
   std::vector<T> data_load;
   size_t dim{};
@@ -277,7 +251,7 @@ void update(const std::string &data_bin, const unsigned L_disk, int vecs_per_ste
 
   int inMemorySize = 0;
   std::future<void> merge_future;
-  uint64_t index_npts = sync_index._disk_index->num_points;
+  uint64_t index_npts = sync_index._disk_index->meta_.npoints;
   for (int i = 0; i < num_steps; i++) {
     LOG(INFO) << "Batch: " << i << " Total Batch : " << num_steps;
     std::vector<unsigned> insert_vec;
@@ -402,7 +376,7 @@ int main(int argc, char **argv) {
                               truthset_l_offset, recall_at, Lsearch, beam_width, search_beam_width, search_mem_L,
                               &dist_cmp);
   } else if (std::string(argv[1]) == std::string("float")) {
-    pipeann::DistanceL2 dist_cmp;
+    pipeann::DistanceL2Float dist_cmp;
     update<float, unsigned>(data_bin, L_disk, vecs_per_step, num_steps, index_prefix, query_file, truthset,
                             truthset_l_offset, recall_at, Lsearch, beam_width, search_beam_width, search_mem_L,
                             &dist_cmp);

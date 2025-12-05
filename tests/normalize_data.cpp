@@ -20,10 +20,7 @@ void convert(char *path) {
   T *data = new T[num_points * dim];
   reader.read((char *) data, num_points * dim * sizeof(T));
   for (int i = 0; i < num_points; ++i) {
-    auto norm = pipeann::compute_l2_norm(data + (i * dim), dim);
-    for (int j = 0; j < dim; ++j) {
-      data[i * dim + j] /= norm;
-    }
+    pipeann::normalize_data(data + (i * dim), data + (i * dim), dim);
   }
   pipeann::save_bin<T>((std::string(path) + "_normalized").c_str(), data, num_points, dim);
 }

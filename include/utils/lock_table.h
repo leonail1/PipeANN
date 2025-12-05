@@ -14,7 +14,7 @@ inline void thread_pause() {
 #endif
 }
 
-namespace v2 {
+namespace pipeann {
   template<class K, class HashFunction = std::hash<K>>
   class SparseLockTable {
    public:
@@ -260,6 +260,6 @@ namespace v2 {
     }
   };
 
-}  // namespace v2
+}  // namespace pipeann
 
 #endif  // LOCK_TABLE_H_

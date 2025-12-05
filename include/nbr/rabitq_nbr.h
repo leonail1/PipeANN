@@ -3,11 +3,11 @@
 #include "nbr/abstract_nbr.h"
 #include "ssd_index_defs.h"
 #include "utils/libcuckoo/cuckoohash_map.hh"
-#include "utils.h"
+#include "distance.h"
 #include <immintrin.h>
 #include <vector>
-#include "partition.h"
-#include "math_utils.h"
+#include "utils/partition.h"
+#include "utils/kmeans_utils.h"
 
 #ifdef USE_AVX512
 #include "rabitq/utils/data_layout.hpp"
@@ -41,11 +41,12 @@ namespace pipeann {
     std::vector<char> data;
     Distance<float> *distance;
 
-    Metric metric = Metric::L2;
+    rabitqlib::MetricType rabitq_metric = rabitqlib::MetricType::METRIC_L2;
 
    public:
-    RaBitQNeighbor<T>() {
+    RaBitQNeighbor<T>(pipeann::Metric metric) : AbstractNeighbor<T>(metric) {
       distance = get_distance_function<float>(metric);
+      rabitq_metric = metric == INNER_PRODUCT ? rabitqlib::MetricType::METRIC_IP : rabitqlib::MetricType::METRIC_L2;
     }
 
     ~RaBitQNeighbor<T>() {
@@ -97,7 +98,7 @@ namespace pipeann {
       rabitqlib::new_transpose_bin(quant_query.data(), query_bin, pad_dim, QUERY_BITS);
 
       float *q_to_centroids = get_q_to_centroids(query_buf->nbr_ctx_scratch);
-      if (metric == Metric::INNER_PRODUCT) {
+      if (this->metric == Metric::INNER_PRODUCT) {
         for (size_t i = 0; i < NUM_CLUSTERS; i++) {
           q_to_centroids[i] = rabitqlib::dot_product(rotated_query_float.data(), rotated_pivots + i * pad_dim, pad_dim);
           q_to_centroids[i + NUM_CLUSTERS] =
@@ -137,7 +138,7 @@ namespace pipeann {
         memcpy(query_buf->nbr_vec_scratch, raw_bin_data, bin_data_size);
         char *bin_data = (char *) query_buf->nbr_vec_scratch;  // for alignment.
 
-        if (metric == Metric::INNER_PRODUCT) {
+        if (this->metric == Metric::INNER_PRODUCT) {
           float norm = q_to_centroids[pivot_id];
           float error = q_to_centroids[pivot_id + NUM_CLUSTERS];
           query_buf->aligned_dist_scratch[i] = split_single_estdist(bin_data, query_bin, meta, -norm, error);
@@ -259,7 +260,7 @@ namespace pipeann {
       std::ifstream base_reader(data_bin, std::ios::binary);
       base_reader.seekg(sizeof(uint32_t) * 2);  // Skip header
 
-      size_t BLOCK_SIZE = (std::min)((size_t) 16384, num_points);  // hard-coded max block size.
+      size_t BLOCK_SIZE = std::min((size_t) 16384, num_points);  // hard-coded max block size.
 
       std::unique_ptr<T[]> block_data_T = std::make_unique<T[]>(BLOCK_SIZE * dim);
       std::unique_ptr<float[]> block_data_float = std::make_unique<float[]>(BLOCK_SIZE * dim);
@@ -269,14 +270,14 @@ namespace pipeann {
 
       for (size_t block = 0; block < num_blocks; block++) {
         size_t start_id = block * BLOCK_SIZE;
-        size_t end_id = (std::min)((block + 1) * BLOCK_SIZE, num_points);
+        size_t end_id = std::min((block + 1) * BLOCK_SIZE, num_points);
         size_t cur_blk_size = end_id - start_id;
 
         base_reader.read((char *) (block_data_T.get()), sizeof(T) * (cur_blk_size * dim));
         pipeann::convert_types<T, float>(block_data_T.get(), block_data_float.get(), cur_blk_size, dim);
 
-        math_utils::compute_closest_centers(block_data_float.get(), cur_blk_size, dim, pivots.data(), NUM_CLUSTERS, 1,
-                                            closest_center.get());
+        kmeans::compute_closest_centers(block_data_float.get(), cur_blk_size, dim, pivots.data(), NUM_CLUSTERS, 1,
+                                        closest_center.get());
 
 #pragma omp parallel for
         for (int64_t j = 0; j < (int64_t) cur_blk_size; j++) {
@@ -321,12 +322,10 @@ namespace pipeann {
 
       std::vector<float> rotated_data(this->pad_dim);
       rotator_->rotate(point, rotated_data.data());
-      // TODO: support METRIC_IP by introducing a metric parameter in RaBitQNeighbor construction.
       std::vector<uint64_t> quant_data(this->bin_data_size + 1);  // for alignment (here overallocation may happen).
       rabitqlib::quant::quantize_split_single(rotated_data.data(), rotated_pivots + (pivot_id * this->pad_dim),
                                               this->pad_dim, 0, (char *) quant_data.data(),
-                                              ((char *) quant_data.data()) + bin_data_size,
-                                              metric == INNER_PRODUCT ? rabitqlib::METRIC_IP : rabitqlib::METRIC_L2);
+                                              ((char *) quant_data.data()) + bin_data_size, rabitq_metric);
       memcpy(out, &pivot_id, sizeof(pivot_id_t));
       memcpy(out + sizeof(pivot_id_t), quant_data.data(), bin_data_size);
     }
@@ -355,12 +354,12 @@ namespace pipeann {
   template<typename T>
   class RaBitQNeighbor : public AbstractNeighbor<T> {
    public:
-    RaBitQNeighbor<T>() {
+    RaBitQNeighbor<T>(pipeann::Metric metric) : AbstractNeighbor<T>(metric) {
       LOG(ERROR) << "RaBitQNeighbor requires AVX512 support.";
       exit(-1);
     }
 
-    static std::string get_name() {
+    std::string get_name() {
       return "RaBitQNeighbor";
     }
     // rev_id_map: new_id -> old_id.

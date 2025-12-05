@@ -21,13 +21,13 @@ def bin_read(filename, dtype="float32"):
         vectors = np.frombuffer(data, dtype=dtype).reshape((num_vecs, vector_dim))
         return vectors
 
-data_dim = 128
+data_dim = 0
 data_type = "uint8"
 full_data_path = "/mnt/nvme/data/bigann/bigann_1M.bbin"
 data_2M_path = "/mnt/nvme/data/bigann/bigann_2M.bbin"
 query_path = "/mnt/nvme/data/bigann/bigann_query.bbin"
 gt_path = "/mnt/nvme/indices_upd/bigann_gnd/idx_1M.ibin"
-gt_2M_path = "/mnt/nvme/indices_upd/bigann_gnd/idx_2M.ibin"
+gt_2M_path = "/mnt/nvme/indices_upd/bigann_gnd/2M_topk/gt_990000.bin"
 index_prefix = "/mnt/nvme/indices/bigann/1M"
 
 def main():
@@ -35,7 +35,9 @@ def main():
     gt = bin_read(gt_path, "int32")
     gt_2M = bin_read(gt_2M_path, "int32")
     full_data_2M = bin_read(data_2M_path, data_type)
+    print(full_data_2M.shape)
 
+    data_dim = full_data_2M.shape[1]
     idx = IndexPipeANN(data_dim, data_type, Metric.L2)
     idx.omp_set_num_threads(32) # the number of search/insert threads.
     idx.set_index_prefix(index_prefix)
@@ -80,6 +82,8 @@ Way 2: use index.add. Here we use the first half of the dataset to build the ind
     for i in range(1000000, 2000000, 10000):
         print(f"Inserting data points {i} to {min(i+10000, full_data_2M.shape[0])} ...")
         idx.add(full_data_2M[i:min(i+10000, full_data_2M.shape[0])], np.arange(i, min(i+10000, full_data_2M.shape[0])))
+    print(f"Deleting the first 1M vectors from the index ...")
+    idx.remove(np.arange(0, 1000000))
 
     # save and load.
     idx.save(index_prefix)

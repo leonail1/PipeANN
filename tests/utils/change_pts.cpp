@@ -24,7 +24,7 @@ void convert(char *path, uint64_t to_pts) {
 
 int main(int argc, char **argv) {
   if (argc < 4) {
-    std::cout << "Correct usage: " << argv[0] << " <type[uint8/float]> <file> <to_pts>" << std::endl;
+    std::cout << "Correct usage: " << argv[0] << " <type[uint8/int8/float]> <file> <to_pts>" << std::endl;
     exit(-1);
   }
 

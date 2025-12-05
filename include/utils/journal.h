@@ -8,7 +8,7 @@
 #include "utils.h"
 #include "utils/libcuckoo/cuckoohash_map.hh"
 
-namespace v2 {
+namespace pipeann {
   // using namespace rocksdb;
   enum TxType { kInsert, kDelete };
   template<class TagT>
@@ -61,5 +61,5 @@ namespace v2 {
       // locked_table.unlock();
     }
   };
-}  // namespace v2
+}  // namespace pipeann
 #endif  // DUMMY_KVS_H_

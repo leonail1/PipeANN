@@ -7,7 +7,7 @@
 #include "utils/libcuckoo/cuckoohash_map.hh"
 #include "utils/lock_table.h"
 
-namespace v2 {
+namespace pipeann {
   // User-space page cache for update acceleration (in fact it's a buffer)
   // only used for write-write, ensure that disk has a consistent state
   // expect a lock-free read
@@ -75,6 +75,6 @@ namespace v2 {
   };
 
   inline PageCache cache;
-}  // namespace v2
+}  // namespace pipeann
 
 #endif  // PAGE_CACHE_H_

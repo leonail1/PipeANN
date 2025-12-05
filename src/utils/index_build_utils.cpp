@@ -1,106 +1,55 @@
 #include <algorithm>
-#include <atomic>
 #include <cassert>
 #include <fstream>
 #include <iostream>
-#include <set>
+#include <memory>
 #include <string>
 #include <vector>
 #include <cblas.h>
+#include <chrono>
+#include <cblas.h>
 
-#include "aux_utils.h"
+#include "utils/index_build_utils.h"
 #include "utils/cached_io.h"
 #include "index.h"
-#include "nbr/pq_nbr.h"
 #include "omp.h"
-#include "partition.h"
-#include "utils/percentile_stats.h"
-#include "ssd_index.h"
-#include "utils.h"
-
-#include "ssd_index.h"
-#include "utils/tsl/robin_set.h"
+#include "utils/partition.h"
 #include "utils.h"
 
 namespace pipeann {
-  double calculate_recall(unsigned num_queries, unsigned *gold_std, float *gs_dist, unsigned dim_gs,
-                          unsigned *our_results, unsigned dim_or, unsigned recall_at) {
-    double total_recall = 0;
-    std::set<unsigned> gt, res;
+  template<typename T>
+  void normalize_data_file(const std::string &inFileName, const std::string &outFileName) {
+    std::ifstream readr(inFileName, std::ios::binary);
+    std::ofstream writr(outFileName, std::ios::binary);
 
-    for (size_t i = 0; i < num_queries; i++) {
-      gt.clear();
-      res.clear();
-      unsigned *gt_vec = gold_std + dim_gs * i;
-      unsigned *res_vec = our_results + dim_or * i;
-      size_t tie_breaker = recall_at;
-      if (gs_dist != nullptr) {
-        float *gt_dist_vec = gs_dist + dim_gs * i;
-        tie_breaker = recall_at - 1;
-        while (tie_breaker < dim_gs && gt_dist_vec[tie_breaker] == gt_dist_vec[recall_at - 1])
-          tie_breaker++;
+    int npts_s32, ndims_s32;
+    readr.read((char *) &npts_s32, sizeof(int32_t));
+    readr.read((char *) &ndims_s32, sizeof(int32_t));
+
+    writr.write((char *) &npts_s32, sizeof(int32_t));
+    writr.write((char *) &ndims_s32, sizeof(int32_t));
+
+    uint64_t npts = (uint64_t) npts_s32, ndims = (uint64_t) ndims_s32;
+    LOG(INFO) << "Normalizing vectors in file: " << inFileName;
+    LOG(INFO) << "Dataset: #pts = " << npts << ", # dims = " << ndims;
+
+    uint64_t blk_size = 131072;
+    uint64_t nblks = ROUND_UP(npts, blk_size) / blk_size;
+    LOG(INFO) << "# blks: " << nblks;
+
+    T *read_buf = new T[blk_size * ndims];
+    for (uint64_t i = 0; i < nblks; i++) {
+      uint64_t cblk_size = std::min(npts - i * blk_size, blk_size);
+      readr.read((char *) read_buf, cblk_size * ndims * sizeof(T));
+#pragma omp parallel for schedule(static, 4096)
+      for (uint64_t j = 0; j < cblk_size; j++) {
+        normalize_data(read_buf + j * ndims, read_buf + j * ndims, ndims);
       }
-
-      gt.insert(gt_vec, gt_vec + tie_breaker);
-      res.insert(res_vec, res_vec + recall_at);
-
-      unsigned cur_recall = 0;
-      for (auto &v : res) {
-        if (gt.find(v) != gt.end()) {
-          cur_recall++;
-        }
-      }
-      total_recall += cur_recall;
+      writr.write((char *) read_buf, cblk_size * ndims * sizeof(T));
     }
-    return total_recall / (num_queries) * (100.0 / recall_at);
-  }
+    delete[] read_buf;
 
-  double calculate_recall(unsigned num_queries, unsigned *gold_std, float *gs_dist, unsigned dim_gs,
-                          unsigned *our_results, unsigned dim_or, unsigned recall_at,
-                          const tsl::robin_set<unsigned> &active_tags) {
-    double total_recall = 0;
-    std::set<unsigned> gt, res;
-    bool printed = false;
-    for (size_t i = 0; i < num_queries; i++) {
-      gt.clear();
-      res.clear();
-      unsigned *gt_vec = gold_std + dim_gs * i;
-      unsigned *res_vec = our_results + dim_or * i;
-      size_t tie_breaker = recall_at;
-      unsigned active_points_count = 0;
-      unsigned cur_counter = 0;
-      while (active_points_count < recall_at && cur_counter < dim_gs) {
-        if (active_tags.find(*(gt_vec + cur_counter)) != active_tags.end()) {
-          active_points_count++;
-        }
-        cur_counter++;
-      }
-      if (active_tags.empty())
-        cur_counter = recall_at;
-
-      if ((active_points_count < recall_at && !active_tags.empty()) && !printed) {
-        LOG(INFO) << "Warning: Couldn't find enough closest neighbors " << active_points_count << "/" << recall_at
-                  << " from truthset for query # " << i << ". Will result in under-reported value of recall.";
-        printed = true;
-      }
-      if (gs_dist != nullptr) {
-        tie_breaker = cur_counter - 1;
-        float *gt_dist_vec = gs_dist + dim_gs * i;
-        while (tie_breaker < dim_gs && gt_dist_vec[tie_breaker] == gt_dist_vec[cur_counter - 1])
-          tie_breaker++;
-      }
-
-      gt.insert(gt_vec, gt_vec + tie_breaker);
-      res.insert(res_vec, res_vec + recall_at);
-      unsigned cur_recall = 0;
-      for (auto &v : res) {
-        if (gt.find(v) != gt.end()) {
-          cur_recall++;
-        }
-      }
-      total_recall += cur_recall;
-    }
-    return ((double) (total_recall / (num_queries))) * ((double) (100.0 / recall_at));
+    LOG(INFO) << "Wrote normalized points to file: " << outFileName;
   }
 
   /***************************************************
@@ -229,7 +178,7 @@ namespace pipeann {
       if (cur_id < node_id) {
         // random_shuffle() is deprecated.
         std::shuffle(final_nhood.begin(), final_nhood.end(), urng);
-        nnbrs = (unsigned) (std::min)(final_nhood.size(), (uint64_t) max_degree);
+        nnbrs = (unsigned) std::min(final_nhood.size(), (uint64_t) max_degree);
         // write into merged ofstream
         diskann_writer.write((char *) &nnbrs, sizeof(unsigned));
         diskann_writer.write((char *) final_nhood.data(), nnbrs * sizeof(unsigned));
@@ -259,7 +208,7 @@ namespace pipeann {
 
     // random_shuffle() is deprecated.
     std::shuffle(final_nhood.begin(), final_nhood.end(), urng);
-    nnbrs = (unsigned) (std::min)(final_nhood.size(), (uint64_t) max_degree);
+    nnbrs = (unsigned) std::min(final_nhood.size(), (uint64_t) max_degree);
     // write into merged ofstream
     diskann_writer.write((char *) &nnbrs, sizeof(unsigned));
     diskann_writer.write((char *) final_nhood.data(), nnbrs * sizeof(unsigned));
@@ -287,22 +236,12 @@ namespace pipeann {
     double full_index_ram = estimate_ram_usage(base_num, base_dim, sizeof(T), R);
     if (full_index_ram < ram_budget * 1024 * 1024 * 1024) {
       LOG(INFO) << "Full index fits in RAM, building in one shot";
-      pipeann::Parameters paras;
+      pipeann::IndexBuildParameters paras;
       paras.set(R, L, 750, 1.2, 0, true);
 
-      bool tags_enabled;
-      if (tag_file == nullptr)
-        tags_enabled = false;
-      else
-        tags_enabled = true;
-
-      std::unique_ptr<pipeann::Index<T>> _pvamanaIndex = std::unique_ptr<pipeann::Index<T>>(
-          new pipeann::Index<T>(_compareMetric, base_dim, base_num, false, false, tags_enabled));
-      if (tags_enabled)
-        _pvamanaIndex->build(base_file.c_str(), base_num, paras, tag_file);
-      else
-        _pvamanaIndex->build(base_file.c_str(), base_num, paras);
-
+      auto _pvamanaIndex = std::make_unique<pipeann::Index<T>>(_compareMetric, base_dim);
+      // For SSD index, data is pre-normalized for correct PQ initialization, so normalize should be set to false.
+      _pvamanaIndex->build(base_file.c_str(), base_num, paras, tag_file, false);
       _pvamanaIndex->save(mem_index_path.c_str());
       std::remove(medoids_file.c_str());
       std::remove(centroids_file.c_str());
@@ -320,13 +259,12 @@ namespace pipeann {
       std::string shard_base_file = merged_index_prefix + "_subshard-" + std::to_string(p) + ".bin";
       std::string shard_index_file = merged_index_prefix + "_subshard-" + std::to_string(p) + "_mem.index";
 
-      pipeann::Parameters paras;
+      pipeann::IndexBuildParameters paras;
       paras.set(2 * R / 3, L, 750, 1.2, 0, false);
       uint64_t shard_base_dim, shard_base_pts;
       get_bin_metadata(shard_base_file, shard_base_pts, shard_base_dim);
-      std::unique_ptr<pipeann::Index<T>> _pvamanaIndex = std::unique_ptr<pipeann::Index<T>>(
-          new pipeann::Index<T>(_compareMetric, shard_base_dim, shard_base_pts, false, false));
-      _pvamanaIndex->build(shard_base_file.c_str(), shard_base_pts, paras);
+      auto _pvamanaIndex = std::make_unique<pipeann::Index<T>>(_compareMetric, shard_base_dim);
+      _pvamanaIndex->build(shard_base_file.c_str(), shard_base_pts, paras, nullptr, false);
       _pvamanaIndex->save(shard_index_file.c_str());
     }
 
@@ -353,217 +291,117 @@ namespace pipeann {
   // mem_index_file, and the entire disk index will be in output_file.
   template<typename T, typename TagT>
   void create_disk_layout(const std::string &mem_index_file, const std::string &base_file, const std::string &tag_file,
-                          const std::string &output_file) {
-    unsigned npts, ndims;
+                          const std::string &output_file, AbstractLabel *label) {
+    constexpr uint64_t kBlkSize = 64 * 1024 * 1024;
 
-    // amount to read or write in one shot
-    uint64_t read_blk_size = 64 * 1024 * 1024;
-    uint64_t write_blk_size = read_blk_size;
+    // Open input files
     cached_ifstream base_reader;
     std::ifstream vamana_reader;
-    uint64_t base_offset = 0, vamana_offset = 0, tags_offset = 0;
-    bool tags_enabled = false;
-
-    base_reader.open(base_file, read_blk_size);
+    base_reader.open(base_file, kBlkSize);
     vamana_reader.open(mem_index_file, std::ios::binary);
-    tags_enabled = tag_file != "";
 
+    // Read base file header
+    uint32_t npts, ndims;
     base_reader.read((char *) &npts, sizeof(uint32_t));
     base_reader.read((char *) &ndims, sizeof(uint32_t));
 
-    size_t npts_64, ndims_64;
-    npts_64 = npts;
-    ndims_64 = ndims;
+    // Read vamana index header
+    size_t index_file_size;
+    uint32_t width, medoid;
+    uint64_t vamana_frozen_num = 0;
+    vamana_reader.read((char *) &index_file_size, sizeof(uint64_t));
+    vamana_reader.read((char *) &width, sizeof(uint32_t));
+    vamana_reader.read((char *) &medoid, sizeof(uint32_t));
+    vamana_reader.read((char *) &vamana_frozen_num, sizeof(uint64_t));
 
-    // create cached reader + writer
-    //    size_t          actual_file_size = get_file_size(mem_index_file);
+    uint64_t label_size = (label != nullptr) ? label->label_size() : 0;
+
+    // Compute disk layout parameters and build metadata
+    uint64_t max_node_len = ((uint64_t) width + 1) * sizeof(uint32_t) + ndims * sizeof(T) + label_size;
+    uint64_t nnodes_per_sector = SECTOR_LEN / max_node_len;  // 0 if max_node_len > SECTOR_LEN
+    SSDIndexMetadata<T> meta(npts, ndims, medoid, max_node_len, nnodes_per_sector, label_size);
+    meta.print();
+
+    // Allocate sector buffer
+    uint64_t bytes_per_write = nnodes_per_sector > 0 ? SECTOR_LEN : ROUND_UP(max_node_len, SECTOR_LEN);
+    uint64_t nodes_per_write = nnodes_per_sector > 0 ? nnodes_per_sector : 1;
+    std::unique_ptr<char[]> sector_buf = std::make_unique<char[]>(bytes_per_write);
+
+    // Create output file and write empty first sector (metadata placeholder)
     std::remove(output_file.c_str());
     cached_ofstream diskann_writer;
-    diskann_writer.open(output_file, write_blk_size);
+    diskann_writer.open(output_file, kBlkSize);
+    memset(sector_buf.get(), 0, SECTOR_LEN);
+    diskann_writer.write(sector_buf.get(), SECTOR_LEN);
 
-    // metadata: width, medoid
-    unsigned width_u32, medoid_u32;
-    size_t index_file_size;
+    // Helper lambda to create DiskNode from buffer
+    auto disk_node_at = [&](char *buf, uint32_t loc) -> DiskNode<T> { return DiskNode<T>(buf, loc, meta); };
 
-    vamana_reader.read((char *) &index_file_size, sizeof(uint64_t));
+    // Write all nodes
+    for (uint64_t cur_node_id = 0; cur_node_id < meta.npoints;) {
+      memset(sector_buf.get(), 0, bytes_per_write);
 
-    uint64_t vamana_frozen_num = false, vamana_frozen_loc = 0;
-    vamana_reader.read((char *) &width_u32, sizeof(unsigned));
-    vamana_reader.read((char *) &medoid_u32, sizeof(unsigned));
-    vamana_reader.read((char *) &vamana_frozen_num, sizeof(uint64_t));
-    // compute
-    uint64_t medoid, max_node_len, nnodes_per_sector;
-    npts_64 = (uint64_t) npts;
-    medoid = (uint64_t) medoid_u32;
-    if (vamana_frozen_num == 1)
-      vamana_frozen_loc = medoid;
-    max_node_len = (((uint64_t) width_u32 + 1) * sizeof(unsigned)) + (ndims_64 * sizeof(T));
-    nnodes_per_sector = SECTOR_LEN / max_node_len;  // 0 if max_node_len > SECTOR_LEN
+      uint64_t nodes_this_write = std::min(nodes_per_write, meta.npoints - cur_node_id);
+      for (uint64_t i = 0; i < nodes_this_write; i++, cur_node_id++) {
+        DiskNode<T> node = disk_node_at(sector_buf.get(), cur_node_id);
 
-    LOG(INFO) << "medoid: " << medoid << "B";
-    LOG(INFO) << "max_node_len: " << max_node_len << "B";
-    LOG(INFO) << "nnodes_per_sector: " << nnodes_per_sector << "B";
+        // Read coords directly into DiskNode
+        base_reader.read((char *) node.coords, meta.data_dim * sizeof(T));
 
-    // SECTOR_LEN buffer for each sector
-    std::unique_ptr<char[]> sector_buf = std::make_unique<char[]>(SECTOR_LEN);
-    std::unique_ptr<char[]> multisector_buf = std::make_unique<char[]>(ROUND_UP(max_node_len, SECTOR_LEN));
-    std::unique_ptr<char[]> node_buf = std::make_unique<char[]>(max_node_len);
-    unsigned &nnbrs = *(unsigned *) (node_buf.get() + ndims_64 * sizeof(T));
-    unsigned *nhood_buf = (unsigned *) (node_buf.get() + (ndims_64 * sizeof(T)) + sizeof(unsigned));
-
-    // number of sectors (1 for meta data)
-    uint64_t n_sectors = nnodes_per_sector > 0 ? ROUND_UP(npts_64, nnodes_per_sector) / nnodes_per_sector
-                                               : npts_64 * DIV_ROUND_UP(max_node_len, SECTOR_LEN);
-    uint64_t disk_index_file_size = (n_sectors + 1) * SECTOR_LEN;
-
-    std::vector<uint64_t> output_file_meta;
-    output_file_meta.push_back(npts_64);
-    output_file_meta.push_back(ndims_64);
-    output_file_meta.push_back(medoid);
-    output_file_meta.push_back(max_node_len);
-    output_file_meta.push_back(nnodes_per_sector);
-    output_file_meta.push_back(vamana_frozen_num);
-    output_file_meta.push_back(vamana_frozen_loc);
-    output_file_meta.push_back(disk_index_file_size);
-
-    diskann_writer.write(sector_buf.get(), SECTOR_LEN);  // write out the empty
-                                                         // first sector, will
-                                                         // be populated at the
-                                                         // end.
-
-    std::unique_ptr<T[]> cur_node_coords = std::make_unique<T[]>(ndims_64);
-    LOG(INFO) << "# sectors: " << n_sectors;
-    uint64_t cur_node_id = 0;
-
-    if (nnodes_per_sector > 0) {
-      for (uint64_t sector = 0; sector < n_sectors; sector++) {
-        if (sector % 100000 == 0) {
-          LOG(INFO) << "Sector #" << sector << "written";
-        }
-        memset(sector_buf.get(), 0, SECTOR_LEN);
-        for (uint64_t sector_node_id = 0; sector_node_id < nnodes_per_sector && cur_node_id < npts_64;
-             sector_node_id++) {
-          memset(node_buf.get(), 0, max_node_len);
-          // read cur node's nnbrs
-          vamana_reader.read((char *) &nnbrs, sizeof(unsigned));
-
-          // sanity checks on nnbrs
-          if (nnbrs == 0) {
-            LOG(INFO) << "ERROR. Found point with no out-neighbors; Point#: " << cur_node_id;
-            exit(-1);
-          }
-
-          // read node's nhood
-          vamana_reader.read((char *) nhood_buf, (std::min)(nnbrs, width_u32) * sizeof(unsigned));
-          if (nnbrs > width_u32) {
-            vamana_reader.seekg((nnbrs - width_u32) * sizeof(unsigned), vamana_reader.cur);
-          }
-
-          // write coords of node first
-          //  T *node_coords = data + ((uint64_t) ndims_64 * cur_node_id);
-          base_reader.read((char *) cur_node_coords.get(), sizeof(T) * ndims_64);
-          memcpy(node_buf.get(), cur_node_coords.get(), ndims_64 * sizeof(T));
-
-          // write nnbrs
-          *(unsigned *) (node_buf.get() + ndims_64 * sizeof(T)) = (std::min)(nnbrs, width_u32);
-
-          // write nhood next
-          memcpy(node_buf.get() + ndims_64 * sizeof(T) + sizeof(unsigned), nhood_buf,
-                 (std::min)(nnbrs, width_u32) * sizeof(unsigned));
-
-          // get offset into sector_buf
-          char *sector_node_buf = sector_buf.get() + (sector_node_id * max_node_len);
-
-          // copy node buf into sector_node_buf
-          memcpy(sector_node_buf, node_buf.get(), max_node_len);
-          cur_node_id++;
-        }
-        // flush sector to disk
-        diskann_writer.write(sector_buf.get(), SECTOR_LEN);
-      }
-    } else {
-      uint64_t nsectors_per_node = DIV_ROUND_UP(max_node_len, SECTOR_LEN);
-      for (uint64_t i = 0; i < npts_64; i++) {
-        if ((i * nsectors_per_node) % 100000 == 0) {
-          LOG(INFO) << "Sector #" << i * nsectors_per_node << "written";
-        }
-        memset(multisector_buf.get(), 0, nsectors_per_node * SECTOR_LEN);
-
-        memset(node_buf.get(), 0, max_node_len);
-        // read cur node's nnbrs
-        vamana_reader.read((char *) &nnbrs, sizeof(uint32_t));
-
-        // read node's nhood
-        vamana_reader.read((char *) nhood_buf, (std::min)(nnbrs, width_u32) * sizeof(uint32_t));
-        if (nnbrs > width_u32) {
-          vamana_reader.seekg((nnbrs - width_u32) * sizeof(uint32_t), vamana_reader.cur);
-        }
-
-        // write coords of node first
-        //  T *node_coords = data + ((uint64_t) ndims_64 * cur_node_id);
-        base_reader.read((char *) cur_node_coords.get(), sizeof(T) * ndims_64);
-        memcpy(multisector_buf.get(), cur_node_coords.get(), ndims_64 * sizeof(T));
-
-        // write nnbrs
-        *(uint32_t *) (multisector_buf.get() + ndims_64 * sizeof(T)) = (std::min)(nnbrs, width_u32);
-
-        // write nhood next
-        memcpy(multisector_buf.get() + ndims_64 * sizeof(T) + sizeof(uint32_t), nhood_buf,
-               (std::min)(nnbrs, width_u32) * sizeof(uint32_t));
-
-        // flush sector to disk
-        diskann_writer.write(multisector_buf.get(), nsectors_per_node * SECTOR_LEN);
-      }
-    }
-
-    diskann_writer.close();
-    size_t tag_bytes_written = 0;
-
-    // frozen point implies dynamic index which must have tags
-    if (vamana_frozen_num > 0) {
-      std::unique_ptr<TagT[]> mem_index_tags;
-      size_t nr, nc;
-      pipeann::load_bin<TagT>(tag_file, mem_index_tags, nr, nc, tags_offset);
-
-      if (nr != npts_64 && nc != 1) {
-        LOG(ERROR) << "Error loading tags file. File dims are " << nr << ", " << nc << ", but expecting " << npts_64
-                   << " tags in 1 dimension (bin format).";
-
-        crash();
-      }
-
-      pipeann::save_bin<TagT>(output_file + std::string(".tags"), mem_index_tags.get(), nr, nc);
-    } else {
-      if (tags_enabled) {
-        std::unique_ptr<TagT[]> mem_index_tags;
-        size_t nr, nc;
-
-        if (!file_exists(tag_file)) {
-          LOG(INFO) << "Static vamana index, tag file " << tag_file << "does not exist. Exiting....";
+        // Read nnbrs from vamana index
+        uint32_t nnbrs_read;
+        vamana_reader.read((char *) &nnbrs_read, sizeof(uint32_t));
+        if (nnbrs_read == 0) {
+          LOG(ERROR) << "Found point with no out-neighbors; Point#: " << cur_node_id;
           exit(-1);
         }
 
-        pipeann::load_bin<TagT>(tag_file, mem_index_tags, nr, nc, tags_offset);
-
-        if (nr != npts_64 && nc != 1) {
-          LOG(ERROR) << "Error loading tags file. File dims are " << nr << ", " << nc << ", but expecting " << npts_64
-                     << " tags in 1 dimension (bin format).";
-          crash();
+        // Read neighbors directly into DiskNode (truncate if exceeds width)
+        uint32_t nnbrs_to_write = std::min(nnbrs_read, width);
+        vamana_reader.read((char *) node.nbrs, nnbrs_to_write * sizeof(uint32_t));
+        if (nnbrs_read > width) {
+          vamana_reader.seekg((nnbrs_read - width) * sizeof(uint32_t), vamana_reader.cur);
         }
+        node.nnbrs = nnbrs_to_write;
 
-        pipeann::save_bin<TagT>(output_file + std::string(".tags"), mem_index_tags.get(), nr, nc);
+        if (label_size > 0) {
+          label->write(static_cast<uint32_t>(cur_node_id), node.labels);
+        }
+      }
+
+      diskann_writer.write(sector_buf.get(), bytes_per_write);
+      if (cur_node_id % 100000 < nodes_per_write) {
+        LOG(INFO) << "Nodes written: " << cur_node_id << "/" << meta.npoints;
       }
     }
+    diskann_writer.close();
 
-    output_file_meta.push_back(output_file_meta[output_file_meta.size() - 1] + tag_bytes_written);
-    pipeann::save_bin<uint64_t>(output_file, output_file_meta.data(), output_file_meta.size(), 1, 0);
+    // Handle tags file
+    bool tags_enabled = !tag_file.empty();
+    if (vamana_frozen_num > 0 || tags_enabled) {
+      if (!file_exists(tag_file)) {
+        LOG(ERROR) << "Tag file " << tag_file << " does not exist. Exiting...";
+        exit(-1);
+      }
+      std::unique_ptr<TagT[]> mem_index_tags;
+      size_t nr, nc;
+      pipeann::load_bin<TagT>(tag_file, mem_index_tags, nr, nc, 0);
+      if (nr != meta.npoints || nc != 1) {
+        LOG(ERROR) << "Tag file dims mismatch: got " << nr << "x" << nc << ", expected " << meta.npoints << "x1";
+        crash();
+      }
+      pipeann::save_bin<TagT>(output_file + ".tags", mem_index_tags.get(), nr, nc);
+    }
+
+    // Write metadata to the first sector
+    meta.save_to_disk_index(output_file);
     LOG(INFO) << "Output file written.";
   }
 
   template<typename T, typename TagT>
   bool build_disk_index(const char *dataPath, const char *indexFilePath, uint32_t R, uint32_t L, uint32_t M,
                         uint32_t num_threads, uint32_t bytes_per_nbr, pipeann::Metric _compareMetric,
-                        const char *tag_file, AbstractNeighbor<T> *nbr_handler) {
+                        const char *tag_file, AbstractNeighbor<T> *nbr_handler, AbstractLabel *label) {
     std::string dataFilePath(dataPath);
     std::string index_prefix_path(indexFilePath);
     std::string mem_index_path = index_prefix_path + "_mem.index";
@@ -579,20 +417,10 @@ namespace pipeann {
               << " bytes per neighbor: " << bytes_per_nbr << " Final index will be in multiple files";
 
     std::string normalized_file_path = dataFilePath;
+    // Normalize data for cosine metric.
     if (_compareMetric == pipeann::Metric::COSINE) {
-      if (std::is_floating_point<T>::value) {
-        LOG(INFO) << "Cosine metric chosen. Normalizing vectors and "
-                     "changing distance to L2 to boost accuracy.";
-
-        normalized_file_path = std::string(indexFilePath) + "_data.normalized.bin";
-        normalize_data_file(dataFilePath, normalized_file_path);
-        _compareMetric = pipeann::Metric::L2;
-      } else {
-        LOG(ERROR) << "WARNING: Cannot normalize integral data types."
-                   << " Using cosine distance with integer data types may "
-                      "result in poor recall."
-                   << " Consider using L2 distance with integral data types.";
-      }
+      normalized_file_path = std::string(indexFilePath) + "_data.normalized.bin";
+      normalize_data_file<T>(dataFilePath, normalized_file_path);
     }
 
     auto s = std::chrono::high_resolution_clock::now();
@@ -606,10 +434,10 @@ namespace pipeann {
     LOG(INFO) << "Vamana index built in: " << std::chrono::duration<double>(end - start).count() << "s.";
 
     if (tag_file == nullptr) {
-      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, "", disk_index_path);
+      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, "", disk_index_path, label);
     } else {
       std::string tag_filename = std::string(tag_file);
-      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, tag_filename, disk_index_path);
+      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, tag_filename, disk_index_path, label);
     }
 
     LOG(INFO) << "Deleting memory index file: " << mem_index_path;
@@ -631,25 +459,28 @@ namespace pipeann {
   }
 
   template void create_disk_layout<int8_t, uint32_t>(const std::string &mem_index_file, const std::string &base_file,
-                                                     const std::string &tag_file, const std::string &output_file);
+                                                     const std::string &tag_file, const std::string &output_file,
+                                                     AbstractLabel *label);
   template void create_disk_layout<uint8_t, uint32_t>(const std::string &mem_index_file, const std::string &base_file,
-                                                      const std::string &tag_file, const std::string &output_file);
+                                                      const std::string &tag_file, const std::string &output_file,
+                                                      AbstractLabel *label);
   template void create_disk_layout<float, uint32_t>(const std::string &mem_index_file, const std::string &base_file,
-                                                    const std::string &tag_file, const std::string &output_file);
+                                                    const std::string &tag_file, const std::string &output_file,
+                                                    AbstractLabel *label);
 
   template bool build_disk_index<int8_t, uint32_t>(const char *dataPath, const char *indexFilePath, uint32_t R,
                                                    uint32_t L, uint32_t M, uint32_t num_threads, uint32_t bytes_per_nbr,
                                                    pipeann::Metric _compareMetric, const char *tag_file,
-                                                   AbstractNeighbor<int8_t> *nbr_handler = nullptr);
+                                                   AbstractNeighbor<int8_t> *nbr_handler, AbstractLabel *label);
   template bool build_disk_index<uint8_t, uint32_t>(const char *dataPath, const char *indexFilePath, uint32_t R,
                                                     uint32_t L, uint32_t M, uint32_t num_threads,
                                                     uint32_t bytes_per_nbr, pipeann::Metric _compareMetric,
-                                                    const char *tag_file,
-                                                    AbstractNeighbor<uint8_t> *nbr_handler = nullptr);
+                                                    const char *tag_file, AbstractNeighbor<uint8_t> *nbr_handler,
+                                                    AbstractLabel *label);
   template bool build_disk_index<float, uint32_t>(const char *dataPath, const char *indexFilePath, uint32_t R,
                                                   uint32_t L, uint32_t M, uint32_t num_threads, uint32_t bytes_per_nbr,
                                                   pipeann::Metric _compareMetric, const char *tag_file,
-                                                  AbstractNeighbor<float> *nbr_handler = nullptr);
+                                                  AbstractNeighbor<float> *nbr_handler, AbstractLabel *label);
 
   template int build_merged_vamana_index<int8_t>(std::string base_file, pipeann::Metric _compareMetric, unsigned L,
                                                  unsigned R, double sampling_rate, double ram_budget,

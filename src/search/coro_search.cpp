@@ -1,10 +1,8 @@
-#include "aligned_file_reader.h"
 #include "utils/libcuckoo/cuckoohash_map.hh"
 #include "ssd_index_defs.h"
 #include "ssd_index.h"
 #include <malloc.h>
 #include <algorithm>
-#include <filesystem>
 
 #include <omp.h>
 #include <chrono>
@@ -132,26 +130,22 @@ namespace pipeann {
 
         for (auto &frontier_nhood : frontier_nhoods) {
           auto [id, loc, sector_buf] = frontier_nhood;
-          char *node_disk_buf = parent->offset_to_loc(sector_buf, loc);
-          unsigned *node_buf = parent->offset_to_node_nhood(node_disk_buf);
-          uint64_t nnbrs = (uint64_t) (*node_buf);
-          T *node_fp_coords = parent->offset_to_node_coords(node_disk_buf);
+          auto node = parent->node_from_page(sector_buf, loc);
 
           T *node_fp_coords_copy = data_buf;
-          memcpy(node_fp_coords_copy, node_fp_coords, parent->data_dim * sizeof(T));
+          memcpy(node_fp_coords_copy, node.coords, parent->meta_.data_dim * sizeof(T));
           float cur_expanded_dist =
               parent->dist_cmp->compare(query, node_fp_coords_copy, (unsigned) parent->aligned_dim);
 
           Neighbor n(id, cur_expanded_dist, true);
           full_retset.push_back(n);
 
-          unsigned *node_nbrs = (node_buf + 1);
           // compute node_nbrs <-> query dist in PQ space
-          parent->nbr_handler->compute_dists(&query_buf, node_nbrs, nnbrs);
+          parent->nbr_handler->compute_dists(&query_buf, node.nbrs, node.nnbrs);
 
           // process prefetch-ed nhood
-          for (uint64_t m = 0; m < nnbrs; ++m) {
-            unsigned id = node_nbrs[m];
+          for (uint64_t m = 0; m < node.nnbrs; ++m) {
+            unsigned id = node.nbrs[m];
             if (visited.find(id) != visited.end()) {
               continue;
             } else {
@@ -207,10 +201,6 @@ namespace pipeann {
       LOG(ERROR) << "N > kMaxCoroPerThread";
       exit(-1);
     }
-    if (unlikely(data_is_normalized)) {
-      LOG(INFO) << "Unsupported yet";
-      exit(-1);
-    }
 
     // do not use the thread data's buf.
     QueryBuffer<T> *thread_data = pop_query_buf(queries[0]);
@@ -220,7 +210,7 @@ namespace pipeann {
     for (int v = 0; v < N; ++v) {
       auto &coro_data = data->data[v];
       auto &query1 = queries[v];
-      memcpy(coro_data.query, query1, this->data_dim * sizeof(T));
+      memcpy(coro_data.query, query1, this->meta_.data_dim * sizeof(T));
 
       auto &query = coro_data.query;
 
@@ -240,7 +230,7 @@ namespace pipeann {
         coro_data.compute_and_add_to_retset(mem_tags.data(), std::min((unsigned) mem_L, (unsigned) l_search));
       } else {
         // Do not use optimized start point.
-        coro_data.compute_and_add_to_retset(&medoid, 1);
+        coro_data.compute_and_add_to_retset(&meta_.entry_point_id, 1);
       }
       std::sort(coro_data.retset.begin(), coro_data.retset.begin() + coro_data.cur_list_size);
     }
