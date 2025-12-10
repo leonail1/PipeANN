@@ -10,3 +10,7 @@ pipeann/*.so
 pipeann/__pycache__/*
 pipeann.egg-info/
 dist/
+scripts/run.log
+.qoder/
+scripts/__pycache__
+compile_commands.json
