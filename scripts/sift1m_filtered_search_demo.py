@@ -4,15 +4,27 @@ SIFT1M Filtered Search 标签选择性实验
 
 运行命令（输出同时显示在命令行和保存到 run.log）:
     python3 sift1m_filtered_search_demo.py 2>&1 | tee run.log
+    python3 sift1m_filtered_search_demo.py --mode range --min-recall 98 --max-recall 99 2>&1 | tee run.log
+    python3 sift1m_filtered_search_demo.py --mode converge 2>&1 | tee run.log
 """
 
 import os
 import sys
 import subprocess
 import re
+import argparse
 from pathlib import Path
 
 def main():
+    parser = argparse.ArgumentParser(description='SIFT1M Filtered Search 标签选择性实验')
+    parser.add_argument('--mode', type=str, default='range', choices=['range', 'converge'],
+                        help='搜索模式: range=在recall区间内停止, converge=二分到收敛')
+    parser.add_argument('--min-recall', type=float, default=98.0,
+                        help='目标最小召回率 (默认: 98.0)')
+    parser.add_argument('--max-recall', type=float, default=99.0,
+                        help='目标最大召回率 (range模式使用, 默认: 99.0)')
+    args = parser.parse_args()
+    
     DATA_DIR = os.getenv("SIFT1M_DATA_DIR", "/data/lzg/sift-pipeann/sift1m_pq")
     DATA_FILE = f"{DATA_DIR}/bigann_1m.bin"
     QUERY_FILE = f"{DATA_DIR}/bigann_query.bin"
@@ -38,41 +50,9 @@ def main():
     print("========================================")
     print(f"数据目录: {DATA_DIR}")
     print(f"索引目录: {INDEX_DIR}")
+    print(f"搜索模式: {args.mode}")
+    print(f"目标召回率: {args.min_recall}%" + (f" - {args.max_recall}%" if args.mode == 'range' else ' (收敛)'))
     print()
-    
-    FILES_TO_CHECK = [
-        f"{DATA_DIR}/data_labels.spmat",
-        f"{INDEX_PREFIX}_disk.index",
-        f"{INDEX_PREFIX}_mem.index",
-        SCRIPT_DIR / "filtered_search_results.csv"
-    ]
-    
-    existing_files = [f for f in FILES_TO_CHECK if os.path.exists(f)] + ([INDEX_DIR] if os.path.isdir(INDEX_DIR) else [])
-    
-    if existing_files:
-        print("⚠️  检测到之前生成的文件：")
-        if os.path.exists(f"{DATA_DIR}/data_labels.spmat"):
-            print("  - 数据标签文件")
-        if os.path.isdir(INDEX_DIR):
-            print("  - 索引目录及所有索引文件")
-        if os.path.exists(SCRIPT_DIR / "filtered_search_results.csv"):
-            print("  - 实验结果CSV文件")
-        print()
-        
-        reply = input("是否删除这些文件并重新开始？[y/N] ").strip().lower()
-        if reply == 'y':
-            print("正在清理旧文件...")
-            for f in [f"{DATA_DIR}/data_labels.spmat", SCRIPT_DIR / "filtered_search_results.csv"]:
-                if os.path.exists(f):
-                    os.remove(f)
-            if os.path.isdir(INDEX_DIR):
-                import shutil
-                shutil.rmtree(INDEX_DIR)
-            print("✓ 清理完成")
-            print()
-        else:
-            print("保留现有文件，将跳过已存在的步骤")
-            print()
     
     if not os.path.isdir(DATA_DIR) or not os.path.exists(DATA_FILE) or not os.path.exists(QUERY_FILE):
         print("❌ 数据文件不存在，请检查路径配置")
@@ -142,7 +122,7 @@ def main():
     
     print()
     print("[4/4] 开始标签选择性实验...")
-    print("  目标: 对每个标签找到最优L值 (Recall>98% 或 延迟>100ms)")
+    print(f"  目标: 对每个标签找到最优L值 (模式={args.mode}, Recall>={args.min_recall}%)")
     print()
     
     RESULTS_FILE = SCRIPT_DIR / "filtered_search_results.csv"
@@ -190,8 +170,8 @@ def main():
         
         L_MIN = 10
         L_MAX = 100
-        TARGET_RECALL_MIN = 98.0
-        TARGET_RECALL_MAX = 99.0
+        TARGET_RECALL_MIN = args.min_recall
+        TARGET_RECALL_MAX = args.max_recall
         MAX_LATENCY_US = 100000
         BEST_L = -1
         BEST_RECALL = 0
@@ -204,7 +184,7 @@ def main():
         def test_L(L):
             result = subprocess.run([
                 str(PROJECT_ROOT / "build/tests/search_disk_index_filtered"), "uint8",
-                INDEX_PREFIX, "4", str(BEAM_WIDTH),
+                INDEX_PREFIX, "1", str(BEAM_WIDTH),
                 QUERY_FILE, CURRENT_FILTERED_GT, str(K),
                 METRIC, NBR_TYPE, "subset", CURRENT_QUERY_LABELS,
                 "0", "10", str(L)
@@ -295,32 +275,47 @@ def main():
                 print(f"    尝试 L={L_MID} (范围: {L_MIN_BINARY}-{L_MAX_BINARY})...", flush=True)
                 recall, lat, qps, p99lat, hops, ios = test_L(L_MID)
                 
-                if TARGET_RECALL_MIN <= recall <= TARGET_RECALL_MAX:
-                    print(f"    ✓✓ 召回率在目标范围内 ({recall}% ∈ [{TARGET_RECALL_MIN}%, {TARGET_RECALL_MAX}%]), 找到最优L")
-                    BEST_L = L_MID
-                    BEST_RECALL = recall
-                    BEST_LATENCY = lat
-                    BEST_QPS = qps
-                    BEST_P99LAT = p99lat
-                    BEST_MEAN_HOPS = hops
-                    BEST_MEAN_IOS = ios
-                    break
-                elif recall > TARGET_RECALL_MAX:
-                    print(f"    → 召回率过高 ({recall}% > {TARGET_RECALL_MAX}%), 减小L")
-                    L_MAX_BINARY = L_MID - 1
-                elif recall >= TARGET_RECALL_MIN:
-                    print(f"    ✓ 达到最低召回率 ({recall}% >= {TARGET_RECALL_MIN}%), 尝试减小L")
-                    BEST_L = L_MID
-                    BEST_RECALL = recall
-                    BEST_LATENCY = lat
-                    BEST_QPS = qps
-                    BEST_P99LAT = p99lat
-                    BEST_MEAN_HOPS = hops
-                    BEST_MEAN_IOS = ios
-                    L_MAX_BINARY = L_MID - 1
+                if args.mode == 'range':
+                    if TARGET_RECALL_MIN <= recall <= TARGET_RECALL_MAX:
+                        print(f"    ✓✓ 召回率在目标范围内 ({recall}% ∈ [{TARGET_RECALL_MIN}%, {TARGET_RECALL_MAX}%]), 找到最优L")
+                        BEST_L = L_MID
+                        BEST_RECALL = recall
+                        BEST_LATENCY = lat
+                        BEST_QPS = qps
+                        BEST_P99LAT = p99lat
+                        BEST_MEAN_HOPS = hops
+                        BEST_MEAN_IOS = ios
+                        break
+                    elif recall > TARGET_RECALL_MAX:
+                        print(f"    → 召回率过高 ({recall}% > {TARGET_RECALL_MAX}%), 减小L")
+                        L_MAX_BINARY = L_MID - 1
+                    elif recall >= TARGET_RECALL_MIN:
+                        print(f"    ✓ 达到最低召回率 ({recall}% >= {TARGET_RECALL_MIN}%), 尝试减小L")
+                        BEST_L = L_MID
+                        BEST_RECALL = recall
+                        BEST_LATENCY = lat
+                        BEST_QPS = qps
+                        BEST_P99LAT = p99lat
+                        BEST_MEAN_HOPS = hops
+                        BEST_MEAN_IOS = ios
+                        L_MAX_BINARY = L_MID - 1
+                    else:
+                        print(f"    → 召回率不足 ({recall}% < {TARGET_RECALL_MIN}%), 增大L")
+                        L_MIN_BINARY = L_MID + 1
                 else:
-                    print(f"    → 召回率不足 ({recall}% < {TARGET_RECALL_MIN}%), 增大L")
-                    L_MIN_BINARY = L_MID + 1
+                    if recall >= TARGET_RECALL_MIN:
+                        print(f"    ✓ 达到最低召回率 ({recall}% >= {TARGET_RECALL_MIN}%), 尝试减小L")
+                        BEST_L = L_MID
+                        BEST_RECALL = recall
+                        BEST_LATENCY = lat
+                        BEST_QPS = qps
+                        BEST_P99LAT = p99lat
+                        BEST_MEAN_HOPS = hops
+                        BEST_MEAN_IOS = ios
+                        L_MAX_BINARY = L_MID - 1
+                    else:
+                        print(f"    → 召回率不足 ({recall}% < {TARGET_RECALL_MIN}%), 增大L")
+                        L_MIN_BINARY = L_MID + 1
         
         print(f"\n  最终结果: L={BEST_L}, Recall={BEST_RECALL}%, Lat={BEST_LATENCY}us\n")
         with open(RESULTS_FILE, 'a') as f:
