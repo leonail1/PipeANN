@@ -214,7 +214,7 @@ namespace pipeann {
           }
         }
 
-        if (dyn_search_l) {
+        if (dyn_search_l && exclude_nodes != nullptr) {
           // TODO(gh): contention still exists in id2tag(x)
           // O(n), but it is not slow as L is typically smaller than 300.
           // l_search monotonically increases to handle deleted nodes.

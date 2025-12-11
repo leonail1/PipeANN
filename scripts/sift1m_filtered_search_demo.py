@@ -21,7 +21,7 @@ def main():
                         help='搜索模式: range=在recall区间内停止, converge=二分到收敛')
     parser.add_argument('--min-recall', type=float, default=98.0,
                         help='目标最小召回率 (默认: 98.0)')
-    parser.add_argument('--max-recall', type=float, default=99.0,
+    parser.add_argument('--max-recall', type=float, default=98.05,
                         help='目标最大召回率 (range模式使用, 默认: 99.0)')
     args = parser.parse_args()
     
@@ -34,7 +34,7 @@ def main():
     NUM_THREADS = 64
     R = 64
     L_BUILD = 96
-    PQ_BYTES = 32
+    PQ_BYTES = 20
     MEMORY_GB = 32
     METRIC = "l2"
     NBR_TYPE = "pq"

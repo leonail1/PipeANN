@@ -242,7 +242,7 @@ int aux_main(int argc, char **argv, pipeann::Metric metric, pipeann::AbstractSel
   }
 
   // Query batch size: process 100 queries at a time to limit memory usage
-  const size_t QUERY_BATCH_SIZE = 100;
+  const size_t QUERY_BATCH_SIZE = 1000;
   const size_t num_query_batches = (nqueries + QUERY_BATCH_SIZE - 1) / QUERY_BATCH_SIZE;
 
   std::vector<std::string> temp_files;

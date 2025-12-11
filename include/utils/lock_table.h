@@ -19,7 +19,7 @@ namespace pipeann {
   class SparseLockTable {
    public:
     SparseLockTable() {
-      locks_ = new libcuckoo::cuckoohash_map<K, std::pair<pthread_rwlock_t *, int>, HashFunction>();
+      locks_ = new libcuckoo::cuckoohash_map<K, std::pair<pthread_rwlock_t *, int>, HashFunction>(128);
     }
 
     int tryrdlock(const K &key) {

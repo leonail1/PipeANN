@@ -28,6 +28,8 @@ namespace pipeann {
   };
 
   struct PageCache {
+    PageCache() : lock_table(), cache(128) {}
+
     bool get(uint64_t block_no, uint8_t *value, bool ref = false) {
       bool ret = cache.update_fn(block_no, [&](PageCacheItem &v) {
         memcpy(value, v.buf, SECTOR_LEN);

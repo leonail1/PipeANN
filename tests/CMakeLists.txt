@@ -29,3 +29,6 @@ target_link_libraries(pad_partition ${PROJECT_NAME} )
 
 add_executable(normalize_data normalize_data.cpp)
 target_link_libraries(normalize_data ${PROJECT_NAME})
+
+add_executable(single_query_memory_test single_query_memory_test.cpp)
+target_link_libraries(single_query_memory_test ${PROJECT_NAME})

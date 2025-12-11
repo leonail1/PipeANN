@@ -4,6 +4,7 @@ project(pipeann)
 set(CMAKE_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(USE_AIO "Use AIO instead of liburing" OFF)
+option(VALGRIND_COMPAT "Build with Valgrind compatibility (disable advanced CPU instructions)" OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_C_COMPILER_LAUNCHER ccache)
@@ -15,7 +16,7 @@ include_directories(
 )
 
 add_compile_options(
-	-fopenmp 
+	-fopenmp
 	-fopenmp-simd
 	-Wall
 	-Wextra
@@ -25,7 +26,14 @@ add_compile_options(
 	-Wno-unused-parameter
 	-Wno-unused-but-set-variable
 )
-add_compile_options(-g -O3 -march=native -mtune=native -ftree-vectorize -funroll-loops -Wl,--no-as-needed)
+
+# Choose architecture flags based on VALGRIND_COMPAT option
+if(VALGRIND_COMPAT)
+	message(STATUS "Building with Valgrind compatibility - using basic x86-64 instructions only")
+	add_compile_options(-g -O2 -march=x86-64 -mno-avx512f -ftree-vectorize -funroll-loops -Wl,--no-as-needed)
+else()
+	add_compile_options(-g -O3 -march=native -mtune=native -ftree-vectorize -funroll-loops -Wl,--no-as-needed)
+endif()
 
 message("Additional definitions: " $ENV{ADDITIONAL_DEFINITIONS})
 add_definitions(
@@ -37,8 +45,8 @@ add_definitions(
 	# -DNO_POLLUTE_ORIGINAL
 
 	# optimizations.
-	# -DREAD_ONLY_TESTS
-	# -DNO_MAPPING # starling: must disable this!
+	-DREAD_ONLY_TESTS
+	-DNO_MAPPING # starling: must disable this!
 	-DOVERLAP_INIT
 )
 
@@ -66,41 +74,46 @@ link_libraries(
 # add_link_options(-fsanitize=address,undefined)
 
 # check for AVX512 and AVX2, add the corresponding definitions.
-# First, for the compiler.
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-mavx512f" COMPILER_SUPPORTS_AVX512F)
-check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+# Skip if VALGRIND_COMPAT is enabled
+if(NOT VALGRIND_COMPAT)
+	# First, for the compiler.
+	include(CheckCXXCompilerFlag)
+	check_cxx_compiler_flag("-mavx512f" COMPILER_SUPPORTS_AVX512F)
+	check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
 
-# Then, for the runtime.
-set(CPU_SUPPORTS_AVX512 FALSE)
-set(CPU_SUPPORTS_AVX2 FALSE)
-try_run(
-	RUN_RESULT
-	COMPILE_RESULT
-	"${CMAKE_BINARY_DIR}"
-	SOURCES "${PROJECT_SOURCE_DIR}/tests/test_cpu.cpp"
-	COMPILE_OUTPUT_VARIABLE COMPILE_OUT
-	RUN_OUTPUT_VARIABLE RUN_OUT
-)
+	# Then, for the runtime.
+	set(CPU_SUPPORTS_AVX512 FALSE)
+	set(CPU_SUPPORTS_AVX2 FALSE)
+	try_run(
+		RUN_RESULT
+		COMPILE_RESULT
+		"${CMAKE_BINARY_DIR}"
+		SOURCES "${PROJECT_SOURCE_DIR}/tests/test_cpu.cpp"
+		COMPILE_OUTPUT_VARIABLE COMPILE_OUT
+		RUN_OUTPUT_VARIABLE RUN_OUT
+	)
 
-if(COMPILE_RESULT AND RUN_RESULT EQUAL 3) # AVX512 + AVX2
-	set(CPU_SUPPORTS_AVX512 TRUE)
-	message(STATUS "CPU supports AVX512")
-elseif(COMPILE_RESULT AND RUN_RESULT EQUAL 1) # AVX2
-	set(CPU_SUPPORTS_AVX2 TRUE)
-	message(STATUS "CPU supports AVX2")
+	if(COMPILE_RESULT AND RUN_RESULT EQUAL 3) # AVX512 + AVX2
+		set(CPU_SUPPORTS_AVX512 TRUE)
+		message(STATUS "CPU supports AVX512")
+	elseif(COMPILE_RESULT AND RUN_RESULT EQUAL 1) # AVX2
+		set(CPU_SUPPORTS_AVX2 TRUE)
+		message(STATUS "CPU supports AVX2")
+	else()
+		message(STATUS "CPU does not support AVX512 or detection failed")
+	endif()
+
+	if(COMPILER_SUPPORTS_AVX512F AND CPU_SUPPORTS_AVX512)
+		message(STATUS "Compiler and CPU supports -mavx512f. Enabling AVX512F.")
+		add_definitions(-DUSE_AVX512)
+	elseif(COMPILER_SUPPORTS_AVX2 AND CPU_SUPPORTS_AVX2)
+		message(STATUS "Compiler and CPU supports -mavx2. Enabling AVX2.")
+		add_definitions(-DUSE_AVX2)
+	else()
+		message(STATUS "Compiler or CPU do not support -mavx512f and -mavx2.")
+	endif()
 else()
-	message(STATUS "CPU does not support AVX512 or detection failed")
-endif()
-
-if(COMPILER_SUPPORTS_AVX512F AND CPU_SUPPORTS_AVX512)
-    message(STATUS "Compiler and CPU supports -mavx512f. Enabling AVX512F.")
-	add_definitions(-DUSE_AVX512)
-elseif(COMPILER_SUPPORTS_AVX2 AND CPU_SUPPORTS_AVX2)
-	message(STATUS "Compiler and CPU supports -mavx2. Enabling AVX2.")
-	add_definitions(-DUSE_AVX2)
-else()
-    message(STATUS "Compiler or CPU do not support -mavx512f and -mavx2.")
+	message(STATUS "Valgrind compatibility mode - skipping AVX512/AVX2 detection")
 endif()
 
 #OpenMP

@@ -168,6 +168,7 @@ namespace pipeann {
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::load_page_layout(const std::string &index_prefix, const uint64_t nnodes_per_sector,
                                            const uint64_t num_points) {
+#ifndef NO_MAPPING
     std::string partition_file = index_prefix + "_partition.bin.aligned";
     id2loc_.resize(num_points);  // pre-allocate space first.
     loc2id_.resize(cur_loc);     // pre-allocate space first.
@@ -214,8 +215,6 @@ namespace pipeann {
                 << " ms";
     } else {
       LOG(INFO) << partition_file << " does not exist, use equal partition mapping";
-// use equal mapping for id2loc and page_layout.
-#ifndef NO_MAPPING
 #pragma omp parallel for
       for (size_t i = 0; i < meta_.npoints; ++i) {
         id2loc_[i] = i;
@@ -224,9 +223,9 @@ namespace pipeann {
       for (size_t i = meta_.npoints; i < this->cur_loc; ++i) {
         loc2id_[i] = kInvalidID;
       }
-#endif
     }
     LOG(INFO) << "Page layout loaded.";
+#endif
   }
 
   template<typename T, typename TagT>
@@ -402,6 +401,9 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   uint32_t SSDIndex<T, TagT>::loc2id(uint32_t loc) {
+#ifdef NO_MAPPING
+    return loc;
+#else
     loc2id_resize_mu_.lock_shared();
     if (unlikely(loc > loc2id_.size())) {
       LOG(ERROR) << "loc " << loc << " is out of range " << loc2id_.size();
@@ -411,10 +413,12 @@ namespace pipeann {
     uint32_t ret = loc2id_[loc];
     loc2id_resize_mu_.unlock_shared();
     return ret;
+#endif
   }
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::set_loc2id(uint32_t loc, uint32_t id) {
+#ifndef NO_MAPPING
     if (unlikely(loc >= loc2id_.size())) {
       loc2id_resize_mu_.lock();
       if (likely(loc >= loc2id_.size())) {
@@ -426,10 +430,12 @@ namespace pipeann {
     loc2id_resize_mu_.lock_shared();
     loc2id_[loc] = id;
     loc2id_resize_mu_.unlock_shared();
+#endif
   }
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::erase_loc2id(uint32_t loc) {
+#ifndef NO_MAPPING
     loc2id_resize_mu_.lock_shared();
     loc2id_[loc] = kInvalidID;
     uint32_t st = sector_to_loc(loc_sector_no(loc), 0);
@@ -446,6 +452,7 @@ namespace pipeann {
     uint32_t page = loc_sector_no(loc);
     uint32_t offset = loc % meta_.nnodes_per_sector;
     loc2id_resize_mu_.unlock_shared();
+#endif
   }
 
   template<typename T, typename TagT>
@@ -564,14 +571,22 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   typename SSDIndex<T, TagT>::PageArr SSDIndex<T, TagT>::get_page_layout(uint32_t page_no) {
-    loc2id_resize_mu_.lock_shared();
     PageArr ret;
+#ifdef NO_MAPPING
+    auto st = sector_to_loc(page_no, 0);
+    auto ed = meta_.nnodes_per_sector == 0 ? st + 1 : st + meta_.nnodes_per_sector;
+    for (uint32_t i = st; i < ed; ++i) {
+      ret.push_back(i);
+    }
+#else
+    loc2id_resize_mu_.lock_shared();
     auto st = sector_to_loc(page_no, 0);
     auto ed = meta_.nnodes_per_sector == 0 ? st + 1 : st + meta_.nnodes_per_sector;
     for (uint32_t i = st; i < ed; ++i) {
       ret.push_back(loc2id_[i]);
     }
     loc2id_resize_mu_.unlock_shared();
+#endif
     return ret;
   }
 
@@ -579,6 +594,7 @@ namespace pipeann {
   void SSDIndex<T, TagT>::erase_and_set_loc(const std::vector<uint64_t> &old_locs,
                                             const std::vector<uint64_t> &new_locs,
                                             const std::vector<uint32_t> &new_ids) {
+#ifndef NO_MAPPING
     std::lock_guard<std::mutex> lock(alloc_lock);
     for (uint32_t i = 0; i < new_locs.size(); ++i) {
       set_loc2id(new_locs[i], new_ids[i]);
@@ -586,14 +602,16 @@ namespace pipeann {
     for (auto &l : old_locs) {
       erase_loc2id(l);
     }
+#endif
   }
 
   // Returns <loc, need_read>.
   template<typename T, typename TagT>
   std::vector<uint64_t> SSDIndex<T, TagT>::alloc_loc(int n, const std::vector<uint64_t> &hint_pages,
                                                      std::set<uint64_t> &page_need_to_read) {
-    std::lock_guard<std::mutex> lock(alloc_lock);
     std::vector<uint64_t> ret;
+#ifndef NO_MAPPING
+    std::lock_guard<std::mutex> lock(alloc_lock);
     int cur = 0;
     // Reuse.
     uint32_t threshold = (meta_.nnodes_per_sector + INDEX_SIZE_FACTOR - 1) / INDEX_SIZE_FACTOR;
@@ -670,11 +688,13 @@ namespace pipeann {
     while (meta_.nnodes_per_sector != 0 && cur_loc % meta_.nnodes_per_sector != 0) {
       set_loc2id(cur_loc++, kInvalidID);  // auto resize.
     }
+#endif
     return ret;
   }
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::verify_id2loc() {
+#ifndef NO_MAPPING
     // Verify id -> loc -> id map.
     LOG(INFO) << "ID2loc size: " << id2loc_.size() << ", cur_loc: " << cur_loc.load() << ", cur_id: " << cur_id
               << ", nnodes_per_sector: " << meta_.nnodes_per_sector;
@@ -704,6 +724,7 @@ namespace pipeann {
       }
     }
     LOG(INFO) << "loc2ID consistency check passed.";
+#endif
   }
 
   template class SSDIndex<float>;

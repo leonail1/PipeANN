@@ -230,6 +230,7 @@ namespace pipeann {
     // Page search mode flag.
     bool use_page_search_ = true;
 
+#ifndef NO_MAPPING
     // ID to location mapping.
     // Concurrency control is done in lock_idx.
     // Only resize should be protected.
@@ -243,10 +244,11 @@ namespace pipeann {
     pipeann::ReaderOptSharedMutex loc2id_resize_mu_;
     std::mutex alloc_lock;
     ConcurrentQueue<uint32_t> empty_pages = ConcurrentQueue<uint32_t>(kInvalidID);
+#endif
 
     // Tag support.
     // If ID == tag, then it is not stored.
-    libcuckoo::cuckoohash_map<uint32_t, TagT> tags;
+    libcuckoo::cuckoohash_map<uint32_t, TagT> tags{128};
 
     // Flags.
     bool load_flag = false;    // already loaded.

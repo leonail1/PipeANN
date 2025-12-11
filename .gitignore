@@ -14,4 +14,3 @@ scripts/run.log
 .qoder/
 scripts/__pycache__
 compile_commands.json
-scripts/filtered_search_results.csv

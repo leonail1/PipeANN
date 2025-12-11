@@ -323,12 +323,14 @@ namespace pipeann {
     this->init_metadata(meta);
 
     // No need to reload PQ, as it is already reloaded in merge_deletes.
+#ifndef NO_MAPPING
     for (uint32_t i = this->meta_.npoints; i < this->cur_loc; ++i) {
       set_loc2id(i, kInvalidID);  // reset loc2id.
     }
     while (!this->empty_pages.empty()) {
       this->empty_pages.pop();
     }
+#endif
     merge_lock.unlock();
     LOG(INFO) << "Reload finished, cur_id: " << this->cur_id << ", cur_loc: " << this->cur_loc;
     return;
