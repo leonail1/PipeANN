@@ -2,8 +2,7 @@
 
 #include "utils.h"
 #include <immintrin.h>
-#include <sstream>
-#include <string_view>
+#include <cmath>
 
 #define NUM_PQ_CENTROIDS 256
 #define NUM_PQ_OFFSETS 5
@@ -11,6 +10,7 @@
 namespace pipeann {
   template<typename T>
   class FixedChunkPQTable {
+   public:
     float *tables = nullptr;  // pq_tables = float* [[2^8 * [chunk_size]] * n_chunks]
     float *centroid = nullptr;
     uint32_t *chunk_offsets = nullptr;
@@ -18,7 +18,6 @@ namespace pipeann {
     float *all_to_all_dists = nullptr;
     pipeann::Metric metric;
 
-   public:
     uint64_t ndims;  // ndims = chunk_size * n_chunks
     uint64_t n_chunks;
 
@@ -123,7 +122,7 @@ namespace pipeann {
       }
 
       this->n_chunks = num_chunks;
-      LOG(INFO) << "Loaded PQ Pivots: #ctrs: " << NUM_PQ_CENTROIDS << ", #dims: " << this->ndims
+      LOG(INFO) << "Loaded PQ Pivots: #centroids: " << NUM_PQ_CENTROIDS << ", #dims: " << this->ndims
                 << ", #chunks: " << this->n_chunks;
     }
 
@@ -194,7 +193,6 @@ namespace pipeann {
       reader.seekg(0);
       load_pq_pivots_new(reader, num_chunks, offset);
       post_load_pq_table();
-      LOG(INFO) << "Finished optimizing for PQ-PQ distance compuation";
     }
 
     void populate_chunk_distances_l2_scalar(const T *query_vec, float *dist_vec) {
@@ -327,5 +325,5 @@ namespace pipeann {
         }
       }
     }
-  };  // namespace pipeann
+  };
 }  // namespace pipeann

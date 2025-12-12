@@ -16,6 +16,12 @@ namespace pipeann {
       return new PQNeighbor<T>(metric);
     } else if (nbr_type == "dummy") {
       return new DummyNeighbor<T>(metric);
+    } else if (nbr_type == "rabitq3") {
+      return new RaBitQNeighbor<T, 3>(metric);
+    } else if (nbr_type == "rabitq4") {
+      return new RaBitQNeighbor<T, 4>(metric);
+    } else if (nbr_type == "rabitq5") {
+      return new RaBitQNeighbor<T, 5>(metric);
     }
     return nullptr;
   }

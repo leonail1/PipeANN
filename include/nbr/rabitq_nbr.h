@@ -18,44 +18,52 @@
 #include "rabitq/utils/warmup_space.hpp"
 
 namespace pipeann {
-  // 1-bit implementation of RaBitQ. The query is quantized to 4 bits.
-  // As PipeANN targets memory-constrained scenarios, we do not implement multi-bit RaBitQ.
+  // 1-bit and multi-bit implementation of RaBitQ. The query is quantized to 4 bits.
   // Update is not supported yet, due to difficult symmetric distance computation.
-  template<typename T>
+  template<typename T, size_t BITS = 1>
   class RaBitQNeighbor : public AbstractNeighbor<T> {
+    static_assert(BITS >= 1, "BITS must be >= 1");
+    static_assert(BITS <= 8, "BITS must be <= 8");
     static constexpr uint32_t NUM_KMEANS = 15;
     static constexpr uint32_t NUM_CLUSTERS = 16;  // recommended by RaBitQ library.
     static constexpr uint32_t QUERY_BITS = 4;     // 4 bits for each query dimension.
+    static constexpr size_t EX_BITS = (BITS > 1 ? BITS - 1 : 0);
+    static constexpr bool HAS_EX = (EX_BITS > 0);
+    static constexpr size_t META_FLOATS = HAS_EX ? 4 : 3;
     using pivot_id_t = uint8_t;
 
     uint64_t data_dim = 0, pad_dim = 0;
-    uint64_t bin_data_size = 0, data_size = 0;
+    uint64_t bin_data_size = 0, ex_data_size = 0, data_size = 0;
 
-    enum { M_DELTA = 0, M_VL = 1, M_K1XSUMQ = 2 };  // offsets in query context.
+    enum { M_DELTA = 0, M_VL = 1, M_K1XSUMQ = 2, M_KBXSUMQ = 3 };  // offsets in query context.
 
     // Float only, use fhtkac rotator.
     rabitqlib::rotator_impl::FhtKacRotator *rotator_ = nullptr;
-    float *rotated_pivots;
+    float *rotated_pivots = nullptr;
 
     // Each element: [pivot_id | bin_data]
     std::vector<char> data;
     Distance<float> *distance;
 
     rabitqlib::MetricType rabitq_metric = rabitqlib::MetricType::METRIC_L2;
+    rabitqlib::ex_ipfunc ex_ip_func_ = nullptr;
 
    public:
-    RaBitQNeighbor<T>(pipeann::Metric metric) : AbstractNeighbor<T>(metric) {
+    RaBitQNeighbor<T, BITS>(pipeann::Metric metric) : AbstractNeighbor<T>(metric) {
       distance = get_distance_function<float>(metric);
       rabitq_metric = metric == INNER_PRODUCT ? rabitqlib::MetricType::METRIC_IP : rabitqlib::MetricType::METRIC_L2;
+      if constexpr (HAS_EX) {
+        ex_ip_func_ = rabitqlib::select_excode_ipfunc(EX_BITS);
+      }
     }
 
-    ~RaBitQNeighbor<T>() {
+    ~RaBitQNeighbor<T, BITS>() {
       if (rotator_ != nullptr) {
         delete rotator_;
         rotator_ = nullptr;
       }
       if (rotated_pivots != nullptr) {
-        aligned_free(rotated_pivots);
+        delete[] rotated_pivots;
         rotated_pivots = nullptr;
       }
     }
@@ -66,8 +74,13 @@ namespace pipeann {
         LOG(ERROR) << "Please load neighbor first!";
         exit(-1);
       }
-      /* quantized_vec | q_to_centroids | delta | vl | k1xsumq */
-      return this->pad_dim * QUERY_BITS / 8 + NUM_CLUSTERS * 2 * sizeof(float) + 3 * sizeof(float);
+      /* quantized_vec | q_to_centroids | delta | vl | k1xsumq | kbxsumq | rotated_query */
+      uint64_t ctx_bytes =
+          this->pad_dim * QUERY_BITS / 8 + NUM_CLUSTERS * 2 * sizeof(float) + META_FLOATS * sizeof(float);
+      if constexpr (HAS_EX) {
+        ctx_bytes += this->pad_dim * sizeof(float);
+      }
+      return ctx_bytes;
     }
 
     std::string get_name() {
@@ -117,6 +130,12 @@ namespace pipeann {
       meta[M_DELTA] = delta_;
       meta[M_VL] = vl_;
       meta[M_K1XSUMQ] = c_1 * sumq;
+      if constexpr (HAS_EX) {
+        float c_b = -static_cast<float>((1 << (EX_BITS + 1)) - 1) / 2.F;
+        meta[M_KBXSUMQ] = c_b * sumq;
+        float *rotated_query_out = get_rotated_query(query_buf->nbr_ctx_scratch);
+        std::memcpy(rotated_query_out, rotated_query_float.data(), pad_dim * sizeof(float));
+      }
     }
 
     // Compute dists using assymetric distance computation.
@@ -124,6 +143,7 @@ namespace pipeann {
       uint64_t *query_bin = (uint64_t *) (query_buf->nbr_ctx_scratch);
       float *q_to_centroids = get_q_to_centroids(query_buf->nbr_ctx_scratch);
       float *meta = get_meta(query_buf->nbr_ctx_scratch);
+      float *rotated_query = HAS_EX ? get_rotated_query(query_buf->nbr_ctx_scratch) : nullptr;
 
       for (uint64_t i = 0; i < n_ids; ++i) {
         if ((i + 1) < n_ids) {
@@ -135,17 +155,28 @@ namespace pipeann {
         pivot_id_t pivot_id = 0;
         memcpy(&pivot_id, item, sizeof(pivot_id_t));
         char *raw_bin_data = item + sizeof(pivot_id_t);
-        memcpy(query_buf->nbr_vec_scratch, raw_bin_data, bin_data_size);
+        memcpy(query_buf->nbr_vec_scratch, raw_bin_data, bin_data_size + ex_data_size);
         char *bin_data = (char *) query_buf->nbr_vec_scratch;  // for alignment.
+        char *ex_data = HAS_EX ? (bin_data + bin_data_size) : nullptr;
 
         if (this->metric == Metric::INNER_PRODUCT) {
           float norm = q_to_centroids[pivot_id];
           float error = q_to_centroids[pivot_id + NUM_CLUSTERS];
-          query_buf->aligned_dist_scratch[i] = split_single_estdist(bin_data, query_bin, meta, -norm, error);
+          if constexpr (HAS_EX) {
+            query_buf->aligned_dist_scratch[i] =
+                split_single_ex_estdist(bin_data, ex_data, query_bin, meta, rotated_query, -norm, error);
+          } else {
+            query_buf->aligned_dist_scratch[i] = split_single_estdist(bin_data, query_bin, meta, -norm, error);
+          }
         } else {
           // L2 distance
           float norm = q_to_centroids[pivot_id];
-          query_buf->aligned_dist_scratch[i] = split_single_estdist(bin_data, query_bin, meta, norm * norm, norm);
+          if constexpr (HAS_EX) {
+            query_buf->aligned_dist_scratch[i] =
+                split_single_ex_estdist(bin_data, ex_data, query_bin, meta, rotated_query, norm * norm, norm);
+          } else {
+            query_buf->aligned_dist_scratch[i] = split_single_estdist(bin_data, query_bin, meta, norm * norm, norm);
+          }
         }
       }
     }
@@ -174,7 +205,12 @@ namespace pipeann {
       this->data_dim = metadata[1];
       this->pad_dim = metadata[2];
       this->data_size = metadata[3];
-      this->bin_data_size = this->data_size - sizeof(pivot_id_t);
+      this->ex_data_size = HAS_EX ? rabitqlib::ExDataMap<float>::data_bytes(this->pad_dim, EX_BITS) : 0;
+      this->bin_data_size = this->data_size - sizeof(pivot_id_t) - this->ex_data_size;
+      if (this->bin_data_size == 0 || this->data_size <= sizeof(pivot_id_t)) {
+        LOG(ERROR) << "Invalid data size in metadata.";
+        exit(-1);
+      }
 
       this->initialize_rotator(this->data_dim);
       std::ifstream rotator_if(rotator_path, std::ios::binary);
@@ -227,8 +263,9 @@ namespace pipeann {
 
       // quantize_split_single uses float, drop f_error as we do not use it.
       bin_data_size = rabitqlib::BinDataMap<float>::data_bytes(this->pad_dim) - sizeof(float);
-      bytes_per_nbr = bin_data_size + sizeof(pivot_id_t);
-      LOG(INFO) << "Bytes per neighbor: " << bytes_per_nbr << ", use 1-bit RaBitQ.";
+      ex_data_size = HAS_EX ? rabitqlib::ExDataMap<float>::data_bytes(this->pad_dim, EX_BITS) : 0;
+      bytes_per_nbr = bin_data_size + ex_data_size + sizeof(pivot_id_t);
+      LOG(INFO) << "Bytes per neighbor: " << bytes_per_nbr << ", use " << BITS << "-bit RaBitQ.";
       this->data_size = bytes_per_nbr;
 
       // 2. get pivots.
@@ -314,6 +351,12 @@ namespace pipeann {
       return (float *) c_ptr;
     }
 
+    float *get_rotated_query(float *query_ctx) {
+      char *c_ptr = ((char *) query_ctx) + (pad_dim * QUERY_BITS / 8) + NUM_CLUSTERS * 2 * sizeof(float) +
+                    META_FLOATS * sizeof(float);
+      return (float *) c_ptr;
+    }
+
     void quantize_single(float *point, pivot_id_t pivot_id, char *out) {
       if (unlikely(pivot_id >= NUM_CLUSTERS)) {
         LOG(ERROR) << "pivot_id " << (int) pivot_id << " >= NUM_CLUSTERS " << NUM_CLUSTERS;
@@ -322,12 +365,17 @@ namespace pipeann {
 
       std::vector<float> rotated_data(this->pad_dim);
       rotator_->rotate(point, rotated_data.data());
-      std::vector<uint64_t> quant_data(this->bin_data_size + 1);  // for alignment (here overallocation may happen).
+      size_t full_bin_bytes = rabitqlib::BinDataMap<float>::data_bytes(this->pad_dim);
+      size_t tmp_bytes = full_bin_bytes + ex_data_size;
+      std::vector<uint64_t> quant_data(DIV_ROUND_UP(tmp_bytes, sizeof(uint64_t)));  // keep 8B alignment
       rabitqlib::quant::quantize_split_single(rotated_data.data(), rotated_pivots + (pivot_id * this->pad_dim),
-                                              this->pad_dim, 0, (char *) quant_data.data(),
-                                              ((char *) quant_data.data()) + bin_data_size, rabitq_metric);
+                                              this->pad_dim, EX_BITS, (char *) quant_data.data(),
+                                              (char *) quant_data.data() + full_bin_bytes, rabitq_metric);
       memcpy(out, &pivot_id, sizeof(pivot_id_t));
-      memcpy(out + sizeof(pivot_id_t), quant_data.data(), bin_data_size);
+      memcpy(out + sizeof(pivot_id_t), quant_data.data(), bin_data_size);  // Do not save f_error.
+      if constexpr (HAS_EX) {
+        memcpy(out + sizeof(pivot_id_t) + bin_data_size, (char *) quant_data.data() + full_bin_bytes, ex_data_size);
+      }
     }
 
     std::vector<float> generate_pivots(const float *train_data, size_t num_train, unsigned dim, unsigned num_centers,
@@ -347,14 +395,25 @@ namespace pipeann {
           warmup_ip_x0_q<QUERY_BITS>(cur_bin.bin_code(), query_bin, meta[M_DELTA], meta[M_VL], pad_dim, QUERY_BITS);
       return cur_bin.f_add() + g_add + cur_bin.f_rescale() * (ip_x0_qr + meta[M_K1XSUMQ]);
     };
+
+    inline float split_single_ex_estdist(const char *bin_data, const char *ex_data, uint64_t *query_bin, float *meta,
+                                         const float *rotated_query, float g_add = 0, float g_error = 0) {
+      rabitqlib::ConstBinDataMap<float> cur_bin(bin_data, pad_dim);
+      float ip_x0_qr =
+          warmup_ip_x0_q<QUERY_BITS>(cur_bin.bin_code(), query_bin, meta[M_DELTA], meta[M_VL], pad_dim, QUERY_BITS);
+      rabitqlib::ConstExDataMap<float> cur_ex(ex_data, pad_dim, EX_BITS);
+      return cur_ex.f_add_ex() + g_add +
+             cur_ex.f_rescale_ex() * (static_cast<float>(1 << EX_BITS) * ip_x0_qr +
+                                      ex_ip_func_(rotated_query, cur_ex.ex_code(), pad_dim) + meta[M_KBXSUMQ]);
+    };
   };
 }  // namespace pipeann
 #else
 namespace pipeann {
-  template<typename T>
+  template<typename T, size_t BITS = 1>
   class RaBitQNeighbor : public AbstractNeighbor<T> {
    public:
-    RaBitQNeighbor<T>(pipeann::Metric metric) : AbstractNeighbor<T>(metric) {
+    RaBitQNeighbor<T, BITS>(pipeann::Metric metric) : AbstractNeighbor<T>(metric) {
       LOG(ERROR) << "RaBitQNeighbor requires AVX512 support.";
       exit(-1);
     }
