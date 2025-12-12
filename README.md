@@ -20,9 +20,9 @@ PipeANN is suitable for both **large-scale** and **memory-constraint** scenarios
 
 | Dataset | Dimension | Memory | Latency | QPS | PipeANN | HNSW | DiskANN |
 |---------|-----|--------|---------|-----|---------|-------------| -------- |
-| 1B (SPACEV) | 100 | 40GB | 2ms | 5K | ✅ | ❌ 1TB | ❌ 6ms |
-| 80M (Wiki) | 768 | 10GB | 1.5ms | 5K | ✅ | ❌ 300GB | ❌ 4ms |
-| 10M (SIFT) | 128 | 550MB | <1ms | 10K | ✅ | ❌ 4GB | ❌ 3ms |
+| 1B (SPACEV) | 100 | 40GB | 2ms | 5K | ✅ | ❌ 1TB mem | ❌ 6ms |
+| 80M (Wiki) | 768 | 10GB | 1.5ms | 5K | ✅ | ❌ 300GB mem | ❌ 4ms |
+| 10M (SIFT) | 128 | 550MB | <1ms | 10K | ✅ | ❌ 4GB mem | ❌ 3ms |
 
 > Recall@10 = 0.99, Samsung PM9A3 SSD, 32B PQ-compressed vectors (128B for Wiki).
 
@@ -31,7 +31,7 @@ PipeANN is suitable for both **large-scale** and **memory-constraint** scenarios
 ## 📰 Updates
 
 - **Dec 4, 2025**: Inner product and filtered ANNS (*arbitrary filter*) supported
-- **Oct 14, 2025**: [RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library) (1-bit quantization) supported
+- **Oct 14, 2025**: [RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library) (1-bit and multi-bit quantization) supported
 - **Sep 29, 2025**: Python interface released
 - **Jul 16, 2025**: Vector update (insert/delete) supported
 
@@ -241,7 +241,7 @@ SIFT1B dataset.
 **2. Convert format** (if needed):
 ```bash
 # convert .vecs to .bin
-build/tests/utils/vecs_to_bin unt8 bigann_base.bvecs bigann.bin # for int8/uint8 vecs (SIFT)
+build/tests/utils/vecs_to_bin uint8 bigann_base.bvecs bigann.bin # for int8/uint8 vecs (SIFT)
 build/tests/utils/vecs_to_bin float base.fvecs deep.bin # for float vecs (DEEP)
 build/tests/utils/vecs_to_bin int32 idx_1000M.ibin # for int32/uint32 vecs (groundtruth) 
 
@@ -267,7 +267,7 @@ build/tests/build_disk_index uint8 data.bin index 96 128 32 256 112 l2 pq
 - `L`: Candidate pool size during build.
 - `PQ_bytes`: Bytes per PQ vector (32 recommended, use a larger value if accuracy is low).
 - `M`: Max memory (GB).
-- `nbr_type`: `pq` (product quantization, supports update) or `rabitq` (1-bit quantization, search-only).
+- `nbr_type`: `pq` (product quantization, supports update), `rabitq` (1-bit quantization, search-only), `rabitq{3-5}` (3-bit to 5-bit quantization, search-only).
 
 **Recommended Parameters:**
 

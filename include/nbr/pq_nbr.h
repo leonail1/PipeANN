@@ -300,7 +300,7 @@ namespace pipeann {
 
       // Every thread compute one chunk, fast enough.
       auto st = std::chrono::high_resolution_clock::now();
-#pragma omp parallel for
+#pragma omp parallel for schedule(static, 1)
       for (size_t i = 0; i < num_pq_chunks; i++) {
         size_t cur_chunk_size = chunk_offsets[i + 1] - chunk_offsets[i];
 
@@ -360,73 +360,16 @@ namespace pipeann {
     int generate_pq_data_from_pivots(const std::string data_file, unsigned num_centers, unsigned num_pq_chunks,
                                      std::string pq_pivots_path, std::string pq_compressed_vectors_path,
                                      size_t offset) {
-      uint64_t read_blk_size = 64 * 1024 * 1024;
-      cached_ifstream base_reader(data_file, read_blk_size, (uint32_t) offset);
-      uint32_t npts32;
-      uint32_t basedim32;
-      base_reader.read((char *) &npts32, sizeof(uint32_t));
-      base_reader.read((char *) &basedim32, sizeof(uint32_t));
-      size_t num_points = npts32;
-      size_t dim = basedim32;
-
-      size_t BLOCK_SIZE = std::min((size_t) 16384, num_points);  // hard-coded max block size.
-
-      std::unique_ptr<float[]> full_pivot_data;
-      std::unique_ptr<float[]> centroid;
-      std::unique_ptr<uint32_t[]> rearrangement;
-      std::unique_ptr<uint32_t[]> chunk_offsets;
-
-      if (!file_exists(pq_pivots_path)) {
-        LOG(INFO) << "ERROR: PQ k-means pivot file not found";
-        crash();
-      } else {
-        uint64_t nr, nc;
-        std::unique_ptr<uint64_t[]> file_offset_data;
-
-        pipeann::load_bin<uint64_t>(pq_pivots_path.c_str(), file_offset_data, nr, nc, 0);
-
-        if (nr != 5) {
-          LOG(INFO) << "Error reading pq_pivots file " << pq_pivots_path
-                    << ". Offsets dont contain correct metadata, # offsets = " << nr << ", but expecting 5.";
-          crash();
-        }
-
-        pipeann::load_bin<float>(pq_pivots_path.c_str(), full_pivot_data, nr, nc, file_offset_data[0]);
-
-        if ((nr != num_centers) || (nc != dim)) {
-          LOG(INFO) << "Error reading pq_pivots file " << pq_pivots_path << ". file_num_centers  = " << nr
-                    << ", file_dim = " << nc << " but expecting " << num_centers << " centers in " << dim
-                    << " dimensions.";
-          crash();
-        }
-
-        pipeann::load_bin<float>(pq_pivots_path.c_str(), centroid, nr, nc, file_offset_data[1]);
-
-        if ((nr != dim) || (nc != 1)) {
-          LOG(INFO) << "Error reading pq_pivots file " << pq_pivots_path << ". file_dim  = " << nr
-                    << ", file_cols = " << nc << " but expecting " << dim << " entries in 1 dimension.";
-          crash();
-        }
-
-        // Load rearrangement for backward compatibility, but don't use it (should be identity mapping)
-        pipeann::load_bin<uint32_t>(pq_pivots_path.c_str(), rearrangement, nr, nc, file_offset_data[2]);
-
-        if ((nr != dim) || (nc != 1)) {
-          LOG(INFO) << "Error reading pq_pivots file " << pq_pivots_path << ". file_dim  = " << nr
-                    << ", file_cols = " << nc << " but expecting " << dim << " entries in 1 dimension.";
-          crash();
-        }
-
-        pipeann::load_bin<uint32_t>(pq_pivots_path.c_str(), chunk_offsets, nr, nc, file_offset_data[3]);
-
-        if (nr != (uint64_t) num_pq_chunks + 1 || nc != 1) {
-          LOG(INFO) << "Error reading pq_pivots file at chunk offsets; file has nr=" << nr << ",nc=" << nc
-                    << ", expecting nr=" << num_pq_chunks + 1 << ", nc=1.";
-          crash();
-        }
-
-        LOG(INFO) << "Loaded PQ pivot information";
+      if (unlikely(num_centers > 256)) {
+        LOG(ERROR) << "Error: number of centers is greater than 256";
+        return -1;
       }
+
+      this->pq_table.load_pq_centroid_bin(pq_pivots_path.c_str(), num_pq_chunks, 0);
+
+      size_t num_points, dim;
+      pipeann::get_bin_metadata(data_file, num_points, dim, offset);
+      constexpr size_t BLOCK_SIZE = 131072;  // hard-coded max block size.
 
       std::ofstream compressed_file_writer(pq_compressed_vectors_path, std::ios::binary);
       uint32_t num_pq_chunks_u32 = num_pq_chunks;
@@ -435,15 +378,17 @@ namespace pipeann {
       compressed_file_writer.write((char *) &num_pq_chunks_u32, sizeof(uint32_t));
 
       size_t block_size = num_points <= BLOCK_SIZE ? num_points : BLOCK_SIZE;
-      std::unique_ptr<uint32_t[]> block_compressed_base =
-          std::make_unique<uint32_t[]>(block_size * (uint64_t) num_pq_chunks);
-      std::memset(block_compressed_base.get(), 0, block_size * (uint64_t) num_pq_chunks * sizeof(uint32_t));
+      std::unique_ptr<uint8_t[]> block_compressed_base =
+          std::make_unique<uint8_t[]>(block_size * (uint64_t) num_pq_chunks);
+      std::memset(block_compressed_base.get(), 0, block_size * (uint64_t) num_pq_chunks);
 
       std::unique_ptr<T[]> block_data_T = std::make_unique<T[]>(block_size * dim);
       std::unique_ptr<float[]> block_data_float = std::make_unique<float[]>(block_size * dim);
 
       size_t num_blocks = DIV_ROUND_UP(num_points, block_size);
 
+      std::ifstream base_reader(data_file, std::ios::binary);
+      base_reader.seekg(offset + sizeof(uint32_t) * 2, std::ios::beg);  // Skip header and offset
       for (size_t block = 0; block < num_blocks; block++) {
         size_t start_id = block * block_size;
         size_t end_id = std::min((block + 1) * block_size, num_points);
@@ -452,18 +397,18 @@ namespace pipeann {
         base_reader.read((char *) (block_data_T.get()), sizeof(T) * (cur_blk_size * dim));
         pipeann::convert_types<T, float>(block_data_T.get(), block_data_float.get(), cur_blk_size, dim);
 
-        // Subtract centroid directly from block_data_float (parallel over points)
+// Subtract centroid directly from block_data_float (parallel over points)
 #pragma omp parallel for schedule(static, 512)
         for (uint64_t p = 0; p < cur_blk_size; p++) {
           for (uint64_t d = 0; d < dim; d++) {
-            block_data_float[p * dim + d] -= centroid[d];
+            block_data_float[p * dim + d] -= pq_table.centroid[d];
           }
         }
 
         // Parallelize over PQ chunks - each chunk is independent
-#pragma omp parallel for schedule(dynamic, 1)
+#pragma omp parallel for schedule(static, 1)
         for (size_t i = 0; i < num_pq_chunks; i++) {
-          size_t cur_chunk_size = chunk_offsets[i + 1] - chunk_offsets[i];
+          size_t cur_chunk_size = pq_table.chunk_offsets[i + 1] - pq_table.chunk_offsets[i];
           if (cur_chunk_size == 0)
             continue;
 
@@ -473,14 +418,14 @@ namespace pipeann {
 
           // Extract chunk data from block
           for (int64_t j = 0; j < (int64_t) cur_blk_size; j++) {
-            std::memcpy(cur_data.get() + j * cur_chunk_size, block_data_float.get() + j * dim + chunk_offsets[i],
-                        cur_chunk_size * sizeof(float));
+            std::memcpy(cur_data.get() + j * cur_chunk_size,
+                        block_data_float.get() + j * dim + pq_table.chunk_offsets[i], cur_chunk_size * sizeof(float));
           }
 
           // Extract chunk pivots
           for (int64_t j = 0; j < (int64_t) num_centers; j++) {
-            std::memcpy(cur_pivot_data.get() + j * cur_chunk_size, full_pivot_data.get() + j * dim + chunk_offsets[i],
-                        cur_chunk_size * sizeof(float));
+            std::memcpy(cur_pivot_data.get() + j * cur_chunk_size,
+                        pq_table.tables + j * dim + pq_table.chunk_offsets[i], cur_chunk_size * sizeof(float));
           }
 
           // Compute closest centers for this chunk
@@ -492,16 +437,8 @@ namespace pipeann {
             block_compressed_base[j * num_pq_chunks + i] = closest_center[j];
           }
         }
-
-        if (num_centers > 256) {
-          compressed_file_writer.write((char *) (block_compressed_base.get()),
-                                       cur_blk_size * num_pq_chunks * sizeof(uint32_t));
-        } else {
-          std::unique_ptr<uint8_t[]> pVec = std::make_unique<uint8_t[]>(cur_blk_size * num_pq_chunks);
-          pipeann::convert_types<uint32_t, uint8_t>(block_compressed_base.get(), pVec.get(), cur_blk_size,
-                                                    num_pq_chunks);
-          compressed_file_writer.write((char *) (pVec.get()), cur_blk_size * num_pq_chunks * sizeof(uint8_t));
-        }
+        compressed_file_writer.write((char *) (block_compressed_base.get()),
+                                     cur_blk_size * num_pq_chunks * sizeof(uint8_t));
       }
       auto ed = std::chrono::high_resolution_clock::now();
       compressed_file_writer.close();
