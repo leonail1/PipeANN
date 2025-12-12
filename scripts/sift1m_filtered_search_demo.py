@@ -6,6 +6,9 @@ SIFT1M Filtered Search 标签选择性实验
     python3 sift1m_filtered_search_demo.py 2>&1 | tee run.log
     python3 sift1m_filtered_search_demo.py --mode range --min-recall 98 --max-recall 99 2>&1 | tee run.log
     python3 sift1m_filtered_search_demo.py --mode converge 2>&1 | tee run.log
+
+注意: GT文件需要预先计算，请在另一个终端运行:
+    python3 /home/lzg/PipeANN/scripts/compute_gt_all.py
 """
 
 import os
@@ -13,7 +16,47 @@ import sys
 import subprocess
 import re
 import argparse
+import time
 from pathlib import Path
+
+def wait_for_gt_file(gt_file: str, query_labels_file: str, label_id: int, 
+                     check_interval: float = 2.0, first_wait: bool = False) -> bool:
+    """
+    等待GT文件出现
+    
+    Args:
+        gt_file: GT文件路径
+        query_labels_file: 查询标签文件路径
+        label_id: 标签ID
+        check_interval: 检查间隔（秒）
+        first_wait: 是否是第一次等待（用于显示提示）
+    
+    Returns:
+        True when files exist
+    """
+    if os.path.exists(gt_file) and os.path.exists(query_labels_file):
+        return True
+    
+    if first_wait:
+        print()
+        print("=" * 60)
+        print("  GT文件不存在，等待计算...")
+        print("  请在另一个终端运行以下命令来计算GT:")
+        print()
+        print("    python3 /home/lzg/PipeANN/scripts/compute_gt_all.py")
+        print()
+        print("=" * 60)
+        print()
+    
+    wait_count = 0
+    while not (os.path.exists(gt_file) and os.path.exists(query_labels_file)):
+        wait_count += 1
+        if wait_count % 15 == 1:
+            print(f"    等待 Label {label_id} 的GT文件... (已等待 {int(wait_count * check_interval)}s)", flush=True)
+        time.sleep(check_interval)
+    
+    print(f"    ✓ Label {label_id} 的GT文件已就绪")
+    return True
 
 def main():
     parser = argparse.ArgumentParser(description='SIFT1M Filtered Search 标签选择性实验')
@@ -127,12 +170,11 @@ def main():
     
     RESULTS_FILE = SCRIPT_DIR / "filtered_search_results.csv"
     
-    # 读取已完成的Label
     completed_labels = set()
     if os.path.exists(RESULTS_FILE):
         with open(RESULTS_FILE, 'r') as f:
             lines = f.readlines()
-            for line in lines[1:]:  # 跳过表头
+            for line in lines[1:]:
                 if line.strip():
                     label_id = int(line.split(',')[0])
                     completed_labels.add(label_id)
@@ -140,6 +182,9 @@ def main():
     else:
         with open(RESULTS_FILE, 'w') as f:
             f.write("Label,Selectivity,L,Recall,AvgLat_us,QPS,P99Lat,MeanHops,MeanIOs\n")
+    
+    pending_labels = [i for i in range(1, 101) if i not in completed_labels]
+    first_wait_done = False
     
     print()
     
@@ -153,20 +198,12 @@ def main():
         
         print(f"\n  [{LABEL_ID}/100] 选择性={SELECTIVITY}% ... ", flush=True)
         
-        subprocess.run([
-            "python3", str(SCRIPT_DIR / "gen_random_labels.py"), "query-labels",
-            "--output", CURRENT_QUERY_LABELS,
-            "--num-queries", "10000",
-            "--num-labels", "100",
-            "--label-id", str(LABEL_ID - 1)
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        
-        subprocess.run([
-            str(PROJECT_ROOT / "build/tests/utils/compute_groundtruth"), "uint8",
-            METRIC, DATA_FILE, QUERY_FILE, str(K), CURRENT_FILTERED_GT,
-            "null", "spmat", "subset",
-            f"{DATA_DIR}/data_labels.spmat", CURRENT_QUERY_LABELS
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        if not os.path.exists(CURRENT_QUERY_LABELS) or not os.path.exists(CURRENT_FILTERED_GT):
+            wait_for_gt_file(CURRENT_FILTERED_GT, CURRENT_QUERY_LABELS, LABEL_ID,
+                           check_interval=2.0, first_wait=not first_wait_done)
+            first_wait_done = True
+        else:
+            print(f"    GT文件已存在，直接使用")
         
         L_MIN = 10
         L_MAX = 100
@@ -342,7 +379,6 @@ def main():
             if os.path.exists(tmp_file):
                 os.remove(tmp_file)
         
-        # 完全重启Python进程以避免内存泄漏
         print(f"  完成Label {LABEL_ID}，重启进程以避免内存泄漏...")
         os.execv(sys.executable, [sys.executable] + sys.argv)
     
