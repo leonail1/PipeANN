@@ -34,7 +34,7 @@ def main():
     NUM_THREADS = 64
     R = 64
     L_BUILD = 96
-    PQ_BYTES = 20
+    PQ_BYTES = 8
     MEMORY_GB = 32
     METRIC = "l2"
     NBR_TYPE = "pq"

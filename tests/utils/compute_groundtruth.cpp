@@ -241,154 +241,103 @@ int aux_main(int argc, char **argv, pipeann::Metric metric, pipeann::AbstractSel
     }
   }
 
-  // Query batch size: process 100 queries at a time to limit memory usage
-  const size_t QUERY_BATCH_SIZE = 1000;
-  const size_t num_query_batches = (nqueries + QUERY_BATCH_SIZE - 1) / QUERY_BATCH_SIZE;
-
-  std::vector<std::string> temp_files;
-
-  std::cout << "Processing " << nqueries << " queries in " << num_query_batches << " batches of " << QUERY_BATCH_SIZE << std::endl;
-
-  // Process queries in batches
-  for (size_t qb = 0; qb < num_query_batches; qb++) {
-    size_t q_start = qb * QUERY_BATCH_SIZE;
-    size_t q_end = std::min(q_start + QUERY_BATCH_SIZE, nqueries);
-    size_t batch_size = q_end - q_start;
-
-    std::cout << "\n=== Processing query batch " << qb + 1 << "/" << num_query_batches 
-              << " (queries " << q_start << "-" << q_end << ") ===" << std::endl;
-
-    std::vector<std::vector<std::pair<uint32_t, float>>> results(batch_size);
-
-    // Process all base data parts for this query batch
-    for (int p = 0; p < num_parts; p++) {
-      size_t start_id = p * PARTSIZE;
-      load_bin_as_float<T>(base_file.c_str(), base_data, npoints, dim, p);
-      if (metric == pipeann::Metric::COSINE) {
-        for (uint64_t i = 0; i < npoints; i++) {
-          pipeann::normalize_data(base_data + i * dim, base_data + i * dim, dim);
-        }
-      }
-
-      if (selector == nullptr) {
-        // No filtering: use fast batch KNN
-        int *closest_points_part = new int[batch_size * k];
-        float *dist_closest_points_part = new float[batch_size * k];
-
-        exact_knn(dim, k, closest_points_part, dist_closest_points_part, npoints, base_data, batch_size, 
-                  query_data + q_start * dim, metric);
-
-        for (uint64_t i = 0; i < batch_size; i++) {
-          for (uint64_t j = 0; j < k; j++) {
-            results[i].push_back(std::make_pair((uint32_t) (closest_points_part[i * k + j] + start_id),
-                                                dist_closest_points_part[i * k + j]));
-          }
-        }
-
-        delete[] closest_points_part;
-        delete[] dist_closest_points_part;
-      } else {
-        // Pre-filtering: for each query, first filter points, then compute distances
-        std::cout << "Pre-filtering for part " << p << " (points " << start_id << " to " << start_id + npoints << ")"
-                  << std::endl;
-
-#pragma omp parallel for schedule(dynamic, 1)
-        for (int64_t q = 0; q < (int64_t) batch_size; q++) {
-          uint64_t global_q = q_start + q;
-          // Get matching points for this query
-          std::vector<uint32_t> matching_points =
-              get_matching_points(selector, base_labels, query_labels, global_q, start_id, start_id + npoints);
-
-          if (matching_points.empty()) {
-            continue;
-          }
-
-          // Compute distances to all matching points
-          std::vector<std::pair<uint32_t, float>> point_dists;
-          point_dists.reserve(matching_points.size());
-
-          for (uint32_t point_id : matching_points) {
-            uint32_t local_id = point_id - start_id;
-            float dist = compute_distance(query_data + global_q * dim, base_data + local_id * dim, dim, metric);
-            point_dists.push_back(std::make_pair(point_id, dist));
-          }
-
-          // Add to results (thread-safe since each query has its own vector)
-#pragma omp critical
-          {
-            for (const auto &pd : point_dists) {
-              results[q].push_back(pd);
-            }
-          }
-        }
-
-        std::cout << "Finished pre-filtering for part " << p << std::endl;
-      }
-
-      pipeann::aligned_free(base_data);
-    }
-
-    // Sort and select top-k for this batch, write to temp file
-    int *closest_points_batch = new int[batch_size * k];
-    float *dist_closest_points_batch = new float[batch_size * k];
-
-    for (uint64_t i = 0; i < batch_size; i++) {
-      std::vector<std::pair<uint32_t, float>> &cur_res = results[i];
-      std::sort(
-          cur_res.begin(), cur_res.end(),
-          [](const std::pair<uint32_t, float> &a, const std::pair<uint32_t, float> &b) { return a.second < b.second; });
-
-      size_t valid_count = std::min(k, cur_res.size());
-      for (uint64_t j = 0; j < k; j++) {
-        if (j < valid_count) {
-          closest_points_batch[i * k + j] = (int32_t) cur_res[j].first;
-          if (metric == pipeann::Metric::INNER_PRODUCT)
-            dist_closest_points_batch[i * k + j] = -cur_res[j].second;
-          else
-            dist_closest_points_batch[i * k + j] = cur_res[j].second;
-        } else {
-          closest_points_batch[i * k + j] = -1;
-          dist_closest_points_batch[i * k + j] = std::numeric_limits<float>::max();
-        }
-      }
-
-      if (valid_count < k) {
-        std::cout << "WARNING: Query " << q_start + i << " only found " << valid_count << " matching results (requested " << k
-                  << ")" << std::endl;
-      }
-    }
-
-    // Write this batch to temp file
-    std::string temp_file = gt_file + ".batch_" + std::to_string(qb);
-    temp_files.push_back(temp_file);
-    std::ofstream writer(temp_file, std::ios::binary);
-    writer.write((char *) closest_points_batch, batch_size * k * sizeof(int32_t));
-    writer.write((char *) dist_closest_points_batch, batch_size * k * sizeof(float));
-    writer.close();
-
-    delete[] closest_points_batch;
-    delete[] dist_closest_points_batch;
-
-    std::cout << "Saved batch " << qb + 1 << " to " << temp_file << std::endl;
-  }
-
-  // Merge all temp files into final output
-  std::cout << "\nMerging " << temp_files.size() << " batch files into " << gt_file << std::endl;
+  std::vector<std::vector<std::pair<uint32_t, float>>> results(nqueries);
 
   int *closest_points = new int[nqueries * k];
   float *dist_closest_points = new float[nqueries * k];
 
-  for (size_t qb = 0; qb < temp_files.size(); qb++) {
-    size_t q_start = qb * QUERY_BATCH_SIZE;
-    size_t q_end = std::min(q_start + QUERY_BATCH_SIZE, nqueries);
-    size_t batch_size = q_end - q_start;
+  for (int p = 0; p < num_parts; p++) {
+    size_t start_id = p * PARTSIZE;
+    load_bin_as_float<T>(base_file.c_str(), base_data, npoints, dim, p);
+    if (metric == pipeann::Metric::COSINE) {
+      for (uint64_t i = 0; i < npoints; i++) {
+        pipeann::normalize_data(base_data + i * dim, base_data + i * dim, dim);
+      }
+    }
 
-    std::ifstream reader(temp_files[qb], std::ios::binary);
-    reader.read((char *) (closest_points + q_start * k), batch_size * k * sizeof(int32_t));
-    reader.read((char *) (dist_closest_points + q_start * k), batch_size * k * sizeof(float));
-    reader.close();
+    if (selector == nullptr) {
+      // No filtering: use fast batch KNN
+      int *closest_points_part = new int[nqueries * k];
+      float *dist_closest_points_part = new float[nqueries * k];
 
-    std::remove(temp_files[qb].c_str());
+      exact_knn(dim, k, closest_points_part, dist_closest_points_part, npoints, base_data, nqueries, query_data,
+                metric);
+
+      for (uint64_t i = 0; i < nqueries; i++) {
+        for (uint64_t j = 0; j < k; j++) {
+          results[i].push_back(std::make_pair((uint32_t) (closest_points_part[i * k + j] + start_id),
+                                              dist_closest_points_part[i * k + j]));
+        }
+      }
+
+      delete[] closest_points_part;
+      delete[] dist_closest_points_part;
+    } else {
+      // Pre-filtering: for each query, first filter points, then compute distances
+      std::cout << "Pre-filtering for part " << p << " (points " << start_id << " to " << start_id + npoints << ")"
+                << std::endl;
+
+#pragma omp parallel for schedule(dynamic, 1)
+      for (int64_t q = 0; q < (int64_t) nqueries; q++) {
+        // Get matching points for this query
+        std::vector<uint32_t> matching_points =
+            get_matching_points(selector, base_labels, query_labels, q, start_id, start_id + npoints);
+
+        if (matching_points.empty()) {
+          continue;
+        }
+
+        // Compute distances to all matching points
+        std::vector<std::pair<uint32_t, float>> point_dists;
+        point_dists.reserve(matching_points.size());
+
+        for (uint32_t point_id : matching_points) {
+          uint32_t local_id = point_id - start_id;
+          float dist = compute_distance(query_data + q * dim, base_data + local_id * dim, dim, metric);
+          point_dists.push_back(std::make_pair(point_id, dist));
+        }
+
+        // Add to results (thread-safe since each query has its own vector)
+#pragma omp critical
+        {
+          for (const auto &pd : point_dists) {
+            results[q].push_back(pd);
+          }
+        }
+      }
+
+      std::cout << "Finished pre-filtering for part " << p << std::endl;
+    }
+
+    pipeann::aligned_free(base_data);
+  }
+
+  // Sort and select top-k for each query
+  for (uint64_t i = 0; i < nqueries; i++) {
+    std::vector<std::pair<uint32_t, float>> &cur_res = results[i];
+    std::sort(
+        cur_res.begin(), cur_res.end(),
+        [](const std::pair<uint32_t, float> &a, const std::pair<uint32_t, float> &b) { return a.second < b.second; });
+
+    size_t valid_count = std::min(k, cur_res.size());
+    for (uint64_t j = 0; j < k; j++) {
+      if (j < valid_count) {
+        closest_points[i * k + j] = (int32_t) cur_res[j].first;
+        if (metric == pipeann::Metric::INNER_PRODUCT)
+          dist_closest_points[i * k + j] = -cur_res[j].second;  // Convert back to positive inner product
+        else
+          dist_closest_points[i * k + j] = cur_res[j].second;
+      } else {
+        // Pad with invalid values if not enough matching results
+        closest_points[i * k + j] = -1;
+        dist_closest_points[i * k + j] = std::numeric_limits<float>::max();
+      }
+    }
+
+    if (valid_count < k) {
+      std::cout << "WARNING: Query " << i << " only found " << valid_count << " matching results (requested " << k
+                << ")" << std::endl;
+    }
   }
 
   uint32_t *tags = nullptr;
