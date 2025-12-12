@@ -25,16 +25,16 @@ def main():
                         help='目标最大召回率 (range模式使用, 默认: 99.0)')
     args = parser.parse_args()
     
-    DATA_DIR = os.getenv("SIFT1M_DATA_DIR", "/data/lzg/sift-pipeann/sift1m_pq")
+    DATA_DIR = os.getenv("SIFT1M_DATA_DIR", "/mnt/ext4/lzg/sift1m_pq")
     DATA_FILE = f"{DATA_DIR}/bigann_1m.bin"
     QUERY_FILE = f"{DATA_DIR}/bigann_query.bin"
     INDEX_DIR = f"{DATA_DIR}/indices"
     INDEX_PREFIX = f"{INDEX_DIR}/sift1m_filtered"
     
     NUM_THREADS = 64
-    R = 64
+    R = 22
     L_BUILD = 96
-    PQ_BYTES = 8
+    PQ_BYTES = 24
     MEMORY_GB = 32
     METRIC = "l2"
     NBR_TYPE = "pq"
@@ -221,6 +221,7 @@ def main():
             return recall, avg_latency, qps, p99lat, mean_hops, mean_ios
         
         print(f"\n    开始搜索最优L值 (初始L_MAX={L_MAX})...")
+        L_PREV = L_MIN
         
         while True:
             print(f"    先测试 L_MAX={L_MAX}...", flush=True)
@@ -260,13 +261,29 @@ def main():
                 BEST_MEAN_IOS = ios_max
                 break
             else:
-                print(f"    → L_MAX={L_MAX} 召回率不足 ({recall_max}% < {TARGET_RECALL_MIN}%), 扩大L_MAX")
+                recall_gap = TARGET_RECALL_MIN - recall_max
+                if recall_gap > 50:
+                    growth_factor = 2.0
+                elif recall_gap > 20:
+                    growth_factor = 1.5
+                elif recall_gap > 10:
+                    growth_factor = 1.3
+                elif recall_gap > 5:
+                    growth_factor = 1.2
+                else:
+                    growth_factor = 1.1
+                
+                L_PREV = L_MAX
                 L_MIN = L_MAX + 1
-                L_MAX *= 2
+                L_MAX_NEW = int(L_MAX * growth_factor)
+                if L_MAX_NEW == L_MAX:
+                    L_MAX_NEW = L_MAX + 100
+                print(f"    → L_MAX={L_MAX} 召回率不足 ({recall_max}% < {TARGET_RECALL_MIN}%, 差距{recall_gap:.1f}%), 增长因子={growth_factor}, 新L_MAX={L_MAX_NEW}")
+                L_MAX = L_MAX_NEW
         
         if BEST_RECALL >= TARGET_RECALL_MIN:
-            print(f"\n    在 [10, {BEST_L}] 范围内二分搜索最小L...")
-            L_MIN_BINARY = 10
+            print(f"\n    在 [{L_PREV}, {BEST_L}] 范围内二分搜索最小L...")
+            L_MIN_BINARY = L_PREV
             L_MAX_BINARY = BEST_L
             
             while L_MIN_BINARY < L_MAX_BINARY:

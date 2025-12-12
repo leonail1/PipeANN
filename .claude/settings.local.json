@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//data/lzg/sift-pipeann/**)",
+      "Bash(ldd:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(grep:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(python3:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
