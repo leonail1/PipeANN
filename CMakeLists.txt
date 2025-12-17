@@ -45,9 +45,11 @@ add_definitions(
 	# -DNO_POLLUTE_ORIGINAL
 
 	# optimizations.
-	-DREAD_ONLY_TESTS
-	-DNO_MAPPING # starling: must disable this!
+	# -DREAD_ONLY_TESTS
+	# -DNO_MAPPING # starling: must disable this!
 	-DOVERLAP_INIT
+
+	# -DENABLE_BUILD_STATS # enable build time statistics
 )
 
 include_directories(

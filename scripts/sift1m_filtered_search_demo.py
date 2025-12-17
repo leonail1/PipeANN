@@ -68,20 +68,14 @@ def main():
                         help='目标最大召回率 (range模式使用, 默认: 99.0)')
     args = parser.parse_args()
     
-    DATA_DIR = os.getenv("SIFT1M_DATA_DIR", "/mnt/ext4/lzg/sift1m_pq")
+    DATA_DIR = os.getenv("SIFT1M_DATA_DIR", "/data/lzg/sift-pipeann/sift1m_pq")
     DATA_FILE = f"{DATA_DIR}/bigann_1m.bin"
     QUERY_FILE = f"{DATA_DIR}/bigann_query.bin"
     INDEX_DIR = f"{DATA_DIR}/indices"
     INDEX_PREFIX = f"{INDEX_DIR}/sift1m_filtered"
     
-    NUM_THREADS = 64
-    R = 22
-    L_BUILD = 96
-    PQ_BYTES = 24
-    MEMORY_GB = 32
     METRIC = "l2"
     NBR_TYPE = "pq"
-    
     BEAM_WIDTH = 32
     K = 10
     
@@ -102,11 +96,8 @@ def main():
         sys.exit(1)
     
     REQUIRED_EXECUTABLES = [
-        "build/tests/build_disk_index",
-        "build/tests/build_memory_index",
         "build/tests/search_disk_index_filtered",
-        "build/tests/utils/compute_groundtruth",
-        "build/tests/utils/gen_random_slice"
+        "build/tests/utils/compute_groundtruth"
     ]
     
     for exe in REQUIRED_EXECUTABLES:
@@ -115,7 +106,7 @@ def main():
             print("   请先编译项目")
             sys.exit(1)
     
-    print("[1/4] 生成数据标签 (标签i有i%的向量包含, i=1~100)...")
+    print("[1/3] 生成数据标签 (标签i有i%的向量包含, i=1~100)...")
     if not os.path.exists(f"{DATA_DIR}/data_labels.spmat"):
         subprocess.run([
             "python3", str(SCRIPT_DIR / "gen_random_labels.py"), "data-labels",
@@ -129,42 +120,26 @@ def main():
         print("  ✓ 已存在")
     
     print()
-    print(f"[2/4] 构建索引 (R={R}, L={L_BUILD}, PQ={PQ_BYTES}B)...")
-    os.makedirs(INDEX_DIR, exist_ok=True)
+    print("[2/3] 确保索引存在（调用 rebuild_index.py）...")
+    result = subprocess.run([
+        "python3", str(SCRIPT_DIR / "rebuild_index.py"),
+        "--data-dir", DATA_DIR,
+        "--quiet"
+    ], capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        print(f"❌ 索引构建失败")
+        if result.stderr:
+            print(result.stderr)
+        sys.exit(1)
     
     if not os.path.exists(f"{INDEX_PREFIX}_disk.index"):
-        subprocess.run([
-            str(PROJECT_ROOT / "build/tests/build_disk_index"), "uint8",
-            DATA_FILE, INDEX_PREFIX,
-            str(R), str(L_BUILD), str(PQ_BYTES), str(MEMORY_GB), str(NUM_THREADS),
-            METRIC, NBR_TYPE,
-            "spmat", f"{DATA_DIR}/data_labels.spmat"
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        print("  ✓ 完成")
-    else:
-        print("  ✓ 已存在")
+        print("❌ 索引文件不存在，请检查 rebuild_index.py 是否正常运行")
+        sys.exit(1)
+    print("  ✓ 索引就绪")
     
     print()
-    print("[3/4] 构建内存索引...")
-    if not os.path.exists(f"{INDEX_PREFIX}_mem.index"):
-        subprocess.run([
-            str(PROJECT_ROOT / "build/tests/utils/gen_random_slice"), "uint8",
-            DATA_FILE, f"{INDEX_PREFIX}_SAMPLE_RATE_0.01", "0.01"
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        
-        subprocess.run([
-            str(PROJECT_ROOT / "build/tests/build_memory_index"), "uint8",
-            f"{INDEX_PREFIX}_SAMPLE_RATE_0.01_data.bin",
-            f"{INDEX_PREFIX}_SAMPLE_RATE_0.01_ids.bin",
-            f"{INDEX_PREFIX}_mem.index",
-            "32", "64", "1.2", str(NUM_THREADS), METRIC
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        print("  ✓ 完成")
-    else:
-        print("  ✓ 已存在")
-    
-    print()
-    print("[4/4] 开始标签选择性实验...")
+    print("[3/3] 开始标签选择性实验...")
     print(f"  目标: 对每个标签找到最优L值 (模式={args.mode}, Recall>={args.min_recall}%)")
     print()
     
@@ -188,7 +163,7 @@ def main():
     
     print()
     
-    for LABEL_ID in range(1, 101):
+    for LABEL_ID in range(5, 101):
         if LABEL_ID in completed_labels:
             print(f"\n  [{LABEL_ID}/100] 选择性={LABEL_ID}% 已完成，跳过")
             continue
