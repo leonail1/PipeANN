@@ -1,0 +1,32 @@
+{
+  "timestamp": "20251217_082037",
+  "config": {
+    "data_dir": "/data/lzg/sift-pipeann/sift1m_pq",
+    "R": 64,
+    "L": 96,
+    "pq_bytes": 32,
+    "threads": 64
+  },
+  "stages": {
+    "build_disk_index": {
+      "outputs": [
+        [
+          "basic",
+          "/home/lzg/PipeANN/scripts/perf_results/20251217_082037_build_disk_index_basic.txt"
+        ],
+        [
+          "detailed",
+          "/home/lzg/PipeANN/scripts/perf_results/20251217_082037_build_disk_index_detailed.txt"
+        ],
+        [
+          "memory",
+          "/home/lzg/PipeANN/scripts/perf_results/20251217_082037_build_disk_index_memory.txt"
+        ],
+        [
+          "record",
+          "/home/lzg/PipeANN/scripts/perf_results/20251217_082037_build_disk_index.perf.data"
+        ]
+      ]
+    }
+  }
+}

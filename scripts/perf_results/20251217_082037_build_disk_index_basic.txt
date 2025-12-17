@@ -1,0 +1,22 @@
+# started on Wed Dec 17 08:20:37 2025
+
+
+ Performance counter stats for '/home/lzg/PipeANN/build/tests/build_disk_index uint8 /data/lzg/sift-pipeann/sift1m_pq/bigann_1m.bin /data/lzg/sift-pipeann/sift1m_pq/indices/sift1m_filtered 64 96 32 32 64 l2 pq':
+
+ 8,132,093,195,171      cycles                    #    2.895 GHz                    
+10,268,490,310,121      instructions              #    1.26  insn per cycle         
+    26,094,024,611      cache-references          #    9.289 M/sec                  
+    11,826,975,651      cache-misses              #   45.324 % of all cache refs    
+   531,693,575,256      branches                  #  189.276 M/sec                  
+    16,373,108,402      branch-misses             #    3.08% of all branches        
+      2,809,097.47 msec task-clock                #   46.046 CPUs utilized          
+            60,408      context-switches          #   21.504 /sec                   
+             1,083      cpu-migrations            #    0.386 /sec                   
+         1,602,180      page-faults               #  570.354 /sec                   
+
+      61.005751517 seconds time elapsed
+
+    2795.351614000 seconds user
+      13.909630000 seconds sys
+
+

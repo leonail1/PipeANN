@@ -1,0 +1,26 @@
+# started on Wed Dec 17 08:21:38 2025
+
+
+ Performance counter stats for '/home/lzg/PipeANN/build/tests/build_disk_index uint8 /data/lzg/sift-pipeann/sift1m_pq/bigann_1m.bin /data/lzg/sift-pipeann/sift1m_pq/indices/sift1m_filtered 64 96 32 32 64 l2 pq':
+
+ 1,029,647,702,707      L1-dcache-loads                                               (30.78%)
+    53,677,697,622      L1-dcache-load-misses     #    5.21% of all L1-dcache accesses  (30.79%)
+   367,384,380,964      L1-dcache-stores                                              (30.78%)
+     1,072,820,286      L1-icache-load-misses                                         (30.78%)
+     4,318,120,796      LLC-loads                                                     (30.78%)
+     1,870,041,125      LLC-load-misses           #   43.31% of all LL-cache accesses  (30.78%)
+     1,503,605,346      LLC-stores                                                    (15.38%)
+       768,043,601      LLC-store-misses                                              (15.39%)
+ 1,031,369,258,931      dTLB-loads                                                    (23.08%)
+     4,244,089,365      dTLB-load-misses          #    0.41% of all dTLB cache accesses  (30.77%)
+   367,172,710,062      dTLB-stores                                                   (30.77%)
+        73,242,279      dTLB-store-misses                                             (30.78%)
+   <not supported>      iTLB-loads                                                  
+        74,096,133      iTLB-load-misses                                              (30.78%)
+
+      61.556841037 seconds time elapsed
+
+    2820.432372000 seconds user
+       8.435475000 seconds sys
+
+

@@ -1,0 +1,14 @@
+# started on Wed Dec 17 08:22:40 2025
+
+
+ Performance counter stats for '/home/lzg/PipeANN/build/tests/build_disk_index uint8 /data/lzg/sift-pipeann/sift1m_pq/bigann_1m.bin /data/lzg/sift-pipeann/sift1m_pq/indices/sift1m_filtered 64 96 32 32 64 l2 pq':
+
+                 0      mem-loads                                                   
+   367,017,594,440      mem-stores                                                  
+
+      61.426897324 seconds time elapsed
+
+    2796.597010000 seconds user
+       9.343589000 seconds sys
+
+
