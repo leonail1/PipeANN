@@ -22,7 +22,7 @@
 #==============================================
 
 # 数据目录（可通过环境变量 SIFT1M_DATA_DIR 覆盖）
-DATA_DIR="${SIFT1M_DATA_DIR:-/data/lzg/sift-pipeann/sift1m_pq}"
+DATA_DIR="${SIFT1M_DATA_DIR:-/mnt/ext4/lzg/sift1m_pq}"
 
 # 可执行文件路径（相对于项目根目录）
 EXECUTABLE="./build/tests/single_query_memory_test"

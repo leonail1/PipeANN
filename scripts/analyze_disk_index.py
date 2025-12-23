@@ -2,8 +2,10 @@
 import struct
 import sys
 import os
+import matplotlib.pyplot as plt
+import numpy as np
 
-def analyze_disk_index(index_path):
+def analyze_disk_index(index_path, return_stats=False):
     file_size = os.path.getsize(index_path)
     print(f"=== Disk Index Analysis: {index_path} ===")
     print(f"Total file size: {file_size:,} bytes ({file_size / 1024 / 1024:.2f} MB)")
@@ -185,11 +187,92 @@ def analyze_disk_index(index_path):
         print(f"Max neighbor space:   {neighbor_total:,} bytes")
         print(f"Est. actual used:     {int(actual_neighbor_bytes):,} bytes")
         print(f"Est. wasted:          {int(wasted_in_neighbors):,} bytes ({wasted_in_neighbors/1024/1024:.2f} MB)")
+        
+        if return_stats:
+            return {
+                'file_size': file_size,
+                'npoints': npoints,
+                'data_dim': data_dim,
+                'max_node_len': max_node_len,
+                'nnodes_per_sector': nnodes_per_sector,
+                'range': range_val,
+                'vector_total': vector_total,
+                'neighbor_total': neighbor_total,
+                'label_total': label_total,
+                'total_padding': total_padding,
+                'metadata_size': metadata_size,
+                'raw_data_size': raw_data_size,
+                'degree_dist': degree_dist,
+                'avg_degree': avg_degree,
+                'actual_neighbor_bytes': actual_neighbor_bytes,
+                'wasted_in_neighbors': wasted_in_neighbors,
+            }
+
+def plot_disk_index_analysis(index_path, output_dir=None):
+    stats = analyze_disk_index(index_path, return_stats=True)
+    if stats is None:
+        print("Failed to analyze index")
+        return
+    
+    if output_dir is None:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        output_dir = os.path.join(script_dir, 'disk_index_plots')
+    
+    import shutil
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    plt.style.use('seaborn-v0_8-whitegrid')
+    
+    fig1, ax1 = plt.subplots(figsize=(10, 8))
+    components = ['Vector Data', 'Neighbor Lists', 'Sector Padding', 'Metadata']
+    sizes = [stats['vector_total'], stats['neighbor_total'], 
+             stats['total_padding'], stats['metadata_size']]
+    colors = plt.cm.Set2(np.linspace(0, 1, len(components)))
+    wedges, texts, autotexts = ax1.pie(sizes, labels=components, autopct='%1.1f%%',
+                                        colors=colors, explode=[0.02]*len(components))
+    index_without_label = stats['file_size'] - stats['label_total']
+    ax1.set_title(f'Disk Index Space Breakdown (Without Labels)\n({index_without_label/1024/1024:.1f} MB total)', fontsize=14)
+    plt.setp(autotexts, size=10, weight='bold')
+    fig1.savefig(os.path.join(output_dir, 'space_breakdown_pie.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig1)
+    
+    fig2, ax2 = plt.subplots(figsize=(8, 6))
+    index_without_label_mb = index_without_label / 1024 / 1024
+    label_mb = stats['label_total'] / 1024 / 1024
+    x = ['Disk Index\n(Without Labels)', 'Labels']
+    heights = [index_without_label_mb, label_mb]
+    colors2 = ['#3498db', '#e74c3c']
+    bars = ax2.bar(x, heights, color=colors2, edgecolor='black', width=0.5)
+    for bar, h in zip(bars, heights):
+        ax2.text(bar.get_x() + bar.get_width()/2, h + max(heights)*0.02,
+                f'{h:.1f} MB', ha='center', va='bottom', fontsize=12, weight='bold')
+    ax2.set_ylabel('Size (MB)', fontsize=12)
+    ax2.set_title('Disk Index vs Labels Size', fontsize=14)
+    ax2.set_ylim(0, max(heights) * 1.2)
+    fig2.savefig(os.path.join(output_dir, 'index_vs_labels.png'), dpi=300, bbox_inches='tight')
+    plt.close(fig2)
+    
+    print(f"\n=== Generated Plots ===")
+    plots = ['space_breakdown_pie.png', 'index_vs_labels.png']
+    for p in plots:
+        print(f"  {os.path.join(output_dir, p)}")
+    
+    return stats
+
 
 if __name__ == "__main__":
+    plot_mode = '--plot' in sys.argv
+    if plot_mode:
+        sys.argv.remove('--plot')
+    
     if len(sys.argv) < 2:
         index_path = "/mnt/ext4/lzg/sift1m_pq/indices/sift1m_filtered_disk.index"
     else:
         index_path = sys.argv[1]
     
-    analyze_disk_index(index_path)
+    if plot_mode:
+        plot_disk_index_analysis(index_path)
+    else:
+        analyze_disk_index(index_path)

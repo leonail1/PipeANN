@@ -32,3 +32,15 @@ target_link_libraries(normalize_data ${PROJECT_NAME})
 
 add_executable(single_query_memory_test single_query_memory_test.cpp)
 target_link_libraries(single_query_memory_test ${PROJECT_NAME})
+
+add_executable(search_prefilter search_prefilter.cpp)
+target_link_libraries(search_prefilter ${PROJECT_NAME})
+
+add_executable(build_label_bitmap build_label_bitmap.cpp)
+target_link_libraries(build_label_bitmap ${PROJECT_NAME})
+
+add_executable(search_prefilter_streaming search_prefilter_streaming.cpp)
+target_link_libraries(search_prefilter_streaming ${PROJECT_NAME})
+
+add_executable(build_inverted_list build_inverted_list.cpp)
+target_link_libraries(build_inverted_list ${PROJECT_NAME})

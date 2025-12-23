@@ -20,3 +20,6 @@ target_link_libraries(gt_update ${PROJECT_NAME} )
 
 add_executable(change_pts change_pts.cpp)
 target_link_libraries(change_pts ${PROJECT_NAME})
+
+add_executable(bench_exact_knn bench_exact_knn.cpp)
+target_link_libraries(bench_exact_knn ${PROJECT_NAME})
