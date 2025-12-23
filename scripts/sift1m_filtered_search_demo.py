@@ -17,8 +17,86 @@ import subprocess
 import re
 import argparse
 import time
-import multiprocessing
+import struct
+import numpy as np
 from pathlib import Path
+
+def sample_query_file(query_file: str, output_file: str, sample_rate: float, seed: int = 42) -> tuple:
+    """
+    对query文件进行采样
+    
+    Args:
+        query_file: 原始query文件路径
+        output_file: 采样后的输出文件路径
+        sample_rate: 采样率 (0.0 - 1.0)
+        seed: 随机种子
+    
+    Returns:
+        (采样的query数量, 采样的索引列表)
+    """
+    with open(query_file, 'rb') as f:
+        npts = struct.unpack('I', f.read(4))[0]
+        ndims = struct.unpack('I', f.read(4))[0]
+        data = np.frombuffer(f.read(), dtype=np.uint8).reshape(npts, ndims)
+    
+    np.random.seed(seed)
+    sample_size = max(1, int(npts * sample_rate))
+    sample_indices = np.sort(np.random.choice(npts, sample_size, replace=False))
+    sampled_data = data[sample_indices]
+    
+    with open(output_file, 'wb') as f:
+        f.write(struct.pack('I', sample_size))
+        f.write(struct.pack('I', ndims))
+        f.write(sampled_data.tobytes())
+    
+    return sample_size, sample_indices
+
+
+def sample_gt_file(gt_file: str, output_file: str, sample_indices: np.ndarray):
+    """
+    对groundtruth文件进行采样
+    
+    Args:
+        gt_file: 原始GT文件路径
+        output_file: 采样后的输出文件路径
+        sample_indices: 要采样的索引列表
+    """
+    with open(gt_file, 'rb') as f:
+        npts = struct.unpack('I', f.read(4))[0]
+        k = struct.unpack('I', f.read(4))[0]
+        data = np.frombuffer(f.read(), dtype=np.uint32).reshape(npts, k)
+    
+    sampled_data = data[sample_indices]
+    sample_size = len(sample_indices)
+    
+    with open(output_file, 'wb') as f:
+        f.write(struct.pack('I', sample_size))
+        f.write(struct.pack('I', k))
+        f.write(sampled_data.tobytes())
+
+
+def sample_query_labels_file(labels_file: str, output_file: str, sample_indices: np.ndarray):
+    """
+    对query_labels文件进行采样 (spmat格式)
+    
+    Args:
+        labels_file: 原始标签文件路径
+        output_file: 采样后的输出文件路径
+        sample_indices: 要采样的索引列表
+    """
+    with open(labels_file, 'rb') as f:
+        npts = struct.unpack('I', f.read(4))[0]
+        labels_per_point = struct.unpack('I', f.read(4))[0]
+        data = np.frombuffer(f.read(), dtype=np.uint32).reshape(npts, labels_per_point)
+    
+    sampled_data = data[sample_indices]
+    sample_size = len(sample_indices)
+    
+    with open(output_file, 'wb') as f:
+        f.write(struct.pack('I', sample_size))
+        f.write(struct.pack('I', labels_per_point))
+        f.write(sampled_data.tobytes())
+
 
 def wait_for_gt_file(gt_file: str, query_labels_file: str, label_id: int, 
                      check_interval: float = 2.0, first_wait: bool = False) -> bool:
@@ -67,13 +145,11 @@ def main():
                         help='目标最小召回率 (默认: 98.0)')
     parser.add_argument('--max-recall', type=float, default=98.05,
                         help='目标最大召回率 (range模式使用, 默认: 99.0)')
-    parser.add_argument('--search-threads', type=int, default=multiprocessing.cpu_count(),
-                        help=f'搜索最佳L值时使用的线程数 (默认: {multiprocessing.cpu_count()})')
-    parser.add_argument('--bench-threads', type=int, default=1,
-                        help='最终benchmark使用的线程数 (默认: 1)')
+    parser.add_argument('--sample-rate', type=float, default=0.1,
+                        help='初始采样率 (默认: 0.1, 即10%%的query)')
     args = parser.parse_args()
     
-    DATA_DIR = os.getenv("SIFT1M_DATA_DIR", "/mnt/ext4/lzg/sift1m_pq")
+    DATA_DIR = os.getenv("SIFT1M_DATA_DIR", "/data/lzg/sift-pipeann/sift1m_pq")
     DATA_FILE = f"{DATA_DIR}/bigann_1m.bin"
     QUERY_FILE = f"{DATA_DIR}/bigann_query.bin"
     INDEX_DIR = f"{DATA_DIR}/indices"
@@ -94,7 +170,7 @@ def main():
     print(f"索引目录: {INDEX_DIR}")
     print(f"搜索模式: {args.mode}")
     print(f"目标召回率: {args.min_recall}%" + (f" - {args.max_recall}%" if args.mode == 'range' else ' (收敛)'))
-    print(f"搜索线程数: {args.search_threads}, Benchmark线程数: {args.bench_threads}")
+    print(f"初始采样率: {args.sample_rate * 100}%")
     print()
     
     if not os.path.isdir(DATA_DIR) or not os.path.exists(DATA_FILE) or not os.path.exists(QUERY_FILE):
@@ -130,8 +206,6 @@ def main():
     result = subprocess.run([
         "python3", str(SCRIPT_DIR / "rebuild_index.py"),
         "--data-dir", DATA_DIR,
-        "-R", "22",
-        "--pq-bytes", "5",
         "--quiet"
     ], capture_output=True, text=True)
     
@@ -188,10 +262,9 @@ def main():
         else:
             print(f"    GT文件已存在，直接使用")
         
-        L_MIN = 10
-        L_MAX = 100
         TARGET_RECALL_MIN = args.min_recall
         TARGET_RECALL_MAX = args.max_recall
+        MAX_LATENCY_US = 100000
         BEST_L = -1
         BEST_RECALL = 0
         BEST_LATENCY = 0
@@ -200,12 +273,12 @@ def main():
         BEST_MEAN_HOPS = 0
         BEST_MEAN_IOS = 0
         
-        def test_L(L, num_threads, verbose=True):
+        def test_L(L, query_file, gt_file, query_labels_file, prefix=""):
             result = subprocess.run([
                 str(PROJECT_ROOT / "build/tests/search_disk_index_filtered"), "uint8",
-                INDEX_PREFIX, str(num_threads), str(BEAM_WIDTH),
-                QUERY_FILE, CURRENT_FILTERED_GT, str(K),
-                METRIC, NBR_TYPE, "subset", CURRENT_QUERY_LABELS,
+                INDEX_PREFIX, "1", str(BEAM_WIDTH),
+                query_file, gt_file, str(K),
+                METRIC, NBR_TYPE, "subset", query_labels_file,
                 "0", "10", str(L)
             ], capture_output=True, text=True)
             
@@ -214,10 +287,10 @@ def main():
             output_lines = SEARCH_OUTPUT.split('\n')
             table_lines = [line for line in output_lines if re.match(r'^\s*\d+\s+\d+\s+[0-9.]+', line) or 'Recall@10' in line or '===' in line]
             
-            if table_lines and verbose:
-                print("    === 搜索结果 ===")
+            if table_lines:
+                print(f"    {prefix}=== 搜索结果 ===")
                 print('\n'.join(table_lines))
-                print("    ===============\n")
+                print(f"    {prefix}===============\n")
             
             table_match = re.search(r'^\s*(\d+)\s+(\d+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)', SEARCH_OUTPUT, re.MULTILINE)
             
@@ -236,66 +309,138 @@ def main():
                 mean_hops = 0
                 mean_ios = 0
             
-            if verbose:
-                print(f"    提取到的指标: Recall={recall}, AvgLat={avg_latency}, QPS={qps}, P99Lat={p99lat}, Hops={mean_hops}, IOs={mean_ios}")
+            print(f"    {prefix}提取到的指标: Recall={recall}, AvgLat={avg_latency}, QPS={qps}, P99Lat={p99lat}, Hops={mean_hops}, IOs={mean_ios}")
             return recall, avg_latency, qps, p99lat, mean_hops, mean_ios
         
-        print(f"\n    开始搜索最优L值 (初始L_MAX={L_MAX}, 使用{args.search_threads}线程)...")
+        SAMPLED_QUERY_FILE = f"{DATA_DIR}/sampled_query_{LABEL_ID}.bin"
+        SAMPLED_GT_FILE = f"{DATA_DIR}/sampled_gt_{LABEL_ID}.bin"
+        SAMPLED_LABELS_FILE = f"{DATA_DIR}/sampled_labels_{LABEL_ID}.spmat"
+        
+        print(f"\n    [阶段1] 使用采样数据 (采样率={args.sample_rate*100}%) 快速搜索粗略L值...")
+        sample_size, sample_indices = sample_query_file(QUERY_FILE, SAMPLED_QUERY_FILE, args.sample_rate)
+        sample_gt_file(CURRENT_FILTERED_GT, SAMPLED_GT_FILE, sample_indices)
+        sample_query_labels_file(CURRENT_QUERY_LABELS, SAMPLED_LABELS_FILE, sample_indices)
+        print(f"    采样了 {sample_size} 个查询向量")
+        
+        L_MIN = 10
+        L_MAX = 100
         L_PREV = L_MIN
+        COARSE_L = -1
         
         while True:
-            print(f"    先测试 L_MAX={L_MAX}...", flush=True)
-            recall_max, lat_max, qps_max, p99lat_max, hops_max, ios_max = test_L(L_MAX, args.search_threads)
+            print(f"    [采样] 测试 L_MAX={L_MAX}...", flush=True)
+            recall_max, lat_max, qps_max, p99lat_max, hops_max, ios_max = test_L(
+                L_MAX, SAMPLED_QUERY_FILE, SAMPLED_GT_FILE, SAMPLED_LABELS_FILE, prefix="[采样] ")
+            
+            if lat_max >= MAX_LATENCY_US:
+                print(f"    [采样] ✗ L_MAX={L_MAX} 延迟超限")
+                COARSE_L = L_MAX
+                break
             
             if recall_max >= TARGET_RECALL_MIN:
-                print(f"    ✓ L_MAX={L_MAX} 达到目标召回率 ({recall_max}% >= {TARGET_RECALL_MIN}%), 开始二分")
-                BEST_L = L_MAX
-                BEST_RECALL = recall_max
-                BEST_LATENCY = lat_max
-                BEST_QPS = qps_max
-                BEST_P99LAT = p99lat_max
-                BEST_MEAN_HOPS = hops_max
-                BEST_MEAN_IOS = ios_max
+                print(f"    [采样] ✓ L_MAX={L_MAX} 达到目标召回率 ({recall_max}% >= {TARGET_RECALL_MIN}%)")
+                COARSE_L = L_MAX
                 break
             else:
                 recall_gap = TARGET_RECALL_MIN - recall_max
-                if recall_gap > 80:
-                    growth_factor = 8.0
-                elif recall_gap > 60:
-                    growth_factor = 5.0
-                elif recall_gap > 40:
-                    growth_factor = 3.0
-                elif recall_gap > 20:
+                if recall_gap > 50:
                     growth_factor = 2.0
-                elif recall_gap > 10:
+                elif recall_gap > 20:
                     growth_factor = 1.5
-                elif recall_gap > 5:
+                elif recall_gap > 10:
                     growth_factor = 1.3
-                else:
+                elif recall_gap > 5:
                     growth_factor = 1.2
+                else:
+                    growth_factor = 1.1
                 
                 L_PREV = L_MAX
                 L_MIN = L_MAX + 1
                 L_MAX_NEW = int(L_MAX * growth_factor)
                 if L_MAX_NEW == L_MAX:
                     L_MAX_NEW = L_MAX + 100
-                print(f"    → L_MAX={L_MAX} 召回率不足 ({recall_max}% < {TARGET_RECALL_MIN}%, 差距{recall_gap:.1f}%), 增长因子={growth_factor}, 新L_MAX={L_MAX_NEW}")
+                print(f"    [采样] → L_MAX={L_MAX} 召回率不足 ({recall_max}% < {TARGET_RECALL_MIN}%), 新L_MAX={L_MAX_NEW}")
                 L_MAX = L_MAX_NEW
         
-        if BEST_RECALL >= TARGET_RECALL_MIN:
-            print(f"\n    在 [{L_PREV}, {BEST_L}] 范围内二分搜索最小L...")
+        if recall_max >= TARGET_RECALL_MIN:
+            print(f"\n    [采样] 在 [{L_PREV}, {COARSE_L}] 范围内二分搜索...")
             L_MIN_BINARY = L_PREV
+            L_MAX_BINARY = COARSE_L
+            
+            while L_MIN_BINARY < L_MAX_BINARY:
+                L_MID = (L_MIN_BINARY + L_MAX_BINARY) // 2
+                print(f"    [采样] 尝试 L={L_MID} (范围: {L_MIN_BINARY}-{L_MAX_BINARY})...", flush=True)
+                recall, lat, qps, p99lat, hops, ios = test_L(
+                    L_MID, SAMPLED_QUERY_FILE, SAMPLED_GT_FILE, SAMPLED_LABELS_FILE, prefix="[采样] ")
+                
+                if recall >= TARGET_RECALL_MIN:
+                    COARSE_L = L_MID
+                    L_MAX_BINARY = L_MID - 1
+                else:
+                    L_MIN_BINARY = L_MID + 1
+        
+        for tmp_file in [SAMPLED_QUERY_FILE, SAMPLED_GT_FILE, SAMPLED_LABELS_FILE]:
+            if os.path.exists(tmp_file):
+                os.remove(tmp_file)
+        
+        print(f"\n    [阶段1完成] 采样数据得到粗略L值: {COARSE_L}")
+        
+        print(f"\n    [阶段2] 使用完整数据在 L={COARSE_L} 附近精细搜索...")
+        SEARCH_RADIUS = max(20, int(COARSE_L * 0.2))
+        L_MIN_FINE = max(10, COARSE_L - SEARCH_RADIUS)
+        L_MAX_FINE = COARSE_L + SEARCH_RADIUS
+        
+        print(f"    精细搜索范围: [{L_MIN_FINE}, {L_MAX_FINE}] (COARSE_L={COARSE_L}, 半径={SEARCH_RADIUS})")
+        
+        recall_at_coarse, lat_at_coarse, qps_at_coarse, p99lat_at_coarse, hops_at_coarse, ios_at_coarse = test_L(
+            COARSE_L, QUERY_FILE, CURRENT_FILTERED_GT, CURRENT_QUERY_LABELS, prefix="[完整] ")
+        
+        BEST_L = COARSE_L
+        BEST_RECALL = recall_at_coarse
+        BEST_LATENCY = lat_at_coarse
+        BEST_QPS = qps_at_coarse
+        BEST_P99LAT = p99lat_at_coarse
+        BEST_MEAN_HOPS = hops_at_coarse
+        BEST_MEAN_IOS = ios_at_coarse
+        
+        if recall_at_coarse < TARGET_RECALL_MIN:
+            print(f"    [完整] COARSE_L={COARSE_L} 召回率不足 ({recall_at_coarse}% < {TARGET_RECALL_MIN}%), 向上搜索...")
+            L_CURRENT = COARSE_L
+            while L_CURRENT <= L_MAX_FINE + SEARCH_RADIUS * 2:
+                L_CURRENT = int(L_CURRENT * 1.1) if L_CURRENT > 100 else L_CURRENT + 10
+                print(f"    [完整] 尝试 L={L_CURRENT}...", flush=True)
+                recall, lat, qps, p99lat, hops, ios = test_L(
+                    L_CURRENT, QUERY_FILE, CURRENT_FILTERED_GT, CURRENT_QUERY_LABELS, prefix="[完整] ")
+                BEST_L = L_CURRENT
+                BEST_RECALL = recall
+                BEST_LATENCY = lat
+                BEST_QPS = qps
+                BEST_P99LAT = p99lat
+                BEST_MEAN_HOPS = hops
+                BEST_MEAN_IOS = ios
+                if recall >= TARGET_RECALL_MIN:
+                    print(f"    [完整] ✓ 达到目标召回率")
+                    L_MAX_FINE = L_CURRENT
+                    break
+                if lat >= MAX_LATENCY_US:
+                    print(f"    [完整] ✗ 延迟超限，停止向上搜索")
+                    break
+        
+        if BEST_RECALL >= TARGET_RECALL_MIN:
+            print(f"\n    [完整] 在 [{L_MIN_FINE}, {BEST_L}] 范围内二分搜索最小L...")
+            L_MIN_BINARY = L_MIN_FINE
             L_MAX_BINARY = BEST_L
             
             while L_MIN_BINARY < L_MAX_BINARY:
                 L_MID = (L_MIN_BINARY + L_MAX_BINARY) // 2
                 
-                print(f"    尝试 L={L_MID} (范围: {L_MIN_BINARY}-{L_MAX_BINARY})...", flush=True)
-                recall, lat, qps, p99lat, hops, ios = test_L(L_MID, args.search_threads)
+                print(f"    [完整] 尝试 L={L_MID} (范围: {L_MIN_BINARY}-{L_MAX_BINARY})...", flush=True)
+                recall, lat, qps, p99lat, hops, ios = test_L(
+                    L_MID, QUERY_FILE, CURRENT_FILTERED_GT, CURRENT_QUERY_LABELS, prefix="[完整] ")
                 
                 if args.mode == 'range':
                     if TARGET_RECALL_MIN <= recall <= TARGET_RECALL_MAX:
-                        print(f"    ✓✓ 召回率在目标范围内 ({recall}% ∈ [{TARGET_RECALL_MIN}%, {TARGET_RECALL_MAX}%]), 找到最优L")
+                        print(f"    [完整] ✓✓ 召回率在目标范围内 ({recall}% ∈ [{TARGET_RECALL_MIN}%, {TARGET_RECALL_MAX}%])")
                         BEST_L = L_MID
                         BEST_RECALL = recall
                         BEST_LATENCY = lat
@@ -305,10 +450,10 @@ def main():
                         BEST_MEAN_IOS = ios
                         break
                     elif recall > TARGET_RECALL_MAX:
-                        print(f"    → 召回率过高 ({recall}% > {TARGET_RECALL_MAX}%), 减小L")
+                        print(f"    [完整] → 召回率过高 ({recall}% > {TARGET_RECALL_MAX}%), 减小L")
                         L_MAX_BINARY = L_MID - 1
                     elif recall >= TARGET_RECALL_MIN:
-                        print(f"    ✓ 达到最低召回率 ({recall}% >= {TARGET_RECALL_MIN}%), 尝试减小L")
+                        print(f"    [完整] ✓ 达到最低召回率 ({recall}% >= {TARGET_RECALL_MIN}%), 尝试减小L")
                         BEST_L = L_MID
                         BEST_RECALL = recall
                         BEST_LATENCY = lat
@@ -318,11 +463,11 @@ def main():
                         BEST_MEAN_IOS = ios
                         L_MAX_BINARY = L_MID - 1
                     else:
-                        print(f"    → 召回率不足 ({recall}% < {TARGET_RECALL_MIN}%), 增大L")
+                        print(f"    [完整] → 召回率不足 ({recall}% < {TARGET_RECALL_MIN}%), 增大L")
                         L_MIN_BINARY = L_MID + 1
                 else:
                     if recall >= TARGET_RECALL_MIN:
-                        print(f"    ✓ 达到最低召回率 ({recall}% >= {TARGET_RECALL_MIN}%), 尝试减小L")
+                        print(f"    [完整] ✓ 达到最低召回率 ({recall}% >= {TARGET_RECALL_MIN}%), 尝试减小L")
                         BEST_L = L_MID
                         BEST_RECALL = recall
                         BEST_LATENCY = lat
@@ -332,17 +477,16 @@ def main():
                         BEST_MEAN_IOS = ios
                         L_MAX_BINARY = L_MID - 1
                     else:
-                        print(f"    → 召回率不足 ({recall}% < {TARGET_RECALL_MIN}%), 增大L")
+                        print(f"    [完整] → 召回率不足 ({recall}% < {TARGET_RECALL_MIN}%), 增大L")
                         L_MIN_BINARY = L_MID + 1
         
-        print(f"\n  搜索阶段结果: L={BEST_L}, Recall={BEST_RECALL}%")
-        
-        print(f"\n    使用{args.bench_threads}线程进行最终Benchmark...")
-        BEST_RECALL, BEST_LATENCY, BEST_QPS, BEST_P99LAT, BEST_MEAN_HOPS, BEST_MEAN_IOS = test_L(BEST_L, args.bench_threads)
-        
-        print(f"\n  最终Benchmark结果: L={BEST_L}, Recall={BEST_RECALL}%, Lat={BEST_LATENCY}us, QPS={BEST_QPS}\n")
+        print(f"\n  最终结果: L={BEST_L}, Recall={BEST_RECALL}%, Lat={BEST_LATENCY}us\n")
         with open(RESULTS_FILE, 'a') as f:
             f.write(f"{LABEL_ID},{SELECTIVITY},{BEST_L},{BEST_RECALL},{BEST_LATENCY},{BEST_QPS},{BEST_P99LAT},{BEST_MEAN_HOPS},{BEST_MEAN_IOS}\n")
+        
+        for tmp_file in [CURRENT_QUERY_LABELS, CURRENT_FILTERED_GT]:
+            if os.path.exists(tmp_file):
+                os.remove(tmp_file)
         
         print(f"  完成Label {LABEL_ID}，重启进程以避免内存泄漏...")
         os.execv(sys.executable, [sys.executable] + sys.argv)
