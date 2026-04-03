@@ -30,9 +30,34 @@ namespace pipeann {
   }
 
   template<typename T, typename TagT>
+  void SSDIndex<T, TagT>::enable_low_memory_search_mode(bool enable) {
+    if (load_flag) {
+      LOG(WARNING) << "enable_low_memory_search_mode should be called before load(); ignoring late request";
+      return;
+    }
+    low_memory_search_mode_ = enable;
+    compact_query_buffers_ = enable;
+    disable_bg_io_threads_ = enable;
+    prefer_identity_page_layout_ = enable;
+  }
+
+  template<typename T, typename TagT>
+  bool SSDIndex<T, TagT>::can_use_identity_page_layout(const std::string &index_prefix) const {
+#ifdef NO_MAPPING
+    (void) index_prefix;
+    return false;
+#else
+    if (!prefer_identity_page_layout_) {
+      return false;
+    }
+    return !file_exists(index_prefix + "_partition.bin.aligned");
+#endif
+  }
+
+  template<typename T, typename TagT>
   SSDIndex<T, TagT>::~SSDIndex() {
     LOG(INFO) << "Lock table size: " << this->idx_lock_table.size();
-    LOG(INFO) << "Page cache size: " << pipeann::cache.cache.size();
+    LOG(INFO) << "Page cache size: " << pipeann::cache.size();
 
     if (load_flag) {
       this->destroy_buffers();
@@ -66,7 +91,7 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::init_buffers(uint64_t n_threads) {
-    uint64_t n_buffers = n_threads * 2;
+    uint64_t n_buffers = compact_query_buffers_ ? std::max<uint64_t>(1, n_threads) : n_threads * 2;
     LOG(INFO) << "Init buffers for " << n_threads << " threads, setup " << n_buffers << " buffers.";
     this->thread_data_queue.null_T = nullptr;
     for (uint64_t i = 0; i < n_buffers; i++) {
@@ -79,10 +104,14 @@ namespace pipeann {
 
 #ifndef READ_ONLY_TESTS
     // background thread.
-    LOG(INFO) << "Setup " << kBgIOThreads << " background I/O threads for insert...";
-    for (int i = 0; i < kBgIOThreads; ++i) {
-      bg_io_thread_[i] = new std::thread(&SSDIndex<T, TagT>::bg_io_thread, this);
-      bg_io_thread_[i]->detach();
+    if (!disable_bg_io_threads_) {
+      LOG(INFO) << "Setup " << kBgIOThreads << " background I/O threads for insert...";
+      for (int i = 0; i < kBgIOThreads; ++i) {
+        bg_io_thread_[i] = new std::thread(&SSDIndex<T, TagT>::bg_io_thread, this);
+        bg_io_thread_[i]->detach();
+      }
+    } else {
+      LOG(INFO) << "Low-memory search mode: skip background insert I/O threads";
     }
 #endif
   }
@@ -151,6 +180,7 @@ namespace pipeann {
 
     // load page layout.
     this->use_page_search_ = use_page_search;
+    this->identity_page_layout_ = can_use_identity_page_layout(index_prefix);
     this->load_page_layout(index_prefix, meta_.nnodes_per_sector, meta_.npoints);
 
     // load tags
@@ -168,6 +198,12 @@ namespace pipeann {
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::load_page_layout(const std::string &index_prefix, const uint64_t nnodes_per_sector,
                                            const uint64_t num_points) {
+#ifndef NO_MAPPING
+    if (identity_page_layout_) {
+      LOG(INFO) << "Low-memory search mode: use identity page layout";
+      return;
+    }
+#endif
     std::string partition_file = index_prefix + "_partition.bin.aligned";
     id2loc_.resize(num_points);  // pre-allocate space first.
     loc2id_.resize(cur_loc);     // pre-allocate space first.
@@ -233,7 +269,7 @@ namespace pipeann {
   void SSDIndex<T, TagT>::load_tags(const std::string &tag_file_name, size_t offset) {
     size_t tag_num, tag_dim;
     std::vector<TagT> tag_v;
-    this->tags.clear();
+    this->reset_tags();
 
     if (!file_exists(tag_file_name)) {
       LOG(INFO) << "Tags file not found. Using equal mapping";
@@ -241,14 +277,44 @@ namespace pipeann {
     } else {
       LOG(INFO) << "Load tags from existing file: " << tag_file_name;
       pipeann::load_bin<TagT>(tag_file_name, tag_v, tag_num, tag_dim, offset);
-      tags.reserve(tag_v.size());
+      size_t non_identity_count = 0;
+      for (size_t i = 0; i < tag_num; ++i) {
+        if (tag_v[i] != static_cast<TagT>(i)) {
+          ++non_identity_count;
+        }
+      }
+      if (non_identity_count == 0) {
+        LOG(INFO) << "Tags file is identity-mapped; skip tag table allocation";
+        return;
+      }
+      auto *tag_map = ensure_tags_map(non_identity_count);
 
 #pragma omp parallel for num_threads(max_nthreads)
       for (size_t i = 0; i < tag_num; ++i) {
-        tags.insert_or_assign(i, tag_v[i]);
+        if (tag_v[i] != static_cast<TagT>(i)) {
+          tag_map->insert_or_assign(i, tag_v[i]);
+        }
       }
-      LOG(INFO) << "Loaded " << tags.size() << " tags";
+      LOG(INFO) << "Loaded " << tag_map->size() << " non-identity tags";
     }
+  }
+
+  template<typename T, typename TagT>
+  void SSDIndex<T, TagT>::reset_tags() {
+    std::lock_guard<std::mutex> guard(tags_init_mu_);
+    tags.reset();
+  }
+
+  template<typename T, typename TagT>
+  libcuckoo::cuckoohash_map<uint32_t, TagT> *SSDIndex<T, TagT>::ensure_tags_map(size_t initial_size) {
+    if (likely(tags != nullptr)) {
+      return tags.get();
+    }
+    std::lock_guard<std::mutex> guard(tags_init_mu_);
+    if (tags == nullptr) {
+      tags = std::make_unique<libcuckoo::cuckoohash_map<uint32_t, TagT>>(std::max<size_t>(initial_size, 4));
+    }
+    return tags.get();
   }
 
   template<typename T, typename TagT>
@@ -344,7 +410,7 @@ namespace pipeann {
     return id;  // use ID to replace tags.
 #else
     TagT ret;
-    if (tags.find(id, ret)) {
+    if (tags != nullptr && tags->find(id, ret)) {
       return ret;
     } else {
       return id;
@@ -357,6 +423,9 @@ namespace pipeann {
 #ifdef NO_MAPPING
     return id;
 #else
+    if (identity_page_layout_) {
+      return id;
+    }
     id2loc_resize_mu_.lock_shared();
     if (unlikely(id >= id2loc_.size())) {
       LOG(ERROR) << "id " << id << " is out of range " << id2loc_.size();
@@ -374,6 +443,11 @@ namespace pipeann {
 #ifdef NO_MAPPING
     return;
 #else
+    if (identity_page_layout_) {
+      (void) id;
+      (void) loc;
+      return;
+    }
     if (unlikely(id >= id2loc_.size())) {
       id2loc_resize_mu_.lock();
       if (likely(id >= id2loc_.size())) {
@@ -402,6 +476,12 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   uint32_t SSDIndex<T, TagT>::loc2id(uint32_t loc) {
+#ifdef NO_MAPPING
+    return loc;
+#else
+    if (identity_page_layout_) {
+      return (loc < meta_.npoints) ? loc : kInvalidID;
+    }
     loc2id_resize_mu_.lock_shared();
     if (unlikely(loc > loc2id_.size())) {
       LOG(ERROR) << "loc " << loc << " is out of range " << loc2id_.size();
@@ -411,10 +491,17 @@ namespace pipeann {
     uint32_t ret = loc2id_[loc];
     loc2id_resize_mu_.unlock_shared();
     return ret;
+#endif
   }
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::set_loc2id(uint32_t loc, uint32_t id) {
+#ifndef NO_MAPPING
+    if (identity_page_layout_) {
+      (void) loc;
+      (void) id;
+      return;
+    }
     if (unlikely(loc >= loc2id_.size())) {
       loc2id_resize_mu_.lock();
       if (likely(loc >= loc2id_.size())) {
@@ -426,10 +513,16 @@ namespace pipeann {
     loc2id_resize_mu_.lock_shared();
     loc2id_[loc] = id;
     loc2id_resize_mu_.unlock_shared();
+#endif
   }
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::erase_loc2id(uint32_t loc) {
+#ifndef NO_MAPPING
+    if (identity_page_layout_) {
+      (void) loc;
+      return;
+    }
     loc2id_resize_mu_.lock_shared();
     loc2id_[loc] = kInvalidID;
     uint32_t st = sector_to_loc(loc_sector_no(loc), 0);
@@ -446,6 +539,7 @@ namespace pipeann {
     uint32_t page = loc_sector_no(loc);
     uint32_t offset = loc % meta_.nnodes_per_sector;
     loc2id_resize_mu_.unlock_shared();
+#endif
   }
 
   template<typename T, typename TagT>
@@ -564,14 +658,30 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   typename SSDIndex<T, TagT>::PageArr SSDIndex<T, TagT>::get_page_layout(uint32_t page_no) {
-    loc2id_resize_mu_.lock_shared();
     PageArr ret;
+#ifdef NO_MAPPING
+    auto st = sector_to_loc(page_no, 0);
+    auto ed = meta_.nnodes_per_sector == 0 ? st + 1 : st + meta_.nnodes_per_sector;
+    for (uint32_t i = st; i < ed; ++i) {
+      ret.push_back(i);
+    }
+#else
+    if (identity_page_layout_) {
+      auto st = sector_to_loc(page_no, 0);
+      auto ed = meta_.nnodes_per_sector == 0 ? st + 1 : st + meta_.nnodes_per_sector;
+      for (uint32_t i = st; i < ed; ++i) {
+        ret.push_back(i < meta_.npoints ? i : kInvalidID);
+      }
+      return ret;
+    }
+    loc2id_resize_mu_.lock_shared();
     auto st = sector_to_loc(page_no, 0);
     auto ed = meta_.nnodes_per_sector == 0 ? st + 1 : st + meta_.nnodes_per_sector;
     for (uint32_t i = st; i < ed; ++i) {
       ret.push_back(loc2id_[i]);
     }
     loc2id_resize_mu_.unlock_shared();
+#endif
     return ret;
   }
 
@@ -579,6 +689,13 @@ namespace pipeann {
   void SSDIndex<T, TagT>::erase_and_set_loc(const std::vector<uint64_t> &old_locs,
                                             const std::vector<uint64_t> &new_locs,
                                             const std::vector<uint32_t> &new_ids) {
+#ifndef NO_MAPPING
+    if (identity_page_layout_) {
+      (void) old_locs;
+      (void) new_locs;
+      (void) new_ids;
+      return;
+    }
     std::lock_guard<std::mutex> lock(alloc_lock);
     for (uint32_t i = 0; i < new_locs.size(); ++i) {
       set_loc2id(new_locs[i], new_ids[i]);
@@ -586,14 +703,22 @@ namespace pipeann {
     for (auto &l : old_locs) {
       erase_loc2id(l);
     }
+#endif
   }
 
   // Returns <loc, need_read>.
   template<typename T, typename TagT>
   std::vector<uint64_t> SSDIndex<T, TagT>::alloc_loc(int n, const std::vector<uint64_t> &hint_pages,
                                                      std::set<uint64_t> &page_need_to_read) {
-    std::lock_guard<std::mutex> lock(alloc_lock);
     std::vector<uint64_t> ret;
+#ifndef NO_MAPPING
+    if (identity_page_layout_) {
+      (void) n;
+      (void) hint_pages;
+      (void) page_need_to_read;
+      return ret;
+    }
+    std::lock_guard<std::mutex> lock(alloc_lock);
     int cur = 0;
     // Reuse.
     uint32_t threshold = (meta_.nnodes_per_sector + INDEX_SIZE_FACTOR - 1) / INDEX_SIZE_FACTOR;
@@ -670,11 +795,17 @@ namespace pipeann {
     while (meta_.nnodes_per_sector != 0 && cur_loc % meta_.nnodes_per_sector != 0) {
       set_loc2id(cur_loc++, kInvalidID);  // auto resize.
     }
+#endif
     return ret;
   }
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::verify_id2loc() {
+#ifndef NO_MAPPING
+    if (identity_page_layout_) {
+      LOG(INFO) << "Identity page layout active; skip explicit id2loc verification";
+      return;
+    }
     // Verify id -> loc -> id map.
     LOG(INFO) << "ID2loc size: " << id2loc_.size() << ", cur_loc: " << cur_loc.load() << ", cur_id: " << cur_id
               << ", nnodes_per_sector: " << meta_.nnodes_per_sector;
@@ -704,6 +835,7 @@ namespace pipeann {
       }
     }
     LOG(INFO) << "loc2ID consistency check passed.";
+#endif
   }
 
   template class SSDIndex<float>;

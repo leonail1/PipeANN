@@ -2,6 +2,8 @@
 #define LOCK_TABLE_H_
 #include <chrono>
 #include <cstddef>
+#include <memory>
+#include <mutex>
 #include <omp.h>
 #include <shared_mutex>
 #include "utils/libcuckoo/cuckoohash_map.hh"
@@ -18,13 +20,11 @@ namespace pipeann {
   template<class K, class HashFunction = std::hash<K>>
   class SparseLockTable {
    public:
-    SparseLockTable() {
-      locks_ = new libcuckoo::cuckoohash_map<K, std::pair<pthread_rwlock_t *, int>, HashFunction>();
-    }
+    SparseLockTable() = default;
 
     int tryrdlock(const K &key) {
       int ret = 0;
-      locks_->upsert(key, [&](std::pair<pthread_rwlock_t *, int> &v, libcuckoo::UpsertContext ctx) {
+      ensure_locks()->upsert(key, [&](std::pair<pthread_rwlock_t *, int> &v, libcuckoo::UpsertContext ctx) {
         if (ctx == libcuckoo::UpsertContext::NEWLY_INSERTED) {
           v = std::make_pair(new pthread_rwlock_t, 0);
           pthread_rwlock_init(v.first, nullptr);
@@ -39,7 +39,7 @@ namespace pipeann {
 
     int trywrlock(const K &key) {
       int ret = 0;
-      locks_->upsert(key, [&](std::pair<pthread_rwlock_t *, int> &v, libcuckoo::UpsertContext ctx) {
+      ensure_locks()->upsert(key, [&](std::pair<pthread_rwlock_t *, int> &v, libcuckoo::UpsertContext ctx) {
         if (ctx == libcuckoo::UpsertContext::NEWLY_INSERTED) {
           v = std::make_pair(new pthread_rwlock_t, 0);
           pthread_rwlock_init(v.first, nullptr);
@@ -66,6 +66,10 @@ namespace pipeann {
     }
 
     inline void unlock(const K &key) {
+      if (locks_ == nullptr) {
+        LOG(ERROR) << "SparseLockTable: unlock with an empty table for key: " << key;
+        __builtin_trap();
+      }
       locks_->erase_fn(key, [&](std::pair<pthread_rwlock_t *, int> &v) {
         if (v.second == 0) {
           LOG(ERROR) << "SparseLockTable: unlock a non-locked key: " << key;
@@ -83,11 +87,26 @@ namespace pipeann {
     }
 
     size_t size() {
-      return locks_->size();
+      return locks_ == nullptr ? 0 : locks_->size();
     }
 
    private:
-    libcuckoo::cuckoohash_map<K, std::pair<pthread_rwlock_t *, int>, HashFunction> *locks_;
+    using LockMap = libcuckoo::cuckoohash_map<K, std::pair<pthread_rwlock_t *, int>, HashFunction>;
+    static constexpr size_t kInitialSize = 4;
+
+    LockMap *ensure_locks() {
+      if (likely(locks_ != nullptr)) {
+        return locks_.get();
+      }
+      std::lock_guard<std::mutex> guard(init_mu_);
+      if (locks_ == nullptr) {
+        locks_ = std::make_unique<LockMap>(kInitialSize);
+      }
+      return locks_.get();
+    }
+
+    std::unique_ptr<LockMap> locks_;
+    std::mutex init_mu_;
   };
 
   template<class K, class HashFunction = std::hash<K>>

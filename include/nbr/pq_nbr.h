@@ -2,7 +2,12 @@
 
 #include "utils/libcuckoo/cuckoohash_map.hh"
 #include "utils.h"
+#include <cerrno>
+#include <fcntl.h>
 #include <immintrin.h>
+#include <strings.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include "nbr/pq_table.h"
 #include "ssd_index_defs.h"
 #include "nbr/abstract_nbr.h"
@@ -19,6 +24,10 @@ namespace pipeann {
 
    public:
     PQNeighbor(pipeann::Metric metric) : AbstractNeighbor<T>(metric), pq_table(metric) {
+    }
+
+    ~PQNeighbor() override {
+      release_mmap();
     }
 
     // max size of context needed for a single query.
@@ -38,10 +47,11 @@ namespace pipeann {
       abs_nbr_handler = pq_nbr_handler;
 
       pq_nbr_handler->data.resize(new_npoints * this->pq_table.n_chunks);
+      const uint8_t *src_data = compressed_data_ptr();
 #pragma omp parallel for num_threads(nthreads)
       for (uint64_t i = 0; i < new_npoints; ++i) {
         memcpy(pq_nbr_handler->data.data() + i * this->pq_table.n_chunks,
-               this->data.data() + rev_id_map.find(i) * this->pq_table.n_chunks, this->pq_table.n_chunks);
+               src_data + rev_id_map.find(i) * this->pq_table.n_chunks, this->pq_table.n_chunks);
       }
       pq_nbr_handler->pq_table = std::move(this->pq_table);
       pq_nbr_handler->npoints = new_npoints;
@@ -57,7 +67,7 @@ namespace pipeann {
     // output to query_buf->aligned_dist_scratch
     void compute_dists(QueryBuffer<T> *query_buf, const uint32_t *ids, const uint64_t n_ids) {
       pq_mu.lock_shared();
-      aggregate_coords(ids, n_ids, this->data.data(), pq_table.n_chunks, query_buf->nbr_vec_scratch);
+      aggregate_coords(ids, n_ids, compressed_data_ptr(), pq_table.n_chunks, query_buf->nbr_vec_scratch);
       pq_dist_lookup(query_buf->nbr_vec_scratch, n_ids, pq_table.n_chunks, query_buf->nbr_ctx_scratch,
                      query_buf->aligned_dist_scratch);
       pq_mu.unlock_shared();
@@ -66,9 +76,10 @@ namespace pipeann {
     void compute_dists(const uint32_t query_id, const uint32_t *ids, const uint64_t n_ids, float *dists_out,
                        uint8_t *aligned_scratch) {
       pq_mu.lock_shared();
-      const uint8_t *src_ptr = this->data.data() + (pq_table.n_chunks * query_id);
+      const uint8_t *all_coords = compressed_data_ptr();
+      const uint8_t *src_ptr = all_coords + (pq_table.n_chunks * query_id);
       // aggregate PQ coords into scratch
-      aggregate_coords(ids, n_ids, this->data.data(), pq_table.n_chunks, aligned_scratch);
+      aggregate_coords(ids, n_ids, all_coords, pq_table.n_chunks, aligned_scratch);
       // compute distances
       this->pq_table.compute_distances_alltoall(src_ptr, aligned_scratch, dists_out, n_ids);
       pq_mu.unlock_shared();
@@ -86,10 +97,21 @@ namespace pipeann {
       LOG(INFO) << "PQ Pivots offset: " << pq_pivots_offset << " PQ Vectors offset: " << pq_vectors_offset;
 
       size_t npts_u64, nchunks_u64;
-      pipeann::load_bin<uint8_t>(pq_compressed_vectors, data, npts_u64, nchunks_u64, pq_vectors_offset);
+      data.clear();
+      data.shrink_to_fit();
+      release_mmap();
+      if (should_mmap_compressed_data()) {
+        if (!map_compressed_vectors(pq_compressed_vectors, npts_u64, nchunks_u64, pq_vectors_offset)) {
+          LOG(INFO) << "Falling back to heap-loaded PQ compressed vectors";
+          pipeann::load_bin<uint8_t>(pq_compressed_vectors, data, npts_u64, nchunks_u64, pq_vectors_offset);
+        }
+      } else {
+        pipeann::load_bin<uint8_t>(pq_compressed_vectors, data, npts_u64, nchunks_u64, pq_vectors_offset);
+      }
 
       LOG(INFO) << "Load compressed vectors from file: " << pq_compressed_vectors << " offset: " << pq_vectors_offset
-                << " num points: " << npts_u64 << " n_chunks: " << nchunks_u64;
+                << " num points: " << npts_u64 << " n_chunks: " << nchunks_u64
+                << " mode: " << (mmap_enabled_ ? "mmap" : "heap");
 
       pq_table.load_pq_centroid_bin(pq_table_bin.c_str(), nchunks_u64, pq_pivots_offset);
       this->npoints = npts_u64;
@@ -99,7 +121,8 @@ namespace pipeann {
       // write PQ pivots.
       std::string pq_out = std::string(index_prefix) + "_pq_compressed.bin";
       std::string pq_pivot_out = std::string(index_prefix) + "_pq_pivots.bin";
-      pipeann::save_bin<uint8_t>(pq_out, this->data.data(), this->npoints, pq_table.n_chunks);
+      uint8_t *src_data = mmap_enabled_ ? const_cast<uint8_t *>(compressed_data_ptr()) : this->data.data();
+      pipeann::save_bin<uint8_t>(pq_out, src_data, this->npoints, pq_table.n_chunks);
       pq_table.save_pq_pivots(pq_pivot_out.c_str());
     }
 
@@ -151,6 +174,7 @@ namespace pipeann {
       uint64_t pq_offset = loc * pq_table.n_chunks;
       {
         pq_mu.lock();
+        ensure_heap_copy();
         if (this->data.size() < pq_offset + pq_table.n_chunks) {
           this->data.resize(1.5 * (pq_offset + pq_table.n_chunks));
         }
@@ -169,6 +193,92 @@ namespace pipeann {
     pipeann::ReaderOptSharedMutex pq_mu;
     std::vector<uint8_t> data;
     FixedChunkPQTable<T> pq_table;
+    void *mmap_base_ = nullptr;
+    const uint8_t *mmap_payload_ = nullptr;
+    size_t mmap_length_ = 0;
+    uint64_t mmap_payload_bytes_ = 0;
+    bool mmap_enabled_ = false;
+
+    const uint8_t *compressed_data_ptr() const {
+      return mmap_enabled_ ? mmap_payload_ : data.data();
+    }
+
+    void ensure_heap_copy() {
+      if (!mmap_enabled_) {
+        return;
+      }
+      data.assign(mmap_payload_, mmap_payload_ + mmap_payload_bytes_);
+      release_mmap();
+    }
+
+    void release_mmap() {
+      if (mmap_base_ != nullptr) {
+        munmap(mmap_base_, mmap_length_);
+      }
+      mmap_base_ = nullptr;
+      mmap_payload_ = nullptr;
+      mmap_length_ = 0;
+      mmap_payload_bytes_ = 0;
+      mmap_enabled_ = false;
+    }
+
+    static bool should_mmap_compressed_data() {
+      const char *value = std::getenv("PIPEANN_PQ_MMAP");
+      if (value == nullptr) {
+        return false;
+      }
+      if (strcmp(value, "0") == 0 || strcasecmp(value, "false") == 0 || strcasecmp(value, "off") == 0) {
+        return false;
+      }
+      return true;
+    }
+
+    bool map_compressed_vectors(const std::string &pq_compressed_vectors, size_t &npts_u64, size_t &nchunks_u64,
+                                size_t pq_vectors_offset) {
+      pipeann::get_bin_metadata(pq_compressed_vectors, npts_u64, nchunks_u64, pq_vectors_offset);
+      uint64_t payload_bytes = static_cast<uint64_t>(npts_u64) * static_cast<uint64_t>(nchunks_u64) * sizeof(uint8_t);
+      uint64_t payload_offset = pq_vectors_offset + 2 * sizeof(int);
+      uint64_t file_size = get_file_size(pq_compressed_vectors);
+      if (file_size < payload_offset + payload_bytes) {
+        LOG(ERROR) << "PQ compressed file too small for mmap: " << pq_compressed_vectors
+                   << " file_size=" << file_size << " expected>=" << (payload_offset + payload_bytes);
+        return false;
+      }
+
+      int fd = open(pq_compressed_vectors.c_str(), O_RDONLY);
+      if (fd < 0) {
+        LOG(ERROR) << "Failed to open PQ compressed file for mmap: " << pq_compressed_vectors
+                   << " errno=" << errno;
+        return false;
+      }
+
+      long page_size = sysconf(_SC_PAGESIZE);
+      if (page_size <= 0) {
+        page_size = 4096;
+      }
+      uint64_t map_offset = payload_offset & ~(static_cast<uint64_t>(page_size) - 1);
+      uint64_t delta = payload_offset - map_offset;
+      size_t map_length = static_cast<size_t>(file_size - map_offset);
+
+      void *mapped = mmap(nullptr, map_length, PROT_READ, MAP_PRIVATE, fd, static_cast<off_t>(map_offset));
+      int saved_errno = errno;
+      close(fd);
+      if (mapped == MAP_FAILED) {
+        LOG(ERROR) << "mmap failed for PQ compressed file: " << pq_compressed_vectors
+                   << " errno=" << saved_errno;
+        return false;
+      }
+
+#ifdef MADV_RANDOM
+      madvise(mapped, map_length, MADV_RANDOM);
+#endif
+      mmap_base_ = mapped;
+      mmap_payload_ = reinterpret_cast<const uint8_t *>(mapped) + delta;
+      mmap_length_ = map_length;
+      mmap_payload_bytes_ = payload_bytes;
+      mmap_enabled_ = true;
+      return true;
+    }
 
     inline void aggregate_coords(const unsigned *ids, const uint64_t n_ids, const uint8_t *all_coords,
                                  const uint64_t ndims, uint8_t *out) {

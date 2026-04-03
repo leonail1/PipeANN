@@ -164,6 +164,8 @@ namespace pipeann {
                        AbstractSelector *selector = nullptr, const void *filter_data = nullptr,
                        const uint64_t relaxed_monotonicity_l = 0);
 
+    void enable_low_memory_search_mode(bool enable = true);
+
     int insert_in_place(const T *point, const TagT &tag, tsl::robin_set<uint32_t> *deletion_set = nullptr);
 
     // Merge deletes (NOTE: index read-only during merge.)
@@ -229,6 +231,11 @@ namespace pipeann {
 
     // Page search mode flag.
     bool use_page_search_ = true;
+    bool low_memory_search_mode_ = false;
+    bool compact_query_buffers_ = false;
+    bool disable_bg_io_threads_ = false;
+    bool prefer_identity_page_layout_ = false;
+    bool identity_page_layout_ = false;
 
     // ID to location mapping.
     // Concurrency control is done in lock_idx.
@@ -246,7 +253,8 @@ namespace pipeann {
 
     // Tag support.
     // If ID == tag, then it is not stored.
-    libcuckoo::cuckoohash_map<uint32_t, TagT> tags;
+    std::unique_ptr<libcuckoo::cuckoohash_map<uint32_t, TagT>> tags;
+    std::mutex tags_init_mu_;
 
     // Flags.
     bool load_flag = false;    // already loaded.
@@ -258,8 +266,11 @@ namespace pipeann {
     // Load id2loc and loc2id (i.e., page_layout), to support index reordering.
     void load_page_layout(const std::string &index_prefix, const uint64_t nnodes_per_sector = 0,
                           const uint64_t num_points = 0);
+    bool can_use_identity_page_layout(const std::string &index_prefix) const;
 
     void load_tags(const std::string &tag_file, size_t offset = 0);
+    void reset_tags();
+    libcuckoo::cuckoohash_map<uint32_t, TagT> *ensure_tags_map(size_t initial_size = 4);
 
     // Direct insert related.
     void do_beam_search(const T *vec, uint32_t mem_L, uint32_t Lsize, const uint32_t beam_width,
