@@ -10,3 +10,7 @@ pipeann/*.so
 pipeann/__pycache__/*
 pipeann.egg-info/
 dist/
+docs/**
+!docs/**/
+!docs/**/*.tex
+!docs/**/*.pdf

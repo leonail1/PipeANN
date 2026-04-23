@@ -1,0 +1,393 @@
+\documentclass[UTF8]{ctexart}
+
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{hyperref}
+
+\title{PipeANN 混合过滤框架正式集成实施计划}
+\author{GitHub Copilot}
+\date{2026年4月23日}
+
+\begin{document}
+
+\maketitle
+
+\section{文档目标}
+本文档只保留可实施内容，用于指导 PipeANN 将现有的 hybrid 搜索能力从 \path{hybrid_rebuild_context} 迁移到正式源码树，并在正式接线与验证完成后删除整个 \path{hybrid_rebuild_context} 目录。本文档不再记录代码审查结论，不再区分“已有能力”和“缺失能力”，只定义后续工程实施的目标、模块落点、阈值机制和验证步骤。
+
+\section{实施范围}
+本次实施范围限定为以下四项：
+
+\begin{enumerate}
+\item 将 hybrid 搜索框架从实验目录迁入正式代码目录，即迁入 \path{include/}、\path{src/} 和 \path{tests/}；
+\item 在正式查询接口中新增统一 hybrid 查询入口，使 prefilter 与 graph-only 两条路径由同一套运行时逻辑调度；
+\item 将路径切换机制统一为候选规模单阈值 \(\tau_m\)，并在第一次索引构建完成后通过一次轻量 benchmark 生成初始阈值；
+\item 将阈值重定位的唯一触发条件定义为向量数量变化超过 10\%，并要求重定位在后台单线程执行，且每条 benchmark 查询开始前都要检测前台负载。
+\end{enumerate}
+
+标签变化不作为阈值重定位触发条件。标签更新只负责维护查询时的候选规模计算输入，不负责触发重新 benchmark。
+
+\section{总体实施目标}
+本次集成完成后，PipeANN 中的过滤查询应具备如下统一执行流程：
+
+\begin{enumerate}
+\item 查询到达正式查询入口；
+\item 运行时根据当前过滤条件计算候选规模 \(m(F)=|S_F|\)；
+\item 将 \(m(F)\) 与候选规模阈值 \(\tau_m\) 进行比较；
+\item 若 \(m(F)\le \tau_m\)，则进入 prefilter 路径；
+\item 若 \(m(F)>\tau_m\)，则进入 graph-only 路径；
+\item 两条路径共用同一套索引前缀、标签 sidecar、查询统计接口和测试入口。
+\end{enumerate}
+
+对应的路由规则定义为
+\[
+m(F)=|S_F|,
+\]
+\[
+m(F) \le \tau_m \Rightarrow \text{prefilter},
+\qquad
+m(F) > \tau_m \Rightarrow \text{graph-only}.
+\]
+
+\section{正式代码迁移方案}
+
+\subsection{迁移原则}
+迁移时遵循以下原则：
+
+\begin{enumerate}
+\item hybrid 相关 C++ 逻辑迁入正式源码树，不再长期保留在实验目录中独立编译；
+\item \path{hybrid_rebuild_context} 只作为迁移阶段的临时对照源使用，不作为长期保留目录；
+\item 统一查询入口放入正式查询接口，而不是继续由 Python 脚本决定选择哪一个独立二进制；
+\item 当正式 binary、正式测试和阈值标定流程稳定后，整体删除 \path{hybrid_rebuild_context} 目录及其构建、脚本、缓存、绘图和辅助文件，不保留实验目录。
+\end{enumerate}
+
+\subsection{模块落点}
+建议按下表拆分并迁移模块：
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.27\linewidth} >{\raggedright\arraybackslash}p{0.31\linewidth} >{\raggedright\arraybackslash}p{0.28\linewidth}}
+\toprule
+当前来源 & 正式落点 & 实施动作 \\
+\midrule
+\path{hybrid_rebuild_context/src/search_disk_index_filtered_prefilter.cpp} 中的 DenseBitset sidecar 读取、计数与候选物化逻辑 & \path{include/filter/densebit_index.h} 与 \path{src/filter/densebit_index.cpp} & 抽出独立 DenseBitset 运行时模块，提供 \texttt{count\_candidates}、\texttt{materialize\_candidates}、\texttt{load\_sidecar} 等接口。 \\
+\path{hybrid_rebuild_context/src/search_disk_index_filtered_prefilter.cpp} 中的 prefilter PQ shortlist 与 SSD 精排逻辑 & \path{src/search/hybrid_prefilter.cpp} & 抽出正式 prefilter 执行器，使其不依赖实验目录下的 main 函数。 \\
+\path{hybrid_rebuild_context} 中的临时路由判断 & \path{include/filter/hybrid_route.h} 与 \path{src/search/hybrid_search.cpp} & 在正式源码树中实现基于 \(\tau_m\) 的统一路由器，并由正式查询入口调用。 \\
+\path{include/ssd_index.h} 与 \path{src/search/pipe_search.cpp} 已有的 graph-only 过滤搜索入口 & 保持在正式源码树 & 不重写 graph-only 核心图搜索，只新增统一的 hybrid 调度层。 \\
+\path{hybrid_rebuild_context} 中的独立 binary 接线与迁移辅助入口 & \path{src/CMakeLists.txt} 与 \path{tests/CMakeLists.txt} & 将 hybrid 相关编译接线并入主工程，补充正式测试驱动，并在迁移完成后移除对实验目录的依赖。 \\
+\bottomrule
+\end{longtable}
+
+\begin{enumerate}
+\item 在 \path{src/CMakeLists.txt} 中将源码 glob 从当前的 \path{*.cpp search/*.cpp update/*.cpp utils/*.cpp} 扩展为包含 \path{filter/*.cpp}；
+\item 在 \path{include/ssd_index.h} 中声明统一 hybrid 查询接口，例如 \texttt{hybrid\_search(...)}；
+\item 在 \path{tests/} 中新增正式驱动，例如 \path{tests/search_disk_index_hybrid.cpp}，用于 smoke 与回归；
+\item 当正式 binary、正式测试和阈值标定流程均已稳定后，删除整个 \path{hybrid_rebuild_context} 目录，并移除所有对该目录的构建、脚本和文档引用。
+\end{enumerate}
+
+\subsection{实验目录删除时机}
+\path{hybrid_rebuild_context} 的删除时机放在迁移收尾阶段，而不是放在模块开发中途。删除前必须同时满足以下条件：
+
+\begin{enumerate}
+\item DenseBitset、prefilter、统一 hybrid 查询入口、阈值标定与后台重定位都已迁入正式源码树；
+\item 主工程可以独立完成构建、smoke、回归与阈值初始化，不再调用 \path{hybrid_rebuild_context} 中的 C++ binary、脚本或缓存；
+\item 正式测试驱动已经覆盖迁移后的核心路径；
+\item 文档中各模块记录已经补齐正式落地实现，能够独立说明正式实现方式。
+\end{enumerate}
+
+一旦上述条件满足，就直接整体删除 \path{hybrid_rebuild_context} 目录，不保留实验副本。
+
+\subsection{文档更新规则}
+本文档需要作为后续正式实现的持续更新接口使用。自本计划开始执行后，每完成一个模块，都必须同步更新本文档中的对应模块记录，至少补齐以下内容：
+
+\begin{enumerate}
+\item 模块状态，从“未开始”更新为“进行中”或“已完成”；
+\item 实际修改的头文件、源码文件、测试文件和构建文件路径；
+\item 模块的具体实现方式，包括关键数据结构、控制流与接口设计；
+\item 至少一段核心代码片段，用于说明该模块的实际落地方式；
+\item 模块验证结果，包括编译、测试、smoke 或回归命令及其结论。
+\end{enumerate}
+
+为避免文档退化为简单进度表，后续更新时必须优先补“具体实现方式”和“核心代码片段”，而不仅仅写“已完成”或“已支持”。
+
+\section{统一 hybrid 查询入口}
+统一 hybrid 查询入口建议作为正式查询接口的一部分实现，而不是继续保留为脚本层的路径分发。该入口需要完成以下工作：
+
+\begin{enumerate}
+\item 接收查询向量、过滤表达式、\texttt{k}、\texttt{L}、\texttt{beamwidth} 等正式参数；
+\item 基于当前过滤表达式计算候选规模 \(m(F)\)；
+\item 将 \(m(F)\) 与当前阈值 \(\tau_m\) 比较，并记录本次选路结果；
+\item 当选择 prefilter 路径时，若已有 bitset 中间结果，则直接复用；
+\item 当选择 graph-only 路径时，直接复用现有 \texttt{pipe\_search(..., selector, filter\_data, ...)}；
+\item 向统一统计接口输出路径选择、候选规模、阈值版本和查询耗时。
+\end{enumerate}
+
+\section{候选规模计算机制}
+
+\subsection{单标签查询}
+对于单标签查询，正式实现中建议维护每个标签的 live 候选数。若迁移初期仍沿用已有的选择性表，则可按
+\[
+m(F)=\rho(F)\cdot N_{\text{live}}
+\]
+换算出候选规模；当正式元数据补齐后，运行时直接读取该标签的 live 候选数即可。无论使用哪种表示，路由比较对象都统一为 \(m(F)\)，而不是直接比较选择性。
+
+\subsection{多标签交集查询}
+对于多标签交集查询，即要求结果向量至少包含查询中的全部标签，运行时在 DenseBitset sidecar 上执行按位与，再对结果做 \texttt{popcount}，得到不重复候选数：
+\[
+m(F)=\left|\bigcap_{\ell \in F} S_{\ell}\right|.
+\]
+
+若最终选中 prefilter 路径，则复用同一份 bitset 结果继续物化候选 ID；若最终选中 graph-only 路径，则只保留计数结果参与路由，不额外物化 ID 列表。
+
+\subsection{多标签并集查询}
+对于多标签并集查询，运行时在 DenseBitset sidecar 上执行按位或，再对结果做 \texttt{popcount}，得到去重后的候选规模：
+\[
+m(F)=\left|\bigcup_{\ell \in F} S_{\ell}\right|.
+\]
+
+这里同样遵循“先计数后选路”的原则。只有在最终选中 prefilter 路径时，才将 bitset 结果物化为候选 ID 列表。
+
+\section{阈值初始化与持久化}
+
+\subsection{初始阈值生成}
+第一次索引构建完成后，系统立即执行一次轻量 benchmark，用来生成初始候选规模阈值 \(\tau_m\)。该 benchmark 仅服务于阈值标定，不承担实验作图职责，要求如下：
+
+\begin{enumerate}
+\item 使用单线程执行，避免与前台检索竞争资源；
+\item 在一组代表性过滤查询上分别运行 prefilter 与 graph-only；
+\item 记录两条路径在相同检索参数下的延迟；
+\item 找到两条成本曲线的交叉区间，并输出一个初始候选规模阈值 \(\tau_m\)；
+\item 将 \(\tau_m\)、标定时的 live 向量总数 \(N_{\text{calib}}\) 以及标定时间持久化为正式元数据。
+\end{enumerate}
+
+\subsection{阈值元数据}
+建议在正式元数据中增加以下字段：
+
+\begin{enumerate}
+\item 当前候选规模阈值 \(\tau_m\)；
+\item 上一次标定时的 live 向量总数 \(N_{\text{calib}}\)；
+\item 当前 live 向量总数 \(N_{\text{live}}\)；
+\item 阈值版本号与上次标定时间；
+\item 阈值是否处于待重定位状态的标志位。
+\end{enumerate}
+
+\section{阈值重定位机制}
+
+\subsection{唯一触发条件}
+阈值重定位的唯一触发条件定义为 live 向量总数相对上一次标定时的向量总数发生超过 10\% 的变化。触发条件写为
+\[
+\frac{\left|N_{\text{live}}-N_{\text{calib}}\right|}{N_{\text{calib}}} > 0.10.
+\]
+
+除这一条件外，不再引入任何其他自动触发条件。标签变化不触发阈值重定位，维护事件也不单独触发阈值重定位。
+
+\subsection{后台重定位执行方式}
+当触发条件成立后，系统只做两件事：
+
+\begin{enumerate}
+\item 将阈值状态标记为待重定位；
+\item 在后台启动单线程轻量 benchmark，重新生成新的 \(\tau_m\) 并更新 \(N_{\text{calib}}\)。
+\end{enumerate}
+
+后台重定位期间，前台查询继续使用旧阈值工作，待新阈值生成并持久化后再切换。
+
+\subsection{前台负载检查}
+每条后台 benchmark 查询开始前，都必须检查一次前台负载。若前台处于高负载，则本条 benchmark 查询不执行，后台任务暂停并等待下一个空闲窗口。前台负载检查建议至少包含以下条件：
+
+\begin{enumerate}
+\item 当前前台查询并发低于低水位；
+\item 查询等待队列为空或接近空；
+\item 当前没有正在执行的前台高优先级维护任务；
+\item 当前没有用户显式禁止后台重定位。
+\end{enumerate}
+
+\section{更新路径配套要求}
+由于系统支持更新，更新路径需要同时维护路由输入与阈值元数据：
+
+\begin{enumerate}
+\item 插入与删除操作必须更新 live 向量总数 \(N_{\text{live}}\)；
+\item 插入、删除和标签变更必须更新 DenseBitset sidecar 对应的 live 状态，保证 \(m(F)\) 的查询期计算正确；
+\item 标签变化只更新候选规模计算输入，不触发阈值重定位；
+\item 每次更新完成后都要检查一次是否满足 10\% 的向量数量变化阈值；
+\item 若满足条件，则仅设置后台重定位任务，不阻塞前台查询路径。
+\end{enumerate}
+
+\section{验证计划}
+实现完成后，至少执行以下验证：
+
+\subsection{构建与集成验证}
+\begin{enumerate}
+\item 主工程 \path{src/CMakeLists.txt} 能成功编译包含 \path{filter/*.cpp} 的正式库；
+\item 正式测试驱动可以直接调用统一 hybrid 查询入口；
+\item 主工程中的正式 binary 可以独立完成 smoke 与回归，不再依赖 \path{hybrid_rebuild_context} 中的 binary 或脚本；
+\item 删除 \path{hybrid_rebuild_context} 后，仓库仍能完成构建与核心验证。
+\end{enumerate}
+
+\subsection{路由正确性验证}
+\begin{enumerate}
+\item 单标签查询可基于 live 候选规模正确选路；
+\item 多标签交集查询可通过 bitset 按位与加 \texttt{popcount} 正确计算 \(m(F)\)；
+\item 多标签并集查询可通过 bitset 按位或加 \texttt{popcount} 正确计算 \(m(F)\)；
+\item 路由决策日志中能看到 \(m(F)\)、\(\tau_m\) 和最终路径选择。
+\end{enumerate}
+
+\subsection{阈值重定位验证}
+\begin{enumerate}
+\item 当 \(N_{\text{live}}\) 与 \(N_{\text{calib}}\) 的差值超过 10\% 时，后台重定位任务被正确触发；
+\item 后台重定位始终以单线程执行；
+\item 每条后台 benchmark 查询前都执行前台负载检查；
+\item 当负载检查失败时，后台任务能暂停并在后续继续；
+\item 阈值更新后，\(\tau_m\) 与 \(N_{\text{calib}}\) 被正确持久化。
+\end{enumerate}
+
+\section{模块实施记录接口}
+本节按模块组织，作为后续持续更新的统一接口。当前版本只给出记录模板；每个模块正式实现后，都应在对应小节中补入实际实现说明与核心代码片段。
+
+\subsection{模块 M1：DenseBitset 运行时模块}
+\textbf{状态：}未开始。
+
+\textbf{目标文件：}建议落点为 \path{include/filter/densebit_index.h}、\path{src/filter/densebit_index.cpp}。
+
+\textbf{待补实现说明：}完成后在此补充 sidecar 加载、候选计数、候选物化、交并集位运算与查询期复用方式。
+
+\textbf{待补核心代码片段：}
+\begin{verbatim}
+// TODO(M1): 在完成 DenseBitset 正式迁移后，粘贴核心实现代码片段。
+// 建议片段内容：sidecar 加载、count_candidates、materialize_candidates。
+\end{verbatim}
+
+\textbf{待补验证结果：}完成后在此补充编译结果、单测或 smoke 结果。
+
+\subsection{模块 M2：Prefilter 执行器}
+\textbf{状态：}未开始。
+
+\textbf{目标文件：}建议落点为 \path{src/search/hybrid_prefilter.cpp}，必要时补充对应头文件。
+
+\textbf{待补实现说明：}完成后在此补充 PQ shortlist、SSD 原始向量精排、与 bitset 中间结果的对接方式。
+
+\textbf{待补核心代码片段：}
+\begin{verbatim}
+// TODO(M2): 在完成 prefilter 执行器正式迁移后，粘贴核心实现代码片段。
+// 建议片段内容：PQ 打分、top-Lr 维护、精确重排主循环。
+\end{verbatim}
+
+\textbf{待补验证结果：}完成后在此补充 recall、延迟或 smoke 结果。
+
+\subsection{模块 M3：统一 Hybrid 查询入口与路由器}
+\textbf{状态：}未开始。
+
+\textbf{目标文件：}建议落点为 \path{include/ssd_index.h}、\path{include/filter/hybrid_route.h}、\path{src/search/hybrid_search.cpp}。
+
+\textbf{待补实现说明：}完成后在此补充正式查询入口签名、路由决策流程、与现有 \texttt{pipe\_search(...)} 的衔接方式。
+
+\textbf{待补核心代码片段：}
+\begin{verbatim}
+// TODO(M3): 在完成统一 hybrid 查询入口后，粘贴核心实现代码片段。
+// 建议片段内容：hybrid_search 主入口与 route(query_filter, tau_m) 逻辑。
+\end{verbatim}
+
+\textbf{待补验证结果：}完成后在此补充单标签、多标签交集、多标签并集选路结果。
+
+\subsection{模块 M4：候选规模计算模块}
+\textbf{状态：}未开始。
+
+\textbf{目标文件：}建议复用 \path{include/filter/densebit_index.h} 与 \path{src/filter/densebit_index.cpp}，必要时拆出独立 helper。
+
+\textbf{待补实现说明：}完成后在此补充单标签、交集查询、并集查询的候选规模计算路径，以及“先计数后选路”的复用关系。
+
+\textbf{待补核心代码片段：}
+\begin{verbatim}
+// TODO(M4): 在完成候选规模计算模块后，粘贴核心实现代码片段。
+// 建议片段内容：bitset AND/OR + popcount 的计数逻辑。
+\end{verbatim}
+
+\textbf{待补验证结果：}完成后在此补充候选规模计算与基准结果的一致性检查。
+
+\subsection{模块 M5：初始阈值标定与元数据持久化}
+\textbf{状态：}未开始。
+
+\textbf{目标文件：}建议落点为正式构建后工具、索引元数据读写模块及相关测试文件。
+
+\textbf{待补实现说明：}完成后在此补充 build 后轻量 benchmark、\(\tau_m\) 生成逻辑、\(N_{\text{calib}}\) 与阈值版本持久化方案。
+
+\textbf{待补核心代码片段：}
+\begin{verbatim}
+// TODO(M5): 在完成阈值初始化模块后，粘贴核心实现代码片段。
+// 建议片段内容：benchmark 主循环、交叉点求解、元数据写回。
+\end{verbatim}
+
+\textbf{待补验证结果：}完成后在此补充初始阈值生成与元数据落盘结果。
+
+\subsection{模块 M6：后台阈值重定位与前台负载检查}
+\textbf{状态：}未开始。
+
+\textbf{目标文件：}建议落点为运行时调度模块、后台任务模块及相关测试文件。
+
+\textbf{待补实现说明：}完成后在此补充 10\% 向量数量变化触发逻辑、后台单线程 benchmark 调度、每条 benchmark 查询前的前台负载检查流程。
+
+\textbf{待补核心代码片段：}
+\begin{verbatim}
+// TODO(M6): 在完成后台重定位模块后，粘贴核心实现代码片段。
+// 建议片段内容：trigger_recalibration_if_needed 与 load guard 逻辑。
+\end{verbatim}
+
+\textbf{待补验证结果：}完成后在此补充后台暂停、恢复和阈值切换结果。
+
+\subsection{模块 M7：更新路径集成}
+\textbf{状态：}未开始。
+
+\textbf{目标文件：}建议落点为 \path{src/update/} 相关文件、标签 sidecar 维护逻辑及测试文件。
+
+\textbf{待补实现说明：}完成后在此补充 \(N_{\text{live}}\) 维护、标签变化引起的 live 状态更新，以及不阻塞前台的触发接线。
+
+\textbf{待补核心代码片段：}
+\begin{verbatim}
+// TODO(M7): 在完成更新路径集成后，粘贴核心实现代码片段。
+// 建议片段内容：insert/delete 后的 live count 更新与重定位触发检查。
+\end{verbatim}
+
+\textbf{待补验证结果：}完成后在此补充更新前后候选规模与阈值状态检查结果。
+
+\subsection{模块 M8：正式测试驱动与实验目录删除}
+\textbf{状态：}未开始。
+
+\textbf{目标文件：}建议落点为 \path{tests/search_disk_index_hybrid.cpp}、\path{tests/CMakeLists.txt}、主工程构建配置及仓库中的相关文档引用。
+
+\textbf{待补实现说明：}完成后在此补充正式 binary 接线、测试入口设计、删除 \path{hybrid_rebuild_context} 前后的仓库清理步骤，以及移除实验目录引用的方式。
+
+\textbf{待补核心代码片段：}
+\begin{verbatim}
+// TODO(M8): 在完成正式测试驱动与 hybrid_rebuild_context 删除后，粘贴核心实现代码片段。
+// 建议片段内容：测试入口 main、构建接线或删除实验目录依赖的关键变更。
+\end{verbatim}
+
+\textbf{待补验证结果：}完成后在此补充正式测试通过情况，以及删除 \path{hybrid_rebuild_context} 后仓库仍可正常构建的结果。
+
+\section{实施顺序}
+建议按以下顺序落地：
+
+\begin{enumerate}
+\item 抽出 DenseBitset 运行时模块，迁入正式 \path{include/filter} 与 \path{src/filter}；
+\item 抽出 prefilter 执行器，迁入正式 \path{src/search}；
+\item 在 \path{include/ssd_index.h} 和正式查询入口中加入统一 hybrid 查询接口；
+\item 在主工程 CMake 和 tests 中接入正式 hybrid binary；
+\item 实现构建后轻量 benchmark，生成初始 \(\tau_m\)；
+\item 接入更新路径中的 \(N_{\text{live}}\) 维护与 10\% 触发逻辑；
+\item 实现后台单线程重定位与前台负载检查；
+\item 最后在正式 binary、正式测试和阈值流程稳定后，整体删除 \path{hybrid_rebuild_context} 目录及其所有残余引用。
+\end{enumerate}
+
+\section{交付结果}
+本计划完成后，工程侧应交付以下内容：
+
+\begin{enumerate}
+\item 正式源码树中的 hybrid 查询实现；
+\item 正式构建系统中的 hybrid 编译接线；
+\item 正式测试驱动与回归验证；
+\item 构建后初始阈值标定流程；
+\item 仅由向量数量变化 10\% 触发的后台阈值重定位流程；
+\item 仓库中不再保留 \path{hybrid_rebuild_context} 目录。
+\end{enumerate}
+
+\end{document}
