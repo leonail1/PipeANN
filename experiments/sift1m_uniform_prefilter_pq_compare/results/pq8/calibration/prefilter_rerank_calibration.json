@@ -1,0 +1,822 @@
+{
+  "beamwidth": 4,
+  "block_candidates": 16384,
+  "calibration_queries": 200,
+  "format": "pipeann.hybrid.prefilter_rerank_calibration.v1",
+  "index_prefix": "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_compare/runtime_indexes/sift1m_uniform_prefilter_compare_pq8",
+  "index_type": "float",
+  "k": 10,
+  "max_selectivity": 1.0,
+  "mem_l": 0,
+  "nbr_type": "pq",
+  "overrides": {
+    "u100": 760,
+    "u1e-01": 235,
+    "u1e-02": 99,
+    "u1e-03": 41,
+    "u25": 406,
+    "u30": 454,
+    "u3e-03": 63,
+    "u50": 541,
+    "u5e-02": 186,
+    "u75": 673
+  },
+  "results": [
+    {
+      "achieved_avg_latency_us": 208.794998,
+      "achieved_qps": 3517.60376,
+      "achieved_recall": 98.099998,
+      "bucket_label": "1.0e-03",
+      "bucket_name": "u1e-03",
+      "calibration_query_count": 200,
+      "candidate_count": 1000,
+      "evaluations": [
+        {
+          "avg_latency_us": 137.914993,
+          "qps": 5085.664551,
+          "recall": 96.099998,
+          "rerank_l": 31
+        },
+        {
+          "avg_latency_us": 158.195007,
+          "qps": 4603.094727,
+          "recall": 97.400002,
+          "rerank_l": 37
+        },
+        {
+          "avg_latency_us": 168.145004,
+          "qps": 4395.326172,
+          "recall": 97.849998,
+          "rerank_l": 40
+        },
+        {
+          "avg_latency_us": 208.794998,
+          "qps": 3517.60376,
+          "recall": 98.099998,
+          "rerank_l": 41
+        },
+        {
+          "avg_latency_us": 174.070007,
+          "qps": 4221.722656,
+          "recall": 98.300003,
+          "rerank_l": 42
+        },
+        {
+          "avg_latency_us": 237.179993,
+          "qps": 3289.050537,
+          "recall": 99.349998,
+          "rerank_l": 53
+        },
+        {
+          "avg_latency_us": 442.950012,
+          "qps": 1931.338867,
+          "recall": 99.949997,
+          "rerank_l": 96
+        }
+      ],
+      "label_id": 0,
+      "prefilter_rerank_l": 41,
+      "selectivity": 0.001,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 327.084991,
+      "achieved_qps": 2451.799805,
+      "achieved_recall": 98.199997,
+      "bucket_label": "3.0e-03",
+      "bucket_name": "u3e-03",
+      "calibration_query_count": 200,
+      "candidate_count": 3000,
+      "evaluations": [
+        {
+          "avg_latency_us": 267.709991,
+          "qps": 2923.253662,
+          "recall": 97.099998,
+          "rerank_l": 53
+        },
+        {
+          "avg_latency_us": 331.045013,
+          "qps": 2390.606201,
+          "recall": 97.650002,
+          "rerank_l": 59
+        },
+        {
+          "avg_latency_us": 327.040009,
+          "qps": 2451.460693,
+          "recall": 97.949997,
+          "rerank_l": 62
+        },
+        {
+          "avg_latency_us": 327.084991,
+          "qps": 2451.799805,
+          "recall": 98.199997,
+          "rerank_l": 63
+        },
+        {
+          "avg_latency_us": 370.404999,
+          "qps": 2215.95752,
+          "recall": 98.25,
+          "rerank_l": 64
+        },
+        {
+          "avg_latency_us": 438.25,
+          "qps": 1897.646362,
+          "recall": 98.800003,
+          "rerank_l": 75
+        },
+        {
+          "avg_latency_us": 606.539978,
+          "qps": 1438.188232,
+          "recall": 99.5,
+          "rerank_l": 96
+        }
+      ],
+      "label_id": 1,
+      "prefilter_rerank_l": 63,
+      "selectivity": 0.003,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 558.025024,
+      "achieved_qps": 1453.65625,
+      "achieved_recall": 98.0,
+      "bucket_label": "1.0%",
+      "bucket_name": "u1e-02",
+      "calibration_query_count": 200,
+      "candidate_count": 10000,
+      "evaluations": [
+        {
+          "avg_latency_us": 449.654999,
+          "qps": 1698.822876,
+          "recall": 95.800003,
+          "rerank_l": 69
+        },
+        {
+          "avg_latency_us": 552.38501,
+          "qps": 1413.853516,
+          "recall": 96.900002,
+          "rerank_l": 84
+        },
+        {
+          "avg_latency_us": 578.474976,
+          "qps": 1359.190552,
+          "recall": 97.449997,
+          "rerank_l": 92
+        },
+        {
+          "avg_latency_us": 465.174988,
+          "qps": 1690.331421,
+          "recall": 97.75,
+          "rerank_l": 96
+        },
+        {
+          "avg_latency_us": 511.75,
+          "qps": 1539.927124,
+          "recall": 97.949997,
+          "rerank_l": 98
+        },
+        {
+          "avg_latency_us": 558.025024,
+          "qps": 1453.65625,
+          "recall": 98.0,
+          "rerank_l": 99
+        },
+        {
+          "avg_latency_us": 775.26001,
+          "qps": 1066.291016,
+          "recall": 99.050003,
+          "rerank_l": 128
+        }
+      ],
+      "label_id": 2,
+      "prefilter_rerank_l": 99,
+      "selectivity": 0.01,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 1493.375,
+      "achieved_qps": 569.673584,
+      "achieved_recall": 98.0,
+      "bucket_label": "5.0%",
+      "bucket_name": "u5e-02",
+      "calibration_query_count": 200,
+      "candidate_count": 50000,
+      "evaluations": [
+        {
+          "avg_latency_us": 1401.935059,
+          "qps": 599.497253,
+          "recall": 97.449997,
+          "rerank_l": 160
+        },
+        {
+          "avg_latency_us": 1253.285034,
+          "qps": 671.710693,
+          "recall": 97.599998,
+          "rerank_l": 165
+        },
+        {
+          "avg_latency_us": 1500.130005,
+          "qps": 562.918823,
+          "recall": 97.949997,
+          "rerank_l": 185
+        },
+        {
+          "avg_latency_us": 1493.375,
+          "qps": 569.673584,
+          "recall": 98.0,
+          "rerank_l": 186
+        },
+        {
+          "avg_latency_us": 1516.775024,
+          "qps": 563.664062,
+          "recall": 98.0,
+          "rerank_l": 187
+        },
+        {
+          "avg_latency_us": 1673.055054,
+          "qps": 514.461487,
+          "recall": 98.0,
+          "rerank_l": 188
+        },
+        {
+          "avg_latency_us": 1541.060059,
+          "qps": 550.504089,
+          "recall": 98.050003,
+          "rerank_l": 190
+        },
+        {
+          "avg_latency_us": 1560.35498,
+          "qps": 551.583923,
+          "recall": 98.099998,
+          "rerank_l": 195
+        },
+        {
+          "avg_latency_us": 1472.594971,
+          "qps": 584.585388,
+          "recall": 98.25,
+          "rerank_l": 204
+        },
+        {
+          "avg_latency_us": 1658.655029,
+          "qps": 526.555664,
+          "recall": 98.699997,
+          "rerank_l": 243
+        },
+        {
+          "avg_latency_us": 2225.780029,
+          "qps": 400.344147,
+          "recall": 99.349998,
+          "rerank_l": 320
+        }
+      ],
+      "label_id": 3,
+      "prefilter_rerank_l": 186,
+      "selectivity": 0.05,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 2288.540039,
+      "achieved_qps": 387.364563,
+      "achieved_recall": 98.0,
+      "bucket_label": "10%",
+      "bucket_name": "u1e-01",
+      "calibration_query_count": 200,
+      "candidate_count": 100000,
+      "evaluations": [
+        {
+          "avg_latency_us": 2029.290039,
+          "qps": 427.848602,
+          "recall": 95.75,
+          "rerank_l": 160
+        },
+        {
+          "avg_latency_us": 2124.929932,
+          "qps": 407.637177,
+          "recall": 96.050003,
+          "rerank_l": 165
+        },
+        {
+          "avg_latency_us": 1820.109985,
+          "qps": 476.820862,
+          "recall": 97.349998,
+          "rerank_l": 204
+        },
+        {
+          "avg_latency_us": 2003.88501,
+          "qps": 438.381744,
+          "recall": 97.800003,
+          "rerank_l": 224
+        },
+        {
+          "avg_latency_us": 1884.47998,
+          "qps": 464.601044,
+          "recall": 97.949997,
+          "rerank_l": 234
+        },
+        {
+          "avg_latency_us": 2288.540039,
+          "qps": 387.364563,
+          "recall": 98.0,
+          "rerank_l": 235
+        },
+        {
+          "avg_latency_us": 2893.860107,
+          "qps": 306.948578,
+          "recall": 98.0,
+          "rerank_l": 236
+        },
+        {
+          "avg_latency_us": 2719.804932,
+          "qps": 324.392548,
+          "recall": 98.050003,
+          "rerank_l": 237
+        },
+        {
+          "avg_latency_us": 2071.48999,
+          "qps": 424.553558,
+          "recall": 98.050003,
+          "rerank_l": 239
+        },
+        {
+          "avg_latency_us": 2210.330078,
+          "qps": 398.283081,
+          "recall": 98.150002,
+          "rerank_l": 243
+        },
+        {
+          "avg_latency_us": 2589.405029,
+          "qps": 345.742584,
+          "recall": 98.849998,
+          "rerank_l": 320
+        }
+      ],
+      "label_id": 4,
+      "prefilter_rerank_l": 235,
+      "selectivity": 0.1,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 5635.109863,
+      "achieved_qps": 159.527588,
+      "achieved_recall": 98.0,
+      "bucket_label": "25%",
+      "bucket_name": "u25",
+      "calibration_query_count": 200,
+      "candidate_count": 250000,
+      "evaluations": [
+        {
+          "avg_latency_us": 3675.689941,
+          "qps": 240.660248,
+          "recall": 93.699997,
+          "rerank_l": 192
+        },
+        {
+          "avg_latency_us": 5120.660156,
+          "qps": 174.968918,
+          "recall": 97.849998,
+          "rerank_l": 384
+        },
+        {
+          "avg_latency_us": 5080.22998,
+          "qps": 175.063004,
+          "recall": 97.849998,
+          "rerank_l": 389
+        },
+        {
+          "avg_latency_us": 5905.02002,
+          "qps": 151.141251,
+          "recall": 97.949997,
+          "rerank_l": 401
+        },
+        {
+          "avg_latency_us": 5343.265137,
+          "qps": 166.198517,
+          "recall": 97.949997,
+          "rerank_l": 404
+        },
+        {
+          "avg_latency_us": 4901.330078,
+          "qps": 180.775146,
+          "recall": 97.949997,
+          "rerank_l": 405
+        },
+        {
+          "avg_latency_us": 5635.109863,
+          "qps": 159.527588,
+          "recall": 98.0,
+          "rerank_l": 406
+        },
+        {
+          "avg_latency_us": 5728.740234,
+          "qps": 156.356598,
+          "recall": 98.0,
+          "rerank_l": 407
+        },
+        {
+          "avg_latency_us": 5941.89502,
+          "qps": 149.784424,
+          "recall": 98.099998,
+          "rerank_l": 413
+        },
+        {
+          "avg_latency_us": 4699.60498,
+          "qps": 192.565216,
+          "recall": 98.25,
+          "rerank_l": 437
+        },
+        {
+          "avg_latency_us": 5176.899902,
+          "qps": 173.377457,
+          "recall": 98.550003,
+          "rerank_l": 484
+        },
+        {
+          "avg_latency_us": 6119.165039,
+          "qps": 148.104462,
+          "recall": 98.699997,
+          "rerank_l": 579
+        },
+        {
+          "avg_latency_us": 7530.504883,
+          "qps": 122.873505,
+          "recall": 99.650002,
+          "rerank_l": 768
+        }
+      ],
+      "label_id": 5,
+      "prefilter_rerank_l": 406,
+      "selectivity": 0.25,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 5022.0,
+      "achieved_qps": 178.295349,
+      "achieved_recall": 98.0,
+      "bucket_label": "30%",
+      "bucket_name": "u30",
+      "calibration_query_count": 200,
+      "candidate_count": 300000,
+      "evaluations": [
+        {
+          "avg_latency_us": 4060.524902,
+          "qps": 218.942657,
+          "recall": 92.650002,
+          "rerank_l": 192
+        },
+        {
+          "avg_latency_us": 5421.765137,
+          "qps": 164.412949,
+          "recall": 97.25,
+          "rerank_l": 384
+        },
+        {
+          "avg_latency_us": 5189.160156,
+          "qps": 171.720932,
+          "recall": 97.25,
+          "rerank_l": 389
+        },
+        {
+          "avg_latency_us": 4659.185059,
+          "qps": 191.474487,
+          "recall": 97.849998,
+          "rerank_l": 437
+        },
+        {
+          "avg_latency_us": 4889.930176,
+          "qps": 183.385941,
+          "recall": 97.900002,
+          "rerank_l": 449
+        },
+        {
+          "avg_latency_us": 5288.069824,
+          "qps": 169.003723,
+          "recall": 97.949997,
+          "rerank_l": 452
+        },
+        {
+          "avg_latency_us": 4862.430176,
+          "qps": 183.655716,
+          "recall": 97.949997,
+          "rerank_l": 453
+        },
+        {
+          "avg_latency_us": 5022.0,
+          "qps": 178.295349,
+          "recall": 98.0,
+          "rerank_l": 454
+        },
+        {
+          "avg_latency_us": 5775.560059,
+          "qps": 156.337265,
+          "recall": 98.0,
+          "rerank_l": 455
+        },
+        {
+          "avg_latency_us": 5072.430176,
+          "qps": 176.600113,
+          "recall": 98.0,
+          "rerank_l": 461
+        },
+        {
+          "avg_latency_us": 5469.794922,
+          "qps": 163.860596,
+          "recall": 98.199997,
+          "rerank_l": 484
+        },
+        {
+          "avg_latency_us": 7473.839844,
+          "qps": 121.637222,
+          "recall": 98.800003,
+          "rerank_l": 579
+        },
+        {
+          "avg_latency_us": 7716.049805,
+          "qps": 119.759315,
+          "recall": 99.449997,
+          "rerank_l": 768
+        }
+      ],
+      "label_id": 6,
+      "prefilter_rerank_l": 454,
+      "selectivity": 0.3,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 7061.35498,
+      "achieved_qps": 126.407204,
+      "achieved_recall": 98.0,
+      "bucket_label": "50%",
+      "bucket_name": "u50",
+      "calibration_query_count": 200,
+      "candidate_count": 500000,
+      "evaluations": [
+        {
+          "avg_latency_us": 5394.879883,
+          "qps": 164.707153,
+          "recall": 92.699997,
+          "rerank_l": 192
+        },
+        {
+          "avg_latency_us": 6539.345215,
+          "qps": 135.270126,
+          "recall": 96.699997,
+          "rerank_l": 384
+        },
+        {
+          "avg_latency_us": 7264.870117,
+          "qps": 123.588905,
+          "recall": 96.800003,
+          "rerank_l": 389
+        },
+        {
+          "avg_latency_us": 6850.100098,
+          "qps": 129.766083,
+          "recall": 97.550003,
+          "rerank_l": 484
+        },
+        {
+          "avg_latency_us": 7185.060059,
+          "qps": 123.887009,
+          "recall": 97.849998,
+          "rerank_l": 532
+        },
+        {
+          "avg_latency_us": 6928.129883,
+          "qps": 128.786453,
+          "recall": 97.949997,
+          "rerank_l": 538
+        },
+        {
+          "avg_latency_us": 7279.194824,
+          "qps": 122.719368,
+          "recall": 97.949997,
+          "rerank_l": 540
+        },
+        {
+          "avg_latency_us": 7061.35498,
+          "qps": 126.407204,
+          "recall": 98.0,
+          "rerank_l": 541
+        },
+        {
+          "avg_latency_us": 7055.790039,
+          "qps": 128.141129,
+          "recall": 98.0,
+          "rerank_l": 544
+        },
+        {
+          "avg_latency_us": 7874.14502,
+          "qps": 114.328331,
+          "recall": 98.099998,
+          "rerank_l": 556
+        },
+        {
+          "avg_latency_us": 7166.390137,
+          "qps": 124.314064,
+          "recall": 98.199997,
+          "rerank_l": 579
+        },
+        {
+          "avg_latency_us": 8601.285156,
+          "qps": 105.902458,
+          "recall": 98.849998,
+          "rerank_l": 768
+        }
+      ],
+      "label_id": 7,
+      "prefilter_rerank_l": 541,
+      "selectivity": 0.5,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 9722.980469,
+      "achieved_qps": 92.325272,
+      "achieved_recall": 98.0,
+      "bucket_label": "75%",
+      "bucket_name": "u75",
+      "calibration_query_count": 200,
+      "candidate_count": 750000,
+      "evaluations": [
+        {
+          "avg_latency_us": 7286.415039,
+          "qps": 121.604996,
+          "recall": 88.849998,
+          "rerank_l": 192
+        },
+        {
+          "avg_latency_us": 8297.509766,
+          "qps": 106.201469,
+          "recall": 95.099998,
+          "rerank_l": 384
+        },
+        {
+          "avg_latency_us": 8998.915039,
+          "qps": 99.048019,
+          "recall": 95.25,
+          "rerank_l": 389
+        },
+        {
+          "avg_latency_us": 9430.174805,
+          "qps": 94.545425,
+          "recall": 97.25,
+          "rerank_l": 579
+        },
+        {
+          "avg_latency_us": 9741.240234,
+          "qps": 91.734451,
+          "recall": 97.599998,
+          "rerank_l": 627
+        },
+        {
+          "avg_latency_us": 9861.709961,
+          "qps": 90.706802,
+          "recall": 97.800003,
+          "rerank_l": 651
+        },
+        {
+          "avg_latency_us": 12041.605469,
+          "qps": 74.814629,
+          "recall": 97.849998,
+          "rerank_l": 663
+        },
+        {
+          "avg_latency_us": 9629.485352,
+          "qps": 93.086578,
+          "recall": 97.900002,
+          "rerank_l": 669
+        },
+        {
+          "avg_latency_us": 10046.695312,
+          "qps": 89.225586,
+          "recall": 97.949997,
+          "rerank_l": 672
+        },
+        {
+          "avg_latency_us": 9722.980469,
+          "qps": 92.325272,
+          "recall": 98.0,
+          "rerank_l": 673
+        },
+        {
+          "avg_latency_us": 9878.445312,
+          "qps": 90.71524,
+          "recall": 98.0,
+          "rerank_l": 674
+        },
+        {
+          "avg_latency_us": 11182.040039,
+          "qps": 81.188202,
+          "recall": 98.199997,
+          "rerank_l": 768
+        }
+      ],
+      "label_id": 8,
+      "prefilter_rerank_l": 673,
+      "selectivity": 0.75,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 11753.740234,
+      "achieved_qps": 76.235519,
+      "achieved_recall": 98.0,
+      "bucket_label": "100%",
+      "bucket_name": "u100",
+      "calibration_query_count": 200,
+      "candidate_count": 1000000,
+      "evaluations": [
+        {
+          "avg_latency_us": 8910.019531,
+          "qps": 99.002579,
+          "recall": 87.5,
+          "rerank_l": 192
+        },
+        {
+          "avg_latency_us": 10744.55957,
+          "qps": 82.158569,
+          "recall": 94.25,
+          "rerank_l": 384
+        },
+        {
+          "avg_latency_us": 10700.214844,
+          "qps": 82.577133,
+          "recall": 94.300003,
+          "rerank_l": 389
+        },
+        {
+          "avg_latency_us": 11808.415039,
+          "qps": 75.435867,
+          "recall": 96.650002,
+          "rerank_l": 579
+        },
+        {
+          "avg_latency_us": 12011.05957,
+          "qps": 74.468872,
+          "recall": 97.550003,
+          "rerank_l": 674
+        },
+        {
+          "avg_latency_us": 12287.94043,
+          "qps": 73.218422,
+          "recall": 97.75,
+          "rerank_l": 721
+        },
+        {
+          "avg_latency_us": 12308.044922,
+          "qps": 72.987,
+          "recall": 97.800003,
+          "rerank_l": 745
+        },
+        {
+          "avg_latency_us": 12805.280273,
+          "qps": 70.456192,
+          "recall": 97.949997,
+          "rerank_l": 757
+        },
+        {
+          "avg_latency_us": 11868.304688,
+          "qps": 75.506958,
+          "recall": 97.949997,
+          "rerank_l": 759
+        },
+        {
+          "avg_latency_us": 11753.740234,
+          "qps": 76.235519,
+          "recall": 98.0,
+          "rerank_l": 760
+        },
+        {
+          "avg_latency_us": 11883.514648,
+          "qps": 75.48584,
+          "recall": 98.0,
+          "rerank_l": 763
+        },
+        {
+          "avg_latency_us": 12558.669922,
+          "qps": 71.681198,
+          "recall": 98.0,
+          "rerank_l": 768
+        }
+      ],
+      "label_id": 9,
+      "prefilter_rerank_l": 760,
+      "selectivity": 1.0,
+      "status": "calibrated",
+      "target_recall": 98.0
+    }
+  ],
+  "search_l": 100,
+  "selector_type": "intersect",
+  "similarity": "l2",
+  "summary_json": "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_compare/workloads/uniform_exact_selectivity_summary.json",
+  "target_recall": 98.0,
+  "threads": 1
+}

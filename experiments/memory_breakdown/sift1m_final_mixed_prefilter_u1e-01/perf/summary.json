@@ -1,0 +1,50 @@
+{
+  "command": [
+    "/usr/bin/perf",
+    "record",
+    "-o",
+    "/mnt/data/lzg/PipeANN/experiments/memory_breakdown/sift1m_final_mixed_prefilter_u1e-01/perf/perf.data",
+    "-g",
+    "-e",
+    "page-faults,minor-faults,major-faults",
+    "--call-graph",
+    "dwarf",
+    "--",
+    "env",
+    "PIPEANN_PQ_MMAP=1",
+    "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+    "float",
+    "/mnt/data/lzg/PipeANN/data/sift1m/sift1m_pipeann_uniform_pq32",
+    "1",
+    "4",
+    "/mnt/data/lzg/PipeANN/data/sift1m/uniform_exact_selectivity/u1e-01/probe_query.bin",
+    "null",
+    "10",
+    "l2",
+    "pq",
+    "intersect",
+    "/mnt/data/lzg/PipeANN/data/sift1m/uniform_exact_selectivity/u1e-01/probe_query.spmat",
+    "prefilter",
+    "0",
+    "0",
+    "100"
+  ],
+  "command_source": "preset",
+  "env_overrides": {
+    "PIPEANN_PQ_MMAP": "1"
+  },
+  "events": [
+    "page-faults",
+    "minor-faults",
+    "major-faults"
+  ],
+  "exit_code": 0,
+  "format": "pipeann.memory.perf.v1",
+  "name": "sift1m_final_mixed_prefilter_u1e-01",
+  "perf_data": "/mnt/data/lzg/PipeANN/experiments/memory_breakdown/sift1m_final_mixed_prefilter_u1e-01/perf/perf.data",
+  "record_log": "/mnt/data/lzg/PipeANN/experiments/memory_breakdown/sift1m_final_mixed_prefilter_u1e-01/perf/record.log",
+  "report_exit_code": 0,
+  "report_timed_out": false,
+  "report_txt": "/mnt/data/lzg/PipeANN/experiments/memory_breakdown/sift1m_final_mixed_prefilter_u1e-01/perf/report.txt",
+  "used_sudo": true
+}

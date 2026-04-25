@@ -1,0 +1,255 @@
+{
+  "categories": [
+    {
+      "category": "shared_libs",
+      "private_kb": 380,
+      "pss_kb": 403,
+      "rss_kb": 700,
+      "shared_kb": 320,
+      "size_kb": 12176
+    },
+    {
+      "category": "other_file_backed",
+      "private_kb": 104,
+      "pss_kb": 104,
+      "rss_kb": 104,
+      "shared_kb": 0,
+      "size_kb": 104
+    },
+    {
+      "category": "search_binary",
+      "private_kb": 52,
+      "pss_kb": 52,
+      "rss_kb": 52,
+      "shared_kb": 0,
+      "size_kb": 2040
+    },
+    {
+      "category": "anonymous",
+      "private_kb": 16,
+      "pss_kb": 16,
+      "rss_kb": 16,
+      "shared_kb": 0,
+      "size_kb": 1864
+    },
+    {
+      "category": "stack",
+      "private_kb": 16,
+      "pss_kb": 16,
+      "rss_kb": 16,
+      "shared_kb": 0,
+      "size_kb": 136
+    },
+    {
+      "category": "vdso",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 4,
+      "shared_kb": 4,
+      "size_kb": 8
+    },
+    {
+      "category": "vvar",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 0,
+      "shared_kb": 0,
+      "size_kb": 16
+    },
+    {
+      "category": "vsyscall",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 0,
+      "shared_kb": 0,
+      "size_kb": 4
+    }
+  ],
+  "elapsed_seconds": 0.0,
+  "label": "000_startup",
+  "rollup_kb": {
+    "55cbe183c000-7ffec9f65000 ---p 00000000 00": 0,
+    "AnonHugePages": 0,
+    "Anonymous": 72,
+    "FilePmdMapped": 0,
+    "LazyFree": 0,
+    "Locked": 0,
+    "Private_Clean": 416,
+    "Private_Dirty": 72,
+    "Private_Hugetlb": 0,
+    "Pss": 489,
+    "Pss_Anon": 72,
+    "Pss_File": 417,
+    "Pss_Shmem": 0,
+    "Referenced": 712,
+    "Rss": 712,
+    "Shared_Clean": 224,
+    "Shared_Dirty": 0,
+    "Shared_Hugetlb": 0,
+    "ShmemPmdMapped": 0,
+    "Swap": 0,
+    "SwapPss": 0
+  },
+  "top_mappings": [
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libmkl_rt.so",
+      "private_kb": 192,
+      "pss_kb": 192,
+      "rss_kb": 192,
+      "shared_kb": 0,
+      "size_kb": 5356
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+      "private_kb": 0,
+      "pss_kb": 1,
+      "rss_kb": 168,
+      "shared_kb": 168,
+      "size_kb": 168
+    },
+    {
+      "path": "/etc/ld.so.cache",
+      "private_kb": 104,
+      "pss_kb": 104,
+      "rss_kb": 104,
+      "shared_kb": 0,
+      "size_kb": 104
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9",
+      "private_kb": 64,
+      "pss_kb": 64,
+      "rss_kb": 64,
+      "shared_kb": 0,
+      "size_kb": 76
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libm.so.6",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 56,
+      "shared_kb": 56,
+      "size_kb": 56
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.35",
+      "private_kb": 48,
+      "pss_kb": 48,
+      "rss_kb": 48,
+      "shared_kb": 0,
+      "size_kb": 72
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+      "private_kb": 0,
+      "pss_kb": 22,
+      "rss_kb": 44,
+      "shared_kb": 44,
+      "size_kb": 44
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 44,
+      "shared_kb": 44,
+      "size_kb": 44
+    },
+    {
+      "path": "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+      "private_kb": 36,
+      "pss_kb": 36,
+      "rss_kb": 36,
+      "shared_kb": 0,
+      "size_kb": 36
+    },
+    {
+      "path": "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+      "private_kb": 16,
+      "pss_kb": 16,
+      "rss_kb": 16,
+      "shared_kb": 0,
+      "size_kb": 16
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+      "private_kb": 16,
+      "pss_kb": 16,
+      "rss_kb": 16,
+      "shared_kb": 0,
+      "size_kb": 16
+    },
+    {
+      "path": "[stack]",
+      "private_kb": 16,
+      "pss_kb": 16,
+      "rss_kb": 16,
+      "shared_kb": 0,
+      "size_kb": 136
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libmkl_rt.so",
+      "private_kb": 12,
+      "pss_kb": 12,
+      "rss_kb": 12,
+      "shared_kb": 0,
+      "size_kb": 32
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1",
+      "private_kb": 8,
+      "pss_kb": 8,
+      "rss_kb": 8,
+      "shared_kb": 0,
+      "size_kb": 8
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+      "private_kb": 8,
+      "pss_kb": 8,
+      "rss_kb": 8,
+      "shared_kb": 0,
+      "size_kb": 8
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libm.so.6",
+      "private_kb": 8,
+      "pss_kb": 8,
+      "rss_kb": 8,
+      "shared_kb": 0,
+      "size_kb": 8
+    },
+    {
+      "path": "",
+      "private_kb": 8,
+      "pss_kb": 8,
+      "rss_kb": 8,
+      "shared_kb": 0,
+      "size_kb": 8
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/liburing.so.2.1.0",
+      "private_kb": 8,
+      "pss_kb": 8,
+      "rss_kb": 8,
+      "shared_kb": 0,
+      "size_kb": 8
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/liburing.so.2.1.0",
+      "private_kb": 8,
+      "pss_kb": 8,
+      "rss_kb": 8,
+      "shared_kb": 0,
+      "size_kb": 8
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9",
+      "private_kb": 8,
+      "pss_kb": 8,
+      "rss_kb": 8,
+      "shared_kb": 0,
+      "size_kb": 8
+    }
+  ]
+}

@@ -63,6 +63,7 @@ class PresetSpec:
     mem_l: int
     l_values: tuple[int, ...]
     truthset: str = "null"
+    env_overrides: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -70,6 +71,7 @@ class SearchCommandSpec:
     name: str
     command: list[str]
     command_source: str
+    env_overrides: dict[str, str]
     index_prefix: Path | None
     query_bin: Path | None
     query_labels: Path | None
@@ -95,6 +97,53 @@ class PhaseEvent:
     label: str
     line: str
     elapsed_seconds: float
+
+
+def default_preset_env_overrides() -> tuple[tuple[str, str], ...]:
+    return (("PIPEANN_PQ_MMAP", os.environ.get("PIPEANN_PQ_MMAP", "1")),)
+
+
+def build_final_mixed_sift1m_cases() -> tuple[PresetSpec, ...]:
+    common_env = default_preset_env_overrides()
+    workload_root = REPO_ROOT / "data" / "sift1m" / "uniform_exact_selectivity"
+    # Pick the heaviest bucket per route from the final mixed experiment so
+    # resident profiling sees the largest route-specific working set.
+    return (
+        PresetSpec(
+            name="sift1m_final_mixed_prefilter_u1e-01",
+            index_type="float",
+            index_prefix=REPO_ROOT / "data" / "sift1m" / "sift1m_pipeann_uniform_pq32",
+            query_bin=workload_root / "u1e-01" / "probe_query.bin",
+            query_labels=workload_root / "u1e-01" / "probe_query.spmat",
+            selector_type="intersect",
+            threads=1,
+            beamwidth=4,
+            k=10,
+            similarity="l2",
+            nbr_type="pq",
+            route="prefilter",
+            mem_l=0,
+            l_values=(100,),
+            env_overrides=common_env,
+        ),
+        PresetSpec(
+            name="sift1m_final_mixed_graph_u100",
+            index_type="float",
+            index_prefix=REPO_ROOT / "data" / "sift1m" / "sift1m_pipeann_uniform_pq16",
+            query_bin=workload_root / "u100" / "probe_query.bin",
+            query_labels=workload_root / "u100" / "probe_query.spmat",
+            selector_type="intersect",
+            threads=1,
+            beamwidth=4,
+            k=10,
+            similarity="l2",
+            nbr_type="pq",
+            route="graph",
+            mem_l=0,
+            l_values=(100,),
+            env_overrides=common_env,
+        ),
+    )
 
 
 def build_presets() -> dict[str, PresetSpec]:
@@ -130,6 +179,7 @@ def build_presets() -> dict[str, PresetSpec]:
             route="auto",
             mem_l=0,
             l_values=(100,),
+            env_overrides=default_preset_env_overrides(),
         ),
         "sift1m": PresetSpec(
             name="sift1m",
@@ -160,11 +210,16 @@ def build_presets() -> dict[str, PresetSpec]:
             route="auto",
             mem_l=0,
             l_values=(100,),
+            env_overrides=default_preset_env_overrides(),
         ),
     }
 
 
 PRESETS = build_presets()
+COMPOSITE_PRESETS = {
+    "sift1m_final_mixed": build_final_mixed_sift1m_cases(),
+}
+PRESET_CHOICES = tuple(sorted(set(PRESETS) | set(COMPOSITE_PRESETS)))
 
 
 def resolve_path(path_str: str) -> Path:
@@ -259,7 +314,13 @@ def parse_l_values(raw: str) -> tuple[int, ...]:
     return values
 
 
-def build_search_command(spec: PresetSpec, build_dir: Path, l_values: Sequence[int], route: str) -> SearchCommandSpec:
+def build_search_command(
+    spec: PresetSpec,
+    build_dir: Path,
+    l_values: Sequence[int],
+    route: str,
+    preset_name: str | None = None,
+) -> SearchCommandSpec:
     search_binary = find_binary(build_dir, "search_disk_index_hybrid")
     require_file(Path(f"{spec.index_prefix}_disk.index"), "disk index")
     require_file(spec.query_bin, "query bin")
@@ -287,6 +348,7 @@ def build_search_command(spec: PresetSpec, build_dir: Path, l_values: Sequence[i
         name=spec.name,
         command=command,
         command_source="preset",
+        env_overrides=dict(spec.env_overrides),
         index_prefix=spec.index_prefix,
         query_bin=spec.query_bin,
         query_labels=spec.query_labels,
@@ -294,11 +356,11 @@ def build_search_command(spec: PresetSpec, build_dir: Path, l_values: Sequence[i
         index_type=spec.index_type,
         search_binary=search_binary,
         truthset=spec.truthset,
-        preset_name=spec.name,
+        preset_name=preset_name or spec.name,
     )
 
 
-def build_command_spec(args: argparse.Namespace) -> SearchCommandSpec:
+def build_command_specs(args: argparse.Namespace) -> list[SearchCommandSpec]:
     if args.command and args.preset:
         raise ValueError("use either --preset or --command, not both")
     if not args.command and not args.preset:
@@ -311,27 +373,40 @@ def build_command_spec(args: argparse.Namespace) -> SearchCommandSpec:
         if not command:
             raise ValueError("--command must not be empty")
         search_binary = resolve_search_binary(command)
-        return SearchCommandSpec(
-            name=args.name,
-            command=command,
-            command_source="explicit",
-            index_prefix=resolve_path(args.index_prefix) if args.index_prefix else None,
-            query_bin=resolve_path(args.query_bin) if args.query_bin else None,
-            query_labels=resolve_path(args.query_labels) if args.query_labels else None,
-            selector_type=args.selector_type,
-            index_type=args.index_type,
-            search_binary=search_binary,
-            truthset=args.truthset,
-        )
+        return [
+            SearchCommandSpec(
+                name=args.name,
+                command=command,
+                command_source="explicit",
+                env_overrides={},
+                index_prefix=resolve_path(args.index_prefix) if args.index_prefix else None,
+                query_bin=resolve_path(args.query_bin) if args.query_bin else None,
+                query_labels=resolve_path(args.query_labels) if args.query_labels else None,
+                selector_type=args.selector_type,
+                index_type=args.index_type,
+                search_binary=search_binary,
+                truthset=args.truthset,
+            )
+        ]
 
-    preset = PRESETS[args.preset]
+    if args.preset in COMPOSITE_PRESETS:
+        if args.name:
+            raise ValueError("--name is not supported with composite presets")
+        if args.route:
+            raise ValueError("--route is not supported with composite presets")
+        presets = list(COMPOSITE_PRESETS[args.preset])
+    else:
+        presets = [PRESETS[args.preset]]
+
     build_dir = resolve_path(args.build_dir)
-    l_values = parse_l_values(args.l_values) if args.l_values else preset.l_values
-    route = args.route or preset.route
-    spec = build_search_command(preset, build_dir, l_values, route)
+    specs: list[SearchCommandSpec] = []
+    for preset in presets:
+        current_l_values = parse_l_values(args.l_values) if args.l_values else preset.l_values
+        route = args.route or preset.route
+        specs.append(build_search_command(preset, build_dir, current_l_values, route, preset_name=args.preset))
     if args.name:
-        spec.name = args.name
-    return spec
+        specs[0].name = args.name
+    return specs
 
 
 def parse_rollup(pid: int) -> dict[str, int]:
@@ -465,6 +540,30 @@ def safe_run_capture(command: Sequence[str]) -> str | None:
     return result.stdout or result.stderr
 
 
+def total_entry_rss(entries: Sequence[dict[str, int | str]]) -> int:
+    return sum(int(entry["rss_kb"]) for entry in entries)
+
+
+def smaps_snapshot_complete(rollup: dict[str, int], entries: Sequence[dict[str, int | str]]) -> bool:
+    rollup_rss = rollup.get("Rss", 0)
+    if rollup_rss <= 0:
+        return True
+    return total_entry_rss(entries) >= int(rollup_rss * 0.8)
+
+
+def build_invocation_command(spec: SearchCommandSpec) -> list[str]:
+    if not spec.env_overrides:
+        return list(spec.command)
+    env_assignments = [f"{key}={value}" for key, value in sorted(spec.env_overrides.items())]
+    return ["env", *env_assignments, *spec.command]
+
+
+def build_process_env(spec: SearchCommandSpec) -> dict[str, str]:
+    env = os.environ.copy()
+    env.update(spec.env_overrides)
+    return env
+
+
 def capture_snapshot(
     pid: int,
     spec: SearchCommandSpec,
@@ -472,14 +571,23 @@ def capture_snapshot(
     label: str,
     elapsed_seconds: float,
 ) -> dict[str, object]:
-    rollup = parse_rollup(pid)
-    entries = parse_smaps(pid)
+    rollup: dict[str, int] = {}
+    entries: list[dict[str, int | str]] = []
+    for attempt in range(4):
+        rollup = parse_rollup(pid)
+        entries = parse_smaps(pid)
+        if smaps_snapshot_complete(rollup, entries) or attempt == 3:
+            break
+        time.sleep(0.01)
     categories = aggregate_categories(entries, spec)
     mappings = top_mappings(entries)
+    smaps_total_rss_kb = total_entry_rss(entries)
     payload = {
         "label": label,
         "elapsed_seconds": elapsed_seconds,
         "rollup_kb": rollup,
+        "smaps_total_rss_kb": smaps_total_rss_kb,
+        "smaps_complete": smaps_snapshot_complete(rollup, entries),
         "categories": categories,
         "top_mappings": mappings,
     }
@@ -650,6 +758,8 @@ def run_resident(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
             "name": spec.name,
             "preset": spec.preset_name,
             "command": spec.command,
+            "env_overrides": spec.env_overrides,
+            "invocation_command": build_invocation_command(spec),
             "command_source": spec.command_source,
             "index_prefix": None if spec.index_prefix is None else str(spec.index_prefix),
             "query_bin": None if spec.query_bin is None else str(spec.query_bin),
@@ -662,13 +772,13 @@ def run_resident(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
 
     start_time = time.perf_counter()
     process = subprocess.Popen(
-        spec.command,
+        build_invocation_command(spec),
         cwd=REPO_ROOT,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         bufsize=1,
-        env=os.environ.copy(),
+        env=build_process_env(spec),
     )
     reader = OutputReader(process, resident_root / "command.log", start_time)
     reader.start()
@@ -720,6 +830,7 @@ def run_resident(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
         "name": spec.name,
         "preset": spec.preset_name,
         "command": spec.command,
+        "env_overrides": spec.env_overrides,
         "command_source": spec.command_source,
         "elapsed_seconds": elapsed_seconds,
         "exit_code": exit_code,
@@ -762,7 +873,7 @@ def run_massif(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
         "--pages-as-heap=yes",
         f"--massif-out-file={massif_out}",
         "--time-unit=ms",
-        *spec.command,
+        *build_invocation_command(spec),
     ]
     result = subprocess.run(
         command,
@@ -770,7 +881,7 @@ def run_massif(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
         text=True,
         capture_output=True,
         check=False,
-        env=os.environ.copy(),
+        env=build_process_env(spec),
     )
     ensure_parent(log_path)
     valgrind_output = result.stdout + result.stderr
@@ -787,14 +898,14 @@ def run_massif(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
         heaptrack = require_tool("heaptrack")
         heaptrack_data = massif_root / "heaptrack.raw.gz"
         heaptrack_log_path = massif_root / "heaptrack.log"
-        heaptrack_command = [heaptrack, "-o", str(heaptrack_data), *spec.command]
+        heaptrack_command = [heaptrack, "-o", str(heaptrack_data), *build_invocation_command(spec)]
         heaptrack_result = subprocess.run(
             heaptrack_command,
             cwd=REPO_ROOT,
             text=True,
             capture_output=True,
             check=False,
-            env=os.environ.copy(),
+            env=build_process_env(spec),
         )
         heaptrack_log_path.write_text(heaptrack_result.stdout + heaptrack_result.stderr, encoding="utf-8")
         if heaptrack_result.returncode != 0:
@@ -836,6 +947,7 @@ def run_massif(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
             "format": "pipeann.memory.massif.v1",
             "name": spec.name,
             "command": command,
+            "env_overrides": spec.env_overrides,
             "command_source": spec.command_source,
             "exit_code": result.returncode,
             "backend": backend,
@@ -875,7 +987,7 @@ def run_perf(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
         "--call-graph",
         "dwarf",
         "--",
-        *spec.command,
+        *build_invocation_command(spec),
     ]
     record_result = subprocess.run(
         record_command,
@@ -883,7 +995,7 @@ def run_perf(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
         text=True,
         capture_output=True,
         check=False,
-        env=os.environ.copy(),
+        env=build_process_env(spec),
     )
     used_sudo = False
     record_output = record_result.stdout + record_result.stderr
@@ -895,7 +1007,7 @@ def run_perf(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
             text=True,
             capture_output=True,
             check=False,
-            env=os.environ.copy(),
+            env=build_process_env(spec),
         )
         record_output = record_output + "\n\n[retry-with-sudo]\n" + sudo_result.stdout + sudo_result.stderr
         record_result = sudo_result
@@ -952,6 +1064,7 @@ def run_perf(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
             "format": "pipeann.memory.perf.v1",
             "name": spec.name,
             "command": record_command,
+            "env_overrides": spec.env_overrides,
             "command_source": spec.command_source,
             "events": events.split(","),
             "exit_code": record_result.returncode,
@@ -970,7 +1083,7 @@ def run_perf(args: argparse.Namespace, spec: SearchCommandSpec) -> Path:
 
 
 def add_common_command_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--preset", choices=sorted(PRESETS))
+    parser.add_argument("--preset", choices=PRESET_CHOICES)
     parser.add_argument("--command", help="Raw command string to profile instead of a built-in preset.")
     parser.add_argument("--name", help="Run name. Required with --command; overrides preset name when provided.")
     parser.add_argument("--build-dir", default=str(DEFAULT_BUILD_DIR))
@@ -1045,20 +1158,24 @@ def main() -> int:
     if args.command_name == "doctor":
         return run_doctor(args)
 
-    spec = build_command_spec(args)
+    specs = build_command_specs(args)
     if args.command_name == "resident":
-        run_resident(args, spec)
+        for spec in specs:
+            run_resident(args, spec)
         return 0
     if args.command_name == "massif":
-        run_massif(args, spec)
+        for spec in specs:
+            run_massif(args, spec)
         return 0
     if args.command_name == "perf":
-        run_perf(args, spec)
+        for spec in specs:
+            run_perf(args, spec)
         return 0
     if args.command_name == "all":
-        run_resident(args, spec)
-        run_massif(args, spec)
-        run_perf(args, spec)
+        for spec in specs:
+            run_resident(args, spec)
+            run_massif(args, spec)
+            run_perf(args, spec)
         return 0
     raise ValueError(f"unsupported command: {args.command_name}")
 

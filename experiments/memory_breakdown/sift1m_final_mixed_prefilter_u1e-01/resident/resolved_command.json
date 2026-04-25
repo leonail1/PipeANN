@@ -1,0 +1,53 @@
+{
+  "command": [
+    "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+    "float",
+    "/mnt/data/lzg/PipeANN/data/sift1m/sift1m_pipeann_uniform_pq32",
+    "1",
+    "4",
+    "/mnt/data/lzg/PipeANN/data/sift1m/uniform_exact_selectivity/u1e-01/probe_query.bin",
+    "null",
+    "10",
+    "l2",
+    "pq",
+    "intersect",
+    "/mnt/data/lzg/PipeANN/data/sift1m/uniform_exact_selectivity/u1e-01/probe_query.spmat",
+    "prefilter",
+    "0",
+    "0",
+    "100"
+  ],
+  "command_source": "preset",
+  "env_overrides": {
+    "PIPEANN_PQ_MMAP": "1"
+  },
+  "format": "pipeann.memory.command.v1",
+  "index_prefix": "/mnt/data/lzg/PipeANN/data/sift1m/sift1m_pipeann_uniform_pq32",
+  "index_type": "float",
+  "invocation_command": [
+    "env",
+    "PIPEANN_PQ_MMAP=1",
+    "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+    "float",
+    "/mnt/data/lzg/PipeANN/data/sift1m/sift1m_pipeann_uniform_pq32",
+    "1",
+    "4",
+    "/mnt/data/lzg/PipeANN/data/sift1m/uniform_exact_selectivity/u1e-01/probe_query.bin",
+    "null",
+    "10",
+    "l2",
+    "pq",
+    "intersect",
+    "/mnt/data/lzg/PipeANN/data/sift1m/uniform_exact_selectivity/u1e-01/probe_query.spmat",
+    "prefilter",
+    "0",
+    "0",
+    "100"
+  ],
+  "name": "sift1m_final_mixed_prefilter_u1e-01",
+  "preset": "sift1m_final_mixed",
+  "query_bin": "/mnt/data/lzg/PipeANN/data/sift1m/uniform_exact_selectivity/u1e-01/probe_query.bin",
+  "query_labels": "/mnt/data/lzg/PipeANN/data/sift1m/uniform_exact_selectivity/u1e-01/probe_query.spmat",
+  "search_binary": "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+  "selector_type": "intersect"
+}
