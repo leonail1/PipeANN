@@ -111,7 +111,7 @@ class PyIndex : public BasePyIndex {
   // Use file path to build. For easier interface, refer to PyIndexInterface.
   void build(const std::string &data_path, const std::string &index_prefix, const char *tag_file = nullptr,
              bool build_mem_index = false, uint32_t max_nbrs = 0, uint32_t build_L = 0, uint32_t PQ_bytes = 32,
-             uint32_t memory_use_GB = 0) {
+             uint32_t memory_use_GB = 0, const char *label_source_file = nullptr) {
     // automatically configure max_nbrs.
     size_t nr = 0, nc = 0;
     pipeann::get_bin_metadata(data_path, nr, nc);
@@ -133,9 +133,14 @@ class PyIndex : public BasePyIndex {
       memory_use_GB = info.totalram / (1024 * 1024 * 1024) * 3 / 4;
       LOG(INFO) << "Memory use not specified. Using 75% of total memory: " << memory_use_GB << "GB";
     }
+    std::unique_ptr<pipeann::AbstractLabel> label;
+    if (label_source_file != nullptr && label_source_file[0] != '\0') {
+      label = std::make_unique<pipeann::SpmatLabel>(label_source_file);
+    }
+
     pipeann::build_disk_index<T, TagT>(data_path.c_str(), index_prefix.c_str(), max_nbrs, build_L, memory_use_GB,
                                        params_.max_nthreads, PQ_bytes, params_.metric, tag_file, nbr_handler_,
-                                       nullptr);  // create tag later.
+                                       label.get(), label_source_file);  // create tag later.
 
     if (build_mem_index) {
       build_mem(data_path, index_prefix);
@@ -341,7 +346,7 @@ class PyIndexInterface {
   // build
   void build(const std::string &data_path, const std::string &index_prefix, const char *tag_file = nullptr,
              bool build_mem_index = false, uint32_t max_nbrs = 0, uint32_t build_L = 0, uint32_t PQ_bytes = 32,
-             uint32_t memory_use_GB = 0);
+             uint32_t memory_use_GB = 0, const char *label_source_file = nullptr);
 
   // updates and queries
   std::tuple<py::array, py::array> search(py::array &queries, uint32_t topk, uint32_t L);

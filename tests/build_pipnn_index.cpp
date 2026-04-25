@@ -25,6 +25,7 @@ int main(int argc, char **argv) {
     std::string nbr_type = argv[11];
     std::string label_type = argc > 13 ? argv[12] : "null";
     std::string label_file = argc > 13 ? argv[13] : "";
+    const char *label_source_file = label_file.empty() ? nullptr : label_file.c_str();
 
     pipeann::AbstractLabel *label = nullptr;
     if (label_type == "spmat") {
@@ -45,15 +46,15 @@ int main(int argc, char **argv) {
     if (std::string(argv[1]) == std::string("float")) {
       pipeann::AbstractNeighbor<float> *nbr_handler = pipeann::get_nbr_handler<float>(m, nbr_type);
       pipeann::build_pipnn_index<float>(argv[2], argv[3], R, l1_fanout, l2_fanout, M, T, pq_bytes, m, nullptr,
-                                        nbr_handler, label);
+                                        nbr_handler, label, label_source_file);
     } else if (std::string(argv[1]) == std::string("int8")) {
       pipeann::AbstractNeighbor<int8_t> *nbr_handler = pipeann::get_nbr_handler<int8_t>(m, nbr_type);
       pipeann::build_pipnn_index<int8_t>(argv[2], argv[3], R, l1_fanout, l2_fanout, M, T, pq_bytes, m, nullptr,
-                                         nbr_handler, label);
+                                         nbr_handler, label, label_source_file);
     } else if (std::string(argv[1]) == std::string("uint8")) {
       pipeann::AbstractNeighbor<uint8_t> *nbr_handler = pipeann::get_nbr_handler<uint8_t>(m, nbr_type);
       pipeann::build_pipnn_index<uint8_t>(argv[2], argv[3], R, l1_fanout, l2_fanout, M, T, pq_bytes, m, nullptr,
-                                          nbr_handler, label);
+                                          nbr_handler, label, label_source_file);
     } else {
       LOG(ERROR) << "Error. wrong file type";
     }

@@ -1,0 +1,54 @@
+{
+  "format": "pipeann.memory.doctor.v1",
+  "tools": [
+    {
+      "install_packages": [
+        "heaptrack"
+      ],
+      "installed": true,
+      "name": "heaptrack",
+      "path": "/usr/bin/heaptrack"
+    },
+    {
+      "install_packages": [
+        "heaptrack"
+      ],
+      "installed": true,
+      "name": "heaptrack_print",
+      "path": "/usr/bin/heaptrack_print"
+    },
+    {
+      "install_packages": [
+        "valgrind"
+      ],
+      "installed": true,
+      "name": "ms_print",
+      "path": "/usr/bin/ms_print"
+    },
+    {
+      "install_packages": [
+        "linux-tools-generic",
+        "linux-tools-$(uname -r)"
+      ],
+      "installed": true,
+      "name": "perf",
+      "path": "/usr/bin/perf"
+    },
+    {
+      "install_packages": [
+        "procps"
+      ],
+      "installed": true,
+      "name": "pmap",
+      "path": "/usr/bin/pmap"
+    },
+    {
+      "install_packages": [
+        "valgrind"
+      ],
+      "installed": true,
+      "name": "valgrind",
+      "path": "/usr/bin/valgrind"
+    }
+  ]
+}

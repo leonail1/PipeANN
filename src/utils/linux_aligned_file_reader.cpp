@@ -2,8 +2,10 @@
 #include "linux_aligned_file_reader.h"
 
 #include <cassert>
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include "aligned_file_reader.h"
 #include "liburing.h"
@@ -12,11 +14,53 @@
 
 namespace {
   constexpr uint64_t kNoUserData = 0;
+
+  void blocking_io(int fd, IORequest &req, bool write) {
+    req.finished = false;
+    char *cursor = static_cast<char *>(req.buf);
+    size_t remaining = static_cast<size_t>(req.len);
+    uint64_t offset = req.offset;
+    while (remaining > 0) {
+      ssize_t ret = write ? ::pwrite(fd, cursor, remaining, static_cast<off_t>(offset))
+                          : ::pread(fd, cursor, remaining, static_cast<off_t>(offset));
+      if (ret < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        LOG(ERROR) << (write ? "pwrite" : "pread") << " failed: " << ::strerror(errno)
+                   << ", offset=" << offset << ", len=" << remaining;
+        crash();
+      }
+      if (ret == 0) {
+        LOG(ERROR) << (write ? "pwrite" : "pread") << " returned 0 unexpectedly"
+                   << ", offset=" << offset << ", len=" << remaining;
+        crash();
+      }
+      cursor += ret;
+      remaining -= static_cast<size_t>(ret);
+      offset += static_cast<uint64_t>(ret);
+    }
+    req.finished = true;
+  }
+
   void execute_io(void *context, int fd, std::vector<IORequest> &reqs, uint64_t n_retries = 0, bool write = false) {
     io_uring *ring = (io_uring *) context;
+    if (ring == nullptr || reqs.size() > MAX_EVENTS) {
+      for (auto &req : reqs) {
+        blocking_io(fd, req, write);
+      }
+      return;
+    }
+
     while (true) {
       for (uint64_t j = 0; j < reqs.size(); j++) {
         auto sqe = io_uring_get_sqe(ring);
+        if (sqe == nullptr) {
+          for (auto &req : reqs) {
+            blocking_io(fd, req, write);
+          }
+          return;
+        }
         sqe->user_data = kNoUserData;
         if (write) {
           io_uring_prep_write(sqe, fd, reqs[j].buf, reqs[j].len, reqs[j].offset);
@@ -84,7 +128,18 @@ void *LinuxAlignedFileReader::get_ctx(int flag) {
 void LinuxAlignedFileReader::register_thread(int flag) {
   if (ioctx::ring == nullptr) {
     ioctx::ring = new io_uring();
-    io_uring_queue_init(MAX_EVENTS, ioctx::ring, flag);
+    int ret = io_uring_queue_init(MAX_EVENTS, ioctx::ring, flag);
+    if (ret < 0 && flag != 0) {
+      LOG(WARNING) << "io_uring_queue_init failed with flag=" << flag << ", retry without SQPOLL: "
+                   << strerror(-ret);
+      ret = io_uring_queue_init(MAX_EVENTS, ioctx::ring, 0);
+    }
+    if (ret < 0) {
+      delete ioctx::ring;
+      ioctx::ring = nullptr;
+      LOG(ERROR) << "io_uring_queue_init failed: " << strerror(-ret);
+      crash();
+    }
   }
 }
 
@@ -152,7 +207,15 @@ void LinuxAlignedFileReader::write_fd(int fd, std::vector<IORequest> &write_reqs
 
 void LinuxAlignedFileReader::send_io(IORequest &req, void *ctx, bool write) {
   io_uring *ring = (io_uring *) ctx;
+  if (ring == nullptr) {
+    blocking_io(this->file_desc, req, write);
+    return;
+  }
   auto sqe = io_uring_get_sqe(ring);
+  if (sqe == nullptr) {
+    blocking_io(this->file_desc, req, write);
+    return;
+  }
   req.finished = false;
   sqe->user_data = (uint64_t) &req;
   if (write) {
@@ -165,8 +228,23 @@ void LinuxAlignedFileReader::send_io(IORequest &req, void *ctx, bool write) {
 
 void LinuxAlignedFileReader::send_io(std::vector<IORequest> &reqs, void *ctx, bool write) {
   io_uring *ring = (io_uring *) ctx;
+  if (ring == nullptr) {
+    for (auto &req : reqs) {
+      blocking_io(this->file_desc, req, write);
+    }
+    return;
+  }
   for (uint64_t j = 0; j < reqs.size(); j++) {
     auto sqe = io_uring_get_sqe(ring);
+    if (sqe == nullptr) {
+      for (uint64_t k = j; k < reqs.size(); ++k) {
+        blocking_io(this->file_desc, reqs[k], write);
+      }
+      if (j != 0) {
+        io_uring_submit(ring);
+      }
+      return;
+    }
     reqs[j].finished = false;
     sqe->user_data = (uint64_t) &reqs[j];
     if (write) {

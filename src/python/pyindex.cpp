@@ -82,13 +82,16 @@ bool PyIndexInterface::save(const std::string &index_prefix) {
 
 void PyIndexInterface::build(const std::string &data_path, const std::string &index_prefix, const char *tag_file,
                              bool build_mem_index, uint32_t max_nbrs, uint32_t build_L, uint32_t PQ_bytes,
-                             uint32_t memory_use_GB) {
+                             uint32_t memory_use_GB, const char *label_source_file) {
   if (auto *p = get<float>())
-    return p->build(data_path, index_prefix, tag_file, build_mem_index, max_nbrs, build_L, PQ_bytes, memory_use_GB);
+    return p->build(data_path, index_prefix, tag_file, build_mem_index, max_nbrs, build_L, PQ_bytes, memory_use_GB,
+                    label_source_file);
   if (auto *p = get<uint8_t>())
-    return p->build(data_path, index_prefix, tag_file, build_mem_index, max_nbrs, build_L, PQ_bytes, memory_use_GB);
+    return p->build(data_path, index_prefix, tag_file, build_mem_index, max_nbrs, build_L, PQ_bytes, memory_use_GB,
+                    label_source_file);
   if (auto *p = get<int8_t>())
-    return p->build(data_path, index_prefix, tag_file, build_mem_index, max_nbrs, build_L, PQ_bytes, memory_use_GB);
+    return p->build(data_path, index_prefix, tag_file, build_mem_index, max_nbrs, build_L, PQ_bytes, memory_use_GB,
+                    label_source_file);
   throw std::runtime_error("Invalid underlying index");
 }
 

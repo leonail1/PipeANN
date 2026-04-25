@@ -87,6 +87,15 @@ namespace pipeann {
       std::filesystem::copy(prefix_in + "_partition.bin.aligned", prefix_out + "_partition.bin.aligned",
                             std::filesystem::copy_options::overwrite_existing);
     }
+
+    for (const std::string &suffix : {std::string("_labels.densebit"), std::string("_hybrid.meta")}) {
+      if (file_exists(prefix_in + suffix)) {
+        std::filesystem::copy(prefix_in + suffix, prefix_out + suffix,
+                              std::filesystem::copy_options::overwrite_existing);
+      } else {
+        std::filesystem::remove(prefix_out + suffix);
+      }
+    }
   }
 
   template<typename T, typename TagT>
@@ -108,7 +117,6 @@ namespace pipeann {
       LOG(INFO) << "Setup " << kBgIOThreads << " background I/O threads for insert...";
       for (int i = 0; i < kBgIOThreads; ++i) {
         bg_io_thread_[i] = new std::thread(&SSDIndex<T, TagT>::bg_io_thread, this);
-        bg_io_thread_[i]->detach();
       }
     } else {
       LOG(INFO) << "Low-memory search mode: skip background insert I/O threads";
@@ -125,6 +133,15 @@ namespace pipeann {
             .thread_data = nullptr, .writes = {}, .pages_to_unlock = {}, .pages_to_deref = {}, .terminate = true};
         bg_tasks.push(bg_task);
         bg_tasks.push_notify_all();
+      }
+    }
+
+    for (int i = 0; i < kBgIOThreads; ++i) {
+      if (bg_io_thread_[i] != nullptr) {
+        if (bg_io_thread_[i]->joinable()) {
+          bg_io_thread_[i]->join();
+        }
+        delete bg_io_thread_[i];
         bg_io_thread_[i] = nullptr;
       }
     }
@@ -190,9 +207,59 @@ namespace pipeann {
       this->load_tags(tag_file);
     }
 
+    this->load_hybrid_runtime(index_prefix);
+
     load_flag = true;
     LOG(INFO) << "SSDIndex loaded successfully.";
     return 0;
+  }
+
+  template<typename T, typename TagT>
+  int SSDIndex<T, TagT>::load_hybrid_runtime(const char *index_prefix) {
+    hybrid_runtime_enabled_ = false;
+    densebit_index_.reset();
+    hybrid_metadata_.reset();
+
+    const std::string sidecar_path = DenseBitsetIndex::default_sidecar_path(index_prefix);
+    if (!file_exists(sidecar_path)) {
+      LOG(INFO) << "Hybrid densebit sidecar not found: " << sidecar_path;
+      return -1;
+    }
+
+    try {
+      densebit_index_ = DenseBitsetIndex::load(sidecar_path, meta_.npoints);
+      LOG(INFO) << "Hybrid densebit runtime loaded from " << sidecar_path;
+    } catch (const std::exception &e) {
+      LOG(WARNING) << "Disabling hybrid runtime: " << e.what();
+      densebit_index_.reset();
+      hybrid_runtime_enabled_ = false;
+      return -1;
+    }
+
+    const std::string meta_path = HybridMetadata::default_metadata_path(index_prefix);
+    if (!file_exists(meta_path)) {
+      LOG(INFO) << "Hybrid metadata file not found: " << meta_path;
+      return -1;
+    }
+
+    try {
+      hybrid_metadata_ = HybridMetadata::load(meta_path);
+      hybrid_metadata_->validate_against_densebit(densebit_index_->header());
+      hybrid_metadata_->validate_against_npoints(meta_.npoints);
+      hybrid_runtime_enabled_ = true;
+      LOG(INFO) << "Hybrid metadata loaded from " << meta_path;
+      return 0;
+    } catch (const std::exception &e) {
+      LOG(WARNING) << "Disabling hybrid runtime: " << e.what();
+      hybrid_metadata_.reset();
+      hybrid_runtime_enabled_ = false;
+      return -1;
+    }
+  }
+
+  template<typename T, typename TagT>
+  bool SSDIndex<T, TagT>::hybrid_enabled() const {
+    return hybrid_runtime_enabled_;
   }
 
   template<typename T, typename TagT>

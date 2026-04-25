@@ -1,4 +1,9 @@
 build/
+experiments/**
+!experiments/**/
+!experiments/**/*.json
+!experiments/**/*.jsonl
+!experiments/**/*.png
 .vscode/
 indices/
 .cache/
@@ -7,10 +12,8 @@ data-example/*
 figures/*
 scripts/tests-pipeann/drop_cache
 pipeann/*.so
-pipeann/__pycache__/*
+__pycache__/
 pipeann.egg-info/
 dist/
-docs/**
-!docs/**/
-!docs/**/*.tex
-!docs/**/*.pdf
+docs/**/.*
+assets/

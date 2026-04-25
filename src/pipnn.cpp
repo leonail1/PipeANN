@@ -469,7 +469,11 @@ namespace pipeann {
   bool build_pipnn_index(const char *dataPath, const char *indexFilePath, uint32_t R, uint32_t l1_fanout,
                          uint32_t l2_fanout, uint32_t M, uint32_t num_threads, uint32_t bytes_per_nbr,
                          pipeann::Metric _compareMetric, const char *tag_file, AbstractNeighbor<T> *nbr_handler,
-                         AbstractLabel *label) {
+                         AbstractLabel *label, const char *label_source_file) {
+    if (!validate_label_build_inputs(label, label_source_file)) {
+      return false;
+    }
+
     std::string dataFilePath(dataPath);
     std::string index_prefix_path(indexFilePath);
     std::string mem_index_path = index_prefix_path + "_mem.index";
@@ -506,10 +510,12 @@ namespace pipeann {
     LOG(INFO) << "PiPNN index built in: " << std::chrono::duration<double>(end - start).count() << "s.";
 
     if (tag_file == nullptr) {
-      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, "", disk_index_path, label);
+      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, "", disk_index_path, label,
+                                           label_source_file == nullptr ? "" : label_source_file);
     } else {
       std::string tag_filename = std::string(tag_file);
-      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, tag_filename, disk_index_path, label);
+      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, tag_filename, disk_index_path, label,
+                                           label_source_file == nullptr ? "" : label_source_file);
     }
 
     LOG(INFO) << "Deleting memory index file: " << mem_index_path;
@@ -541,11 +547,11 @@ namespace pipeann {
 
   template bool build_pipnn_index<int8_t, uint32_t>(const char *, const char *, uint32_t, uint32_t, uint32_t, uint32_t,
                                                      uint32_t, uint32_t, pipeann::Metric, const char *,
-                                                     AbstractNeighbor<int8_t> *, AbstractLabel *);
+                                                     AbstractNeighbor<int8_t> *, AbstractLabel *, const char *);
   template bool build_pipnn_index<uint8_t, uint32_t>(const char *, const char *, uint32_t, uint32_t, uint32_t, uint32_t,
                                                       uint32_t, uint32_t, pipeann::Metric, const char *,
-                                                      AbstractNeighbor<uint8_t> *, AbstractLabel *);
+                                                      AbstractNeighbor<uint8_t> *, AbstractLabel *, const char *);
   template bool build_pipnn_index<float, uint32_t>(const char *, const char *, uint32_t, uint32_t, uint32_t, uint32_t,
                                                     uint32_t, uint32_t, pipeann::Metric, const char *,
-                                                    AbstractNeighbor<float> *, AbstractLabel *);
+                                                    AbstractNeighbor<float> *, AbstractLabel *, const char *);
 }  // namespace pipeann

@@ -1,0 +1,263 @@
+{
+  "categories": [
+    {
+      "category": "heap_mapping",
+      "private_kb": 479052,
+      "pss_kb": 479052,
+      "rss_kb": 479052,
+      "shared_kb": 0,
+      "size_kb": 534188
+    },
+    {
+      "category": "shared_libs",
+      "private_kb": 2060,
+      "pss_kb": 2338,
+      "rss_kb": 6248,
+      "shared_kb": 4188,
+      "size_kb": 14616
+    },
+    {
+      "category": "anonymous",
+      "private_kb": 2404,
+      "pss_kb": 2404,
+      "rss_kb": 2404,
+      "shared_kb": 0,
+      "size_kb": 419996
+    },
+    {
+      "category": "densebit_sidecar",
+      "private_kb": 1344,
+      "pss_kb": 1344,
+      "rss_kb": 1344,
+      "shared_kb": 0,
+      "size_kb": 244611820
+    },
+    {
+      "category": "search_binary",
+      "private_kb": 1200,
+      "pss_kb": 1200,
+      "rss_kb": 1200,
+      "shared_kb": 0,
+      "size_kb": 2040
+    },
+    {
+      "category": "stack",
+      "private_kb": 28,
+      "pss_kb": 28,
+      "rss_kb": 28,
+      "shared_kb": 0,
+      "size_kb": 136
+    },
+    {
+      "category": "vdso",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 4,
+      "shared_kb": 4,
+      "size_kb": 8
+    },
+    {
+      "category": "vvar",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 0,
+      "shared_kb": 0,
+      "size_kb": 16
+    },
+    {
+      "category": "vsyscall",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 0,
+      "shared_kb": 0,
+      "size_kb": 4
+    }
+  ],
+  "elapsed_seconds": 19.210999037022702,
+  "label": "172_interval",
+  "rollup_kb": {
+    "55ec363ea000-7fffbdbdb000 ---p 00000000 00": 0,
+    "AnonHugePages": 0,
+    "Anonymous": 481716,
+    "FilePmdMapped": 0,
+    "LazyFree": 0,
+    "Locked": 0,
+    "Private_Clean": 4372,
+    "Private_Dirty": 481716,
+    "Private_Hugetlb": 0,
+    "Pss": 486373,
+    "Pss_Anon": 481716,
+    "Pss_File": 4657,
+    "Pss_Shmem": 0,
+    "Referenced": 490280,
+    "Rss": 490280,
+    "Shared_Clean": 4192,
+    "Shared_Dirty": 0,
+    "Shared_Hugetlb": 0,
+    "ShmemPmdMapped": 0,
+    "Swap": 0,
+    "SwapPss": 0
+  },
+  "top_mappings": [
+    {
+      "path": "[heap]",
+      "private_kb": 479052,
+      "pss_kb": 479052,
+      "rss_kb": 479052,
+      "shared_kb": 0,
+      "size_kb": 534188
+    },
+    {
+      "path": "",
+      "private_kb": 1672,
+      "pss_kb": 1672,
+      "rss_kb": 1672,
+      "shared_kb": 0,
+      "size_kb": 1752
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libmkl_rt.so",
+      "private_kb": 1408,
+      "pss_kb": 1408,
+      "rss_kb": 1408,
+      "shared_kb": 0,
+      "size_kb": 5356
+    },
+    {
+      "path": "/mnt/data/lzg/PipeANN/data/yfcc100M/yfcc10m_pipeann_labels.densebit",
+      "private_kb": 1344,
+      "pss_kb": 1344,
+      "rss_kb": 1344,
+      "shared_kb": 0,
+      "size_kb": 244611820
+    },
+    {
+      "path": "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+      "private_kb": 1012,
+      "pss_kb": 1012,
+      "rss_kb": 1012,
+      "shared_kb": 0,
+      "size_kb": 1836
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libc.so.6",
+      "private_kb": 0,
+      "pss_kb": 8,
+      "rss_kb": 980,
+      "shared_kb": 980,
+      "size_kb": 1620
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.35",
+      "private_kb": 0,
+      "pss_kb": 35,
+      "rss_kb": 892,
+      "shared_kb": 892,
+      "size_kb": 1388
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.35",
+      "private_kb": 0,
+      "pss_kb": 24,
+      "rss_kb": 652,
+      "shared_kb": 652,
+      "size_kb": 652
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libc.so.6",
+      "private_kb": 0,
+      "pss_kb": 26,
+      "rss_kb": 320,
+      "shared_kb": 320,
+      "size_kb": 352
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+      "private_kb": 76,
+      "pss_kb": 168,
+      "rss_kb": 260,
+      "shared_kb": 184,
+      "size_kb": 264
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libm.so.6",
+      "private_kb": 0,
+      "pss_kb": 4,
+      "rss_kb": 236,
+      "shared_kb": 236,
+      "size_kb": 496
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.35",
+      "private_kb": 0,
+      "pss_kb": 27,
+      "rss_kb": 192,
+      "shared_kb": 192,
+      "size_kb": 568
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+      "private_kb": 0,
+      "pss_kb": 1,
+      "rss_kb": 168,
+      "shared_kb": 168,
+      "size_kb": 168
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libc.so.6",
+      "private_kb": 0,
+      "pss_kb": 1,
+      "rss_kb": 160,
+      "shared_kb": 160,
+      "size_kb": 160
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9",
+      "private_kb": 152,
+      "pss_kb": 152,
+      "rss_kb": 152,
+      "shared_kb": 0,
+      "size_kb": 152
+    },
+    {
+      "path": "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+      "private_kb": 136,
+      "pss_kb": 136,
+      "rss_kb": 136,
+      "shared_kb": 0,
+      "size_kb": 152
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9",
+      "private_kb": 76,
+      "pss_kb": 76,
+      "rss_kb": 76,
+      "shared_kb": 0,
+      "size_kb": 76
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1",
+      "private_kb": 0,
+      "pss_kb": 1,
+      "rss_kb": 64,
+      "shared_kb": 64,
+      "size_kb": 144
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+      "private_kb": 0,
+      "pss_kb": 32,
+      "rss_kb": 64,
+      "shared_kb": 64,
+      "size_kb": 64
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9",
+      "private_kb": 64,
+      "pss_kb": 64,
+      "rss_kb": 64,
+      "shared_kb": 0,
+      "size_kb": 64
+    }
+  ]
+}

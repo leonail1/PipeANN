@@ -1,13 +1,13 @@
 #include <algorithm>
 #include <cassert>
+#include <cerrno>
+#include <chrono>
+#include <cblas.h>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
-#include <cblas.h>
-#include <chrono>
-#include <cblas.h>
 
 #include "utils/index_build_utils.h"
 #include "utils/cached_io.h"
@@ -17,6 +17,151 @@
 #include "utils.h"
 
 namespace pipeann {
+  namespace {
+    constexpr uint64_t kDenseBitsetMagic = 0x54494245534E4544ULL;
+    constexpr uint64_t kDenseBitsetVersion = 1ULL;
+
+    struct DenseBitsetFileHeaderV1 {
+      uint64_t magic = kDenseBitsetMagic;
+      uint64_t version = kDenseBitsetVersion;
+      uint64_t npoints = 0;
+      uint64_t nlabels = 0;
+      uint64_t words_per_label = 0;
+      uint64_t nnz = 0;
+    };
+
+    uint64_t dense_words_per_label(uint64_t npoints) {
+      return DIV_ROUND_UP(npoints, 64ULL);
+    }
+
+    std::string densebit_sidecar_path_from_output(const std::string &output_file) {
+      static const std::string kDiskIndexSuffix = "_disk.index";
+      if (output_file.size() >= kDiskIndexSuffix.size()
+          && output_file.compare(output_file.size() - kDiskIndexSuffix.size(), kDiskIndexSuffix.size(),
+                                 kDiskIndexSuffix) == 0) {
+        return output_file.substr(0, output_file.size() - kDiskIndexSuffix.size()) + "_labels.densebit";
+      }
+      return output_file + "_labels.densebit";
+    }
+
+    void write_all_or_crash(int fd, const void *buffer, size_t bytes, const std::string &path) {
+      const char *cursor = static_cast<const char *>(buffer);
+      size_t remaining = bytes;
+      while (remaining > 0) {
+        ssize_t written = ::write(fd, cursor, remaining);
+        if (written < 0) {
+          if (errno == EINTR) {
+            continue;
+          }
+          LOG(ERROR) << "Failed to write densebit sidecar " << path << ": " << std::strerror(errno);
+          crash();
+        }
+        cursor += written;
+        remaining -= static_cast<size_t>(written);
+      }
+    }
+
+    void build_densebit_sidecar(const std::string &label_source_file, uint64_t expected_npoints,
+                                const std::string &output_file) {
+      std::ifstream reader(label_source_file, std::ios::binary);
+      if (!reader.is_open()) {
+        LOG(ERROR) << "Failed to open label source file for densebit build: " << label_source_file;
+        crash();
+      }
+
+      int64_t nrow = 0, ncol = 0, nnz = 0;
+      reader.read(reinterpret_cast<char *>(&nrow), sizeof(int64_t));
+      reader.read(reinterpret_cast<char *>(&ncol), sizeof(int64_t));
+      reader.read(reinterpret_cast<char *>(&nnz), sizeof(int64_t));
+      if (!reader.good() || nrow < 0 || ncol < 0 || nnz < 0) {
+        LOG(ERROR) << "Invalid spmat header in label source file: " << label_source_file;
+        crash();
+      }
+
+      if (static_cast<uint64_t>(nrow) != expected_npoints) {
+        LOG(ERROR) << "Label source row count " << nrow << " does not match index point count " << expected_npoints;
+        crash();
+      }
+
+      std::vector<int64_t> indptr(static_cast<size_t>(nrow) + 1);
+      std::vector<int32_t> indices(static_cast<size_t>(nnz));
+      std::vector<float> data(static_cast<size_t>(nnz));
+      reader.read(reinterpret_cast<char *>(indptr.data()), static_cast<std::streamsize>(indptr.size() * sizeof(int64_t)));
+      reader.read(reinterpret_cast<char *>(indices.data()), static_cast<std::streamsize>(indices.size() * sizeof(int32_t)));
+      reader.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(data.size() * sizeof(float)));
+      if (!reader.good()) {
+        LOG(ERROR) << "Failed to read complete spmat payload from " << label_source_file;
+        crash();
+      }
+
+      const uint64_t nlabels = static_cast<uint64_t>(ncol);
+      const uint64_t words_per_label = dense_words_per_label(expected_npoints);
+      if (nlabels > 0 && words_per_label > std::numeric_limits<size_t>::max() / nlabels) {
+        LOG(ERROR) << "Densebit sidecar payload would overflow addressable memory for " << label_source_file;
+        crash();
+      }
+
+      std::vector<uint64_t> payload(static_cast<size_t>(nlabels * words_per_label), 0ULL);
+      uint64_t kept_nnz = 0;
+      for (int64_t row = 0; row < nrow; ++row) {
+        const int64_t row_begin = indptr[static_cast<size_t>(row)];
+        const int64_t row_end = indptr[static_cast<size_t>(row) + 1];
+        if (row_begin < 0 || row_end < row_begin || row_end > nnz) {
+          LOG(ERROR) << "Invalid indptr range in label source file: " << label_source_file;
+          crash();
+        }
+        const uint64_t word_idx = static_cast<uint64_t>(row) >> 6;
+        const uint64_t bit_mask = 1ULL << (static_cast<uint64_t>(row) & 63ULL);
+        for (int64_t idx = row_begin; idx < row_end; ++idx) {
+          if (data[static_cast<size_t>(idx)] == 0.0f) {
+            continue;
+          }
+          const int32_t label_id = indices[static_cast<size_t>(idx)];
+          if (label_id < 0 || static_cast<uint64_t>(label_id) >= nlabels) {
+            LOG(ERROR) << "Label id " << label_id << " is out of range for densebit sidecar build";
+            crash();
+          }
+          payload[static_cast<size_t>(label_id) * static_cast<size_t>(words_per_label) + static_cast<size_t>(word_idx)] |= bit_mask;
+          ++kept_nnz;
+        }
+      }
+
+      DenseBitsetFileHeaderV1 header;
+      header.npoints = expected_npoints;
+      header.nlabels = nlabels;
+      header.words_per_label = words_per_label;
+      header.nnz = kept_nnz;
+
+      const std::string sidecar_path = densebit_sidecar_path_from_output(output_file);
+      const std::string tmp_path = sidecar_path + ".tmp";
+      const int fd = ::open(tmp_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      if (fd < 0) {
+        LOG(ERROR) << "Failed to open densebit temp file " << tmp_path << ": " << std::strerror(errno);
+        crash();
+      }
+
+      write_all_or_crash(fd, &header, sizeof(header), tmp_path);
+      if (!payload.empty()) {
+        write_all_or_crash(fd, payload.data(), payload.size() * sizeof(uint64_t), tmp_path);
+      }
+      if (::fsync(fd) != 0) {
+        const int saved_errno = errno;
+        ::close(fd);
+        LOG(ERROR) << "Failed to fsync densebit temp file " << tmp_path << ": " << std::strerror(saved_errno);
+        crash();
+      }
+      if (::close(fd) != 0) {
+        LOG(ERROR) << "Failed to close densebit temp file " << tmp_path << ": " << std::strerror(errno);
+        crash();
+      }
+      if (::rename(tmp_path.c_str(), sidecar_path.c_str()) != 0) {
+        LOG(ERROR) << "Failed to publish densebit sidecar " << sidecar_path << ": " << std::strerror(errno);
+        crash();
+      }
+      LOG(INFO) << "Densebit sidecar written to " << sidecar_path;
+    }
+  }  // namespace
+
   template<typename T>
   void normalize_data_file(const std::string &inFileName, const std::string &outFileName) {
     std::ifstream readr(inFileName, std::ios::binary);
@@ -291,7 +436,8 @@ namespace pipeann {
   // mem_index_file, and the entire disk index will be in output_file.
   template<typename T, typename TagT>
   void create_disk_layout(const std::string &mem_index_file, const std::string &base_file, const std::string &tag_file,
-                          const std::string &output_file, AbstractLabel *label) {
+                          const std::string &output_file, AbstractLabel *label,
+                          const std::string &label_source_file) {
     constexpr uint64_t kBlkSize = 64 * 1024 * 1024;
 
     // Open input files
@@ -395,13 +541,23 @@ namespace pipeann {
 
     // Write metadata to the first sector
     meta.save_to_disk_index(output_file);
+
+    if (!label_source_file.empty()) {
+      build_densebit_sidecar(label_source_file, meta.npoints, output_file);
+    }
+
     LOG(INFO) << "Output file written.";
   }
 
   template<typename T, typename TagT>
   bool build_disk_index(const char *dataPath, const char *indexFilePath, uint32_t R, uint32_t L, uint32_t M,
                         uint32_t num_threads, uint32_t bytes_per_nbr, pipeann::Metric _compareMetric,
-                        const char *tag_file, AbstractNeighbor<T> *nbr_handler, AbstractLabel *label) {
+                        const char *tag_file, AbstractNeighbor<T> *nbr_handler, AbstractLabel *label,
+                        const char *label_source_file) {
+    if (!validate_label_build_inputs(label, label_source_file)) {
+      return false;
+    }
+
     std::string dataFilePath(dataPath);
     std::string index_prefix_path(indexFilePath);
     std::string mem_index_path = index_prefix_path + "_mem.index";
@@ -434,10 +590,12 @@ namespace pipeann {
     LOG(INFO) << "Vamana index built in: " << std::chrono::duration<double>(end - start).count() << "s.";
 
     if (tag_file == nullptr) {
-      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, "", disk_index_path, label);
+      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, "", disk_index_path, label,
+                                           label_source_file == nullptr ? "" : label_source_file);
     } else {
       std::string tag_filename = std::string(tag_file);
-      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, tag_filename, disk_index_path, label);
+      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, tag_filename, disk_index_path, label,
+                                           label_source_file == nullptr ? "" : label_source_file);
     }
 
     LOG(INFO) << "Deleting memory index file: " << mem_index_path;
@@ -460,27 +618,29 @@ namespace pipeann {
 
   template void create_disk_layout<int8_t, uint32_t>(const std::string &mem_index_file, const std::string &base_file,
                                                      const std::string &tag_file, const std::string &output_file,
-                                                     AbstractLabel *label);
+                                                     AbstractLabel *label, const std::string &label_source_file);
   template void create_disk_layout<uint8_t, uint32_t>(const std::string &mem_index_file, const std::string &base_file,
                                                       const std::string &tag_file, const std::string &output_file,
-                                                      AbstractLabel *label);
+                                                      AbstractLabel *label, const std::string &label_source_file);
   template void create_disk_layout<float, uint32_t>(const std::string &mem_index_file, const std::string &base_file,
                                                     const std::string &tag_file, const std::string &output_file,
-                                                    AbstractLabel *label);
+                                                    AbstractLabel *label, const std::string &label_source_file);
 
   template bool build_disk_index<int8_t, uint32_t>(const char *dataPath, const char *indexFilePath, uint32_t R,
                                                    uint32_t L, uint32_t M, uint32_t num_threads, uint32_t bytes_per_nbr,
                                                    pipeann::Metric _compareMetric, const char *tag_file,
-                                                   AbstractNeighbor<int8_t> *nbr_handler, AbstractLabel *label);
+                                                   AbstractNeighbor<int8_t> *nbr_handler, AbstractLabel *label,
+                                                   const char *label_source_file);
   template bool build_disk_index<uint8_t, uint32_t>(const char *dataPath, const char *indexFilePath, uint32_t R,
                                                     uint32_t L, uint32_t M, uint32_t num_threads,
                                                     uint32_t bytes_per_nbr, pipeann::Metric _compareMetric,
                                                     const char *tag_file, AbstractNeighbor<uint8_t> *nbr_handler,
-                                                    AbstractLabel *label);
+                                                    AbstractLabel *label, const char *label_source_file);
   template bool build_disk_index<float, uint32_t>(const char *dataPath, const char *indexFilePath, uint32_t R,
                                                   uint32_t L, uint32_t M, uint32_t num_threads, uint32_t bytes_per_nbr,
                                                   pipeann::Metric _compareMetric, const char *tag_file,
-                                                  AbstractNeighbor<float> *nbr_handler, AbstractLabel *label);
+                                                  AbstractNeighbor<float> *nbr_handler, AbstractLabel *label,
+                                                  const char *label_source_file);
 
   template int build_merged_vamana_index<int8_t>(std::string base_file, pipeann::Metric _compareMetric, unsigned L,
                                                  unsigned R, double sampling_rate, double ram_budget,

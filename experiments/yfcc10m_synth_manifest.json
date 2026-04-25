@@ -1,0 +1,50 @@
+{
+  "buckets": [
+    {
+      "label": "50%",
+      "lower": 0.5,
+      "midpoint": 0.5,
+      "name": "s50",
+      "probe_query_bin": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/synthetic_high_selectivity/s50/probe_query.bin",
+      "probe_query_labels": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/synthetic_high_selectivity/s50/probe_query.spmat",
+      "query_bin": "/mnt/data/lzg/PipeANN/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/synthetic_high_selectivity/s50/queries.spmat",
+      "upper": 0.5
+    },
+    {
+      "label": "75%",
+      "lower": 0.75,
+      "midpoint": 0.75,
+      "name": "s75",
+      "probe_query_bin": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/synthetic_high_selectivity/s75/probe_query.bin",
+      "probe_query_labels": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/synthetic_high_selectivity/s75/probe_query.spmat",
+      "query_bin": "/mnt/data/lzg/PipeANN/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/synthetic_high_selectivity/s75/queries.spmat",
+      "upper": 0.75
+    },
+    {
+      "label": "100%",
+      "lower": 1.0,
+      "midpoint": 1.0,
+      "name": "s100",
+      "probe_query_bin": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/synthetic_high_selectivity/s100/probe_query.bin",
+      "probe_query_labels": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/synthetic_high_selectivity/s100/probe_query.spmat",
+      "query_bin": "/mnt/data/lzg/PipeANN/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/synthetic_high_selectivity/s100/queries.spmat",
+      "upper": 1.0
+    }
+  ],
+  "format": "pipeann.hybrid.selectivity_manifest.v1",
+  "index_prefix": "/mnt/data/lzg/PipeANN/data/yfcc100M/yfcc10m_pipeann_synth",
+  "index_type": "uint8",
+  "npoints": 10000000,
+  "queries_per_bucket": null,
+  "query_bin": "/mnt/data/lzg/PipeANN/data/yfcc100M/query.public.100K.u8bin",
+  "query_labels": null,
+  "scanned_queries": 300000,
+  "selector_type": "intersect",
+  "sidecar_path": "/mnt/data/lzg/PipeANN/data/yfcc100M/yfcc10m_pipeann_synth_labels.densebit"
+}

@@ -13,6 +13,23 @@
 #include "utils.h"
 
 namespace pipeann {
+  inline bool validate_label_build_inputs(AbstractLabel *label, const char *label_source_file) {
+    const bool has_label_writer = label != nullptr;
+    const bool has_label_source = label_source_file != nullptr && label_source_file[0] != '\0';
+    if (!has_label_writer && !has_label_source) {
+      return true;
+    }
+    if (!has_label_writer) {
+      LOG(ERROR) << "label_source_file was provided but no label writer is attached to the build";
+      return false;
+    }
+    if (!has_label_source) {
+      LOG(ERROR) << "Filtered build requires label_source_file to generate <index_prefix>_labels.densebit";
+      return false;
+    }
+    return true;
+  }
+
   template<typename T>
   void normalize_data_file(const std::string &inFileName, const std::string &outFileName);
 
@@ -29,9 +46,11 @@ namespace pipeann {
   template<typename T, typename TagT = uint32_t>
   bool build_disk_index(const char *dataPath, const char *indexFilePath, uint32_t R, uint32_t L, uint32_t M,
                         uint32_t num_threads, uint32_t bytes_per_nbr, pipeann::Metric _compareMetric,
-                        const char *tag_file, AbstractNeighbor<T> *nbr_handler, AbstractLabel *label);
+                        const char *tag_file, AbstractNeighbor<T> *nbr_handler, AbstractLabel *label,
+                        const char *label_source_file = nullptr);
 
   template<typename T, typename TagT = uint32_t>
   void create_disk_layout(const std::string &mem_index_file, const std::string &base_file, const std::string &tag_file,
-                          const std::string &output_file, AbstractLabel *label);
+                          const std::string &output_file, AbstractLabel *label,
+                          const std::string &label_source_file = "");
 }  // namespace pipeann

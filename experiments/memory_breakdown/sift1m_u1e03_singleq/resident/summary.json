@@ -1,0 +1,320 @@
+{
+  "command": [
+    "./build/tests/search_disk_index_hybrid",
+    "float",
+    "./data/sift1m/sift1m_pipeann_uniform",
+    "1",
+    "4",
+    "./experiments/latency_breakdown/sift1m_u1e03_single/query_000.bin",
+    "null",
+    "10",
+    "l2",
+    "pq",
+    "intersect",
+    "./experiments/latency_breakdown/sift1m_u1e03_single/query_000.spmat",
+    "auto",
+    "0",
+    "0",
+    "100"
+  ],
+  "command_source": "explicit",
+  "elapsed_seconds": 0.060473683988675475,
+  "exit_code": 0,
+  "format": "pipeann.memory.resident.v1",
+  "known_heap_inputs": [
+    {
+      "estimated": true,
+      "estimated_kb": 31251,
+      "name": "pq_compressed_heap_load",
+      "note": "PQ compressed vectors were heap-loaded instead of mmap-backed.",
+      "path": "/mnt/data/lzg/PipeANN/data/sift1m/sift1m_pipeann_uniform_pq_compressed.bin"
+    },
+    {
+      "estimated": true,
+      "estimated_kb": 134,
+      "name": "pq_pivots_heap_load",
+      "note": "PQ pivots are loaded into process heap and expanded into lookup tables.",
+      "path": "/mnt/data/lzg/PipeANN/data/sift1m/sift1m_pipeann_uniform_pq_pivots.bin"
+    },
+    {
+      "estimated": true,
+      "estimated_kb": 1,
+      "name": "hybrid_meta_heap_parse",
+      "note": "Hybrid metadata is parsed into heap structures after file read.",
+      "path": "/mnt/data/lzg/PipeANN/data/sift1m/sift1m_pipeann_uniform_hybrid.meta"
+    },
+    {
+      "estimated": true,
+      "estimated_kb": 1,
+      "name": "query_bin_heap_load",
+      "note": "Query vectors are loaded via load_bin into anonymous heap-backed memory.",
+      "path": "/mnt/data/lzg/PipeANN/experiments/latency_breakdown/sift1m_u1e03_single/query_000.bin"
+    },
+    {
+      "estimated": true,
+      "estimated_kb": 1,
+      "name": "query_labels_heap_load",
+      "note": "SPMAT query labels are expanded into heap vectors.",
+      "path": "/mnt/data/lzg/PipeANN/experiments/latency_breakdown/sift1m_u1e03_single/query_000.spmat"
+    }
+  ],
+  "name": "sift1m_u1e03_singleq",
+  "notes": [
+    "Resident snapshots come from /proc/<pid>/smaps and /proc/<pid>/smaps_rollup, not from code instrumentation.",
+    "Use the sibling massif artifact for heap callsite attribution; use the sibling perf artifact for fault/callgraph evidence."
+  ],
+  "peak_categories": [
+    {
+      "category": "shared_libs",
+      "private_kb": 88,
+      "pss_kb": 89,
+      "rss_kb": 308,
+      "shared_kb": 220,
+      "size_kb": 536
+    },
+    {
+      "category": "other_file_backed",
+      "private_kb": 104,
+      "pss_kb": 104,
+      "rss_kb": 104,
+      "shared_kb": 0,
+      "size_kb": 104
+    },
+    {
+      "category": "search_binary",
+      "private_kb": 52,
+      "pss_kb": 52,
+      "rss_kb": 52,
+      "shared_kb": 0,
+      "size_kb": 2040
+    },
+    {
+      "category": "stack",
+      "private_kb": 20,
+      "pss_kb": 20,
+      "rss_kb": 20,
+      "shared_kb": 0,
+      "size_kb": 136
+    },
+    {
+      "category": "anonymous",
+      "private_kb": 8,
+      "pss_kb": 8,
+      "rss_kb": 8,
+      "shared_kb": 0,
+      "size_kb": 1760
+    },
+    {
+      "category": "vdso",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 4,
+      "shared_kb": 4,
+      "size_kb": 8
+    },
+    {
+      "category": "vvar",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 0,
+      "shared_kb": 0,
+      "size_kb": 16
+    },
+    {
+      "category": "vsyscall",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 0,
+      "shared_kb": 0,
+      "size_kb": 4
+    }
+  ],
+  "peak_rollup_kb": {
+    "564fdecf1000-7ffcbe9fb000 ---p 00000000 00": 0,
+    "AnonHugePages": 0,
+    "Anonymous": 48,
+    "FilePmdMapped": 0,
+    "LazyFree": 0,
+    "Locked": 0,
+    "Private_Clean": 148,
+    "Private_Dirty": 48,
+    "Private_Hugetlb": 0,
+    "Pss": 197,
+    "Pss_Anon": 48,
+    "Pss_File": 149,
+    "Pss_Shmem": 0,
+    "Referenced": 420,
+    "Rss": 420,
+    "Shared_Clean": 224,
+    "Shared_Dirty": 0,
+    "Shared_Hugetlb": 0,
+    "ShmemPmdMapped": 0,
+    "Swap": 0,
+    "SwapPss": 0
+  },
+  "peak_snapshot": {
+    "elapsed_seconds": 0.0,
+    "label": "000_startup",
+    "pmap_txt": "/mnt/data/lzg/PipeANN/experiments/memory_breakdown/sift1m_u1e03_singleq/resident/snapshots/000_startup.pmap.txt",
+    "rollup_pss_kb": 197,
+    "rollup_rss_kb": 420,
+    "snapshot_json": "/mnt/data/lzg/PipeANN/experiments/memory_breakdown/sift1m_u1e03_singleq/resident/snapshots/000_startup.json"
+  },
+  "peak_top_mappings": [
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+      "private_kb": 0,
+      "pss_kb": 1,
+      "rss_kb": 168,
+      "shared_kb": 168,
+      "size_kb": 168
+    },
+    {
+      "path": "/etc/ld.so.cache",
+      "private_kb": 104,
+      "pss_kb": 104,
+      "rss_kb": 104,
+      "shared_kb": 0,
+      "size_kb": 104
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9",
+      "private_kb": 64,
+      "pss_kb": 64,
+      "rss_kb": 64,
+      "shared_kb": 0,
+      "size_kb": 76
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 44,
+      "shared_kb": 44,
+      "size_kb": 44
+    },
+    {
+      "path": "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+      "private_kb": 36,
+      "pss_kb": 36,
+      "rss_kb": 36,
+      "shared_kb": 0,
+      "size_kb": 36
+    },
+    {
+      "path": "[stack]",
+      "private_kb": 20,
+      "pss_kb": 20,
+      "rss_kb": 20,
+      "shared_kb": 0,
+      "size_kb": 136
+    },
+    {
+      "path": "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+      "private_kb": 16,
+      "pss_kb": 16,
+      "rss_kb": 16,
+      "shared_kb": 0,
+      "size_kb": 16
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+      "private_kb": 16,
+      "pss_kb": 16,
+      "rss_kb": 16,
+      "shared_kb": 0,
+      "size_kb": 16
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9",
+      "private_kb": 8,
+      "pss_kb": 8,
+      "rss_kb": 8,
+      "shared_kb": 0,
+      "size_kb": 8
+    },
+    {
+      "path": "",
+      "private_kb": 8,
+      "pss_kb": 8,
+      "rss_kb": 8,
+      "shared_kb": 0,
+      "size_kb": 8
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 8,
+      "shared_kb": 8,
+      "size_kb": 8
+    },
+    {
+      "path": "[vdso]",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 4,
+      "shared_kb": 4,
+      "size_kb": 8
+    },
+    {
+      "path": "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 0,
+      "shared_kb": 0,
+      "size_kb": 1836
+    },
+    {
+      "path": "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 0,
+      "shared_kb": 0,
+      "size_kb": 152
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9",
+      "private_kb": 0,
+      "pss_kb": 0,
+      "rss_kb": 0,
+      "shared_kb": 0,
+      "size_kb": 152
+    }
+  ],
+  "phase_events": [
+    {
+      "elapsed_seconds": 0.03973741899244487,
+      "label": "after_pq_load",
+      "line": "[pq_nbr.h:112:INFO] Load compressed vectors from file: ./data/sift1m/sift1m_pipeann_uniform_pq_compressed.bin offset: 0 num points: 1000000 n_chunks: 32 mode: heap"
+    },
+    {
+      "elapsed_seconds": 0.05394900403916836,
+      "label": "after_densebit_load",
+      "line": "[ssd_index.cpp:231:INFO] Hybrid densebit runtime loaded from ./data/sift1m/sift1m_pipeann_uniform_labels.densebit"
+    },
+    {
+      "elapsed_seconds": 0.054007560946047306,
+      "label": "after_hybrid_metadata_load",
+      "line": "[ssd_index.cpp:250:INFO] Hybrid metadata loaded from ./data/sift1m/sift1m_pipeann_uniform_hybrid.meta"
+    },
+    {
+      "elapsed_seconds": 0.05403400398790836,
+      "label": "after_index_load",
+      "line": "[ssd_index.cpp:213:INFO] SSDIndex loaded successfully."
+    }
+  ],
+  "pq_mode": "heap",
+  "preset": null,
+  "sample_interval_ms": 100,
+  "snapshots": [
+    {
+      "elapsed_seconds": 0.0,
+      "label": "000_startup",
+      "pmap_txt": "/mnt/data/lzg/PipeANN/experiments/memory_breakdown/sift1m_u1e03_singleq/resident/snapshots/000_startup.pmap.txt",
+      "rollup_pss_kb": 197,
+      "rollup_rss_kb": 420,
+      "snapshot_json": "/mnt/data/lzg/PipeANN/experiments/memory_breakdown/sift1m_u1e03_singleq/resident/snapshots/000_startup.json"
+    }
+  ]
+}

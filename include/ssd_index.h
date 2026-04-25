@@ -8,6 +8,9 @@
 
 #include "aligned_file_reader.h"
 #include "ssd_index_defs.h"
+#include "filter/densebit_index.h"
+#include "filter/hybrid_route.h"
+#include "filter/hybrid_metadata.h"
 #include "filter/selector.h"
 #include "utils/concurrent_queue.h"
 #include "utils/lock_table.h"
@@ -141,6 +144,11 @@ namespace pipeann {
 
     // Load compressed data, and obtains the handle to the disk-resident index.
     int load(const char *index_prefix, uint32_t num_threads, bool use_page_search = false);
+    int load_hybrid_runtime(const char *index_prefix);
+    bool hybrid_enabled() const;
+    const HybridMetadata *hybrid_metadata() const {
+      return hybrid_metadata_.get();
+    }
 
     void load_mem_index(const std::string &mem_index_path);
 
@@ -163,6 +171,16 @@ namespace pipeann {
                        TagT *res_tags, float *res_dists, const uint64_t beam_width, QueryStats *stats = nullptr,
                        AbstractSelector *selector = nullptr, const void *filter_data = nullptr,
                        const uint64_t relaxed_monotonicity_l = 0);
+
+    size_t hybrid_search(const T *query, const uint64_t k_search, const uint32_t mem_L, const uint64_t l_search,
+               TagT *res_tags, float *res_dists, const uint64_t beam_width,
+               HybridFilterKind filter_kind, const void *filter_data, QueryStats *stats = nullptr,
+               HybridQueryStats *hybrid_stats = nullptr,
+               HybridRouteOverride route_override = HybridRouteOverride::kAuto);
+
+    size_t hybrid_prefilter_search(const T *query, const uint64_t k_search, TagT *res_tags, float *res_dists,
+                     const std::vector<uint32_t> &candidate_ids, QueryStats *stats = nullptr,
+                     uint64_t total_points_override = 0);
 
     void enable_low_memory_search_mode(bool enable = true);
 
@@ -255,10 +273,13 @@ namespace pipeann {
     // If ID == tag, then it is not stored.
     std::unique_ptr<libcuckoo::cuckoohash_map<uint32_t, TagT>> tags;
     std::mutex tags_init_mu_;
+    std::unique_ptr<DenseBitsetIndex> densebit_index_;
+    std::unique_ptr<HybridMetadata> hybrid_metadata_;
 
     // Flags.
     bool load_flag = false;    // already loaded.
     bool enable_tags = false;  // support for tags and dynamic indexing
+    bool hybrid_runtime_enabled_ = false;
 
     void init_buffers(uint64_t nthreads);
     void destroy_buffers();

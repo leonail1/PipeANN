@@ -5,6 +5,8 @@
 #include <malloc.h>
 #include <algorithm>
 
+#include <filesystem>
+
 #include <omp.h>
 #include <chrono>
 #include <cmath>
@@ -314,6 +316,14 @@ namespace pipeann {
     }
     pipeann::save_bin<TagT>(out_path_prefix + "_disk.index.tags", new_tags->data(), meta_.npoints, 1, 0);
     nbr_handler->save(out_path_prefix.c_str());
+
+    const std::string hybrid_meta_in = out_path_prefix == in_path_prefix ? "" : in_path_prefix + "_hybrid.meta";
+    const std::string hybrid_meta_out = out_path_prefix + "_hybrid.meta";
+    if (!hybrid_meta_in.empty() && file_exists(hybrid_meta_in)) {
+      std::filesystem::copy(hybrid_meta_in, hybrid_meta_out, std::filesystem::copy_options::overwrite_existing);
+    } else if (!hybrid_meta_in.empty()) {
+      std::filesystem::remove(hybrid_meta_out);
+    }
   }
 
   template<typename T, typename TagT>

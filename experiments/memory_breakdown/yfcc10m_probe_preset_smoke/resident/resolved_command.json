@@ -1,0 +1,30 @@
+{
+  "command": [
+    "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+    "uint8",
+    "/mnt/data/lzg/PipeANN/data/yfcc100M/yfcc10m_pipeann",
+    "52",
+    "4",
+    "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/real_selected_labels/real_t1e-03_l8636/probe_query.bin",
+    "null",
+    "10",
+    "l2",
+    "pq",
+    "intersect",
+    "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/real_selected_labels/real_t1e-03_l8636/probe_query.spmat",
+    "auto",
+    "0",
+    "0",
+    "100"
+  ],
+  "command_source": "preset",
+  "format": "pipeann.memory.command.v1",
+  "index_prefix": "/mnt/data/lzg/PipeANN/data/yfcc100M/yfcc10m_pipeann",
+  "index_type": "uint8",
+  "name": "yfcc10m_probe_preset_smoke",
+  "preset": "yfcc10m",
+  "query_bin": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/real_selected_labels/real_t1e-03_l8636/probe_query.bin",
+  "query_labels": "/mnt/data/lzg/PipeANN/data/yfcc100M/random_single_label_workloads/real_selected_labels/real_t1e-03_l8636/probe_query.spmat",
+  "search_binary": "/mnt/data/lzg/PipeANN/build/tests/search_disk_index_hybrid",
+  "selector_type": "intersect"
+}

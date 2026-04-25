@@ -16,7 +16,8 @@ PYBIND11_MODULE(C, m) {
       .def("save", &PyIndexInterface::save, py::arg("index_prefix"))
       .def("build", &PyIndexInterface::build, py::arg("data_path"), py::arg("index_prefix"),
            py::arg("tag_file") = nullptr, py::arg("build_mem_index") = false, py::arg("max_nbrs") = 0,
-           py::arg("build_L") = 0, py::arg("PQ_bytes") = 32, py::arg("memory_use_GB") = 0)
+         py::arg("build_L") = 0, py::arg("PQ_bytes") = 32, py::arg("memory_use_GB") = 0,
+         py::arg("label_source_file") = nullptr)
       .def("search", &PyIndexInterface::search, py::arg("queries"), py::arg("topk"), py::arg("L"))
       .def("add", &PyIndexInterface::add, py::arg("vectors"), py::arg("tags"))
       .def("remove", &PyIndexInterface::remove, py::arg("tags"))

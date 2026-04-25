@@ -4,25 +4,25 @@
 
 ## ✨ Key Features
 
-| Feature | Description |
-|---------|-------------|
-| ⚡ **Ultra-Low Latency** | <1ms for 1 billion vectors (top-10, 90% recall), only 1.14x-2.02x of in-memory index |
-| 📈 **High Throughput** | 20K QPS for 1 billion vectors, outperforming DiskANN and SPANN |
-| 🔄 **Efficient Updates** | Insert/delete with minimal search interference (1.07x fluctuation) |
-| 🎯 **User-Defined Filters** | Supports arbitrary filtered ANNS via user-defined `Label` and `Selector` |
-| 💾 **Memory Efficient** | >10x less memory than in-memory indexes (~40GB for 1B vectors) |
-| 🐍 **Easy-to-Use** | Both Python (`faiss`-like) and C++ interfaces supported |
+| Feature                    | Description                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| ⚡ **Ultra-Low Latency**    | <1ms for 1 billion vectors (top-10, 90% recall), only 1.14x-2.02x of in-memory index |
+| 📈 **High Throughput**      | 20K QPS for 1 billion vectors, outperforming DiskANN and SPANN                       |
+| 🔄 **Efficient Updates**    | Insert/delete with minimal search interference (1.07x fluctuation)                   |
+| 🎯 **User-Defined Filters** | Supports arbitrary filtered ANNS via user-defined `Label` and `Selector`             |
+| 💾 **Memory Efficient**     | >10x less memory than in-memory indexes (~40GB for 1B vectors)                       |
+| 🐍 **Easy-to-Use**          | Both Python (`faiss`-like) and C++ interfaces supported                              |
 
 ## 📊 Performance Comparison
 
 PipeANN is suitable for both **large-scale** and **memory-constraint** scenarios.
 
 
-| Dataset | Dimension | Memory | Latency | QPS | PipeANN | HNSW | DiskANN |
-|---------|-----|--------|---------|-----|---------|-------------| -------- |
-| 1B (SPACEV) | 100 | 40GB | 2ms | 5K | ✅ | ❌ 1TB mem | ❌ 6ms |
-| 80M (Wiki) | 768 | 10GB | 1.5ms | 5K | ✅ | ❌ 300GB mem | ❌ 4ms |
-| 10M (SIFT) | 128 | 550MB | <1ms | 10K | ✅ | ❌ 4GB mem | ❌ 3ms |
+| Dataset     | Dimension | Memory | Latency | QPS | PipeANN | HNSW        | DiskANN |
+| ----------- | --------- | ------ | ------- | --- | ------- | ----------- | ------- |
+| 1B (SPACEV) | 100       | 40GB   | 2ms     | 5K  | ✅       | ❌ 1TB mem   | ❌ 6ms   |
+| 80M (Wiki)  | 768       | 10GB   | 1.5ms   | 5K  | ✅       | ❌ 300GB mem | ❌ 4ms   |
+| 10M (SIFT)  | 128       | 550MB  | <1ms    | 10K | ✅       | ❌ 4GB mem   | ❌ 3ms   |
 
 > Recall@10 = 0.99, Samsung PM9A3 SSD, 32B PQ-compressed vectors (128B for Wiki).
 
@@ -42,11 +42,11 @@ PipeANN is suitable for both **large-scale** and **memory-constraint** scenarios
 
 ### Hardware Requirements
 
-| Component | Requirement |
-|-----------|-------------|
-| **CPU** | x86 or ARM with SIMD (AVX2/AVX512 recommended) |
-| **DRAM** | ~40GB (search) or ~90GB (search+update) per billion vectors |
-| **SSD** | ~700GB for 1B SIFT, ~900GB for 1.4B SPACEV |
+| Component | Requirement                                                 |
+| --------- | ----------------------------------------------------------- |
+| **CPU**   | x86 or ARM with SIMD (AVX2/AVX512 recommended)              |
+| **DRAM**  | ~40GB (search) or ~90GB (search+update) per billion vectors |
+| **SSD**   | ~700GB for 1B SIFT, ~900GB for 1.4B SPACEV                  |
 
 ### Software Requirements
 
@@ -92,6 +92,27 @@ bash ./build.sh  # Binaries in build/
 ```
 
 For performance-critical scenarios, we recommend using C++ interface.
+
+## 🔬 External Memory Breakdown
+
+The repository now includes a formal external-tool driver at `scripts/pipeann_memory_breakdown.py` for resident-memory snapshots, Valgrind Massif, and `perf record` runs without modifying PipeANN code.
+
+If Valgrind cannot execute the current binary because of unsupported instructions on this host, the `massif` subcommand automatically falls back to `heaptrack` and still writes artifacts into the same run directory.
+
+Examples:
+
+```bash
+# Check which external tools are already installed.
+python scripts/pipeann_memory_breakdown.py doctor
+
+# Run resident snapshots, massif, and perf for the built-in SIFT1M preset.
+python scripts/pipeann_memory_breakdown.py all --preset sift1m
+
+# Run only the live resident-memory sampler for the YFCC10M preset.
+python scripts/pipeann_memory_breakdown.py resident --preset yfcc10m
+```
+
+Artifacts are written under `experiments/memory_breakdown/` and never under `build/`.
 
 ---
 
@@ -279,11 +300,11 @@ build/tests/build_disk_index uint8 data.bin index 96 128 32 256 112 l2 pq
 
 **Recommended Parameters:**
 
-| Dataset | Type | R | L | PQ_bytes | Memory | Threads |
-|---------|------|---|---|----------|--------|---------|
-| 100M subsets | uint8/float/int8 | 96 | 128 | 32 | 256GB | 112 |
-| SIFT1B | uint8 | 128 | 200 | 32 | 500GB | 112 |
-| SPACEV1B | int8 | 128 | 200 | 32 | 500GB | 112 |
+| Dataset      | Type             | R   | L   | PQ_bytes | Memory | Threads |
+| ------------ | ---------------- | --- | --- | -------- | ------ | ------- |
+| 100M subsets | uint8/float/int8 | 96  | 128 | 32       | 256GB  | 112     |
+| SIFT1B       | uint8            | 128 | 200 | 32       | 500GB  | 112     |
+| SPACEV1B     | int8             | 128 | 200 | 32       | 500GB  | 112     |
 
 This requires ~5h for 100M-scale datasets, and ~1d for billion-scale datasets.
 
