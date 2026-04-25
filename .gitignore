@@ -4,6 +4,7 @@ experiments/**
 !experiments/**/*.json
 !experiments/**/*.jsonl
 !experiments/**/*.png
+!experiments/**/*.md
 .vscode/
 indices/
 .cache/
