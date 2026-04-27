@@ -77,6 +77,9 @@ pipeann::HybridFilterKind parse_filter_kind(const std::string &selector_type) {
   if (selector_type == "subset") {
     return pipeann::HybridFilterKind::kSubset;
   }
+  if (selector_type == "range") {
+    return pipeann::HybridFilterKind::kRange;
+  }
   return pipeann::HybridFilterKind::kUnsupported;
 }
 
@@ -86,6 +89,8 @@ uint64_t selector_mask_for_kind(pipeann::HybridFilterKind kind) {
       return 1ULL;
     case pipeann::HybridFilterKind::kSubset:
       return 2ULL;
+    case pipeann::HybridFilterKind::kRange:
+      return 4ULL;
     case pipeann::HybridFilterKind::kUnsupported:
     default:
       return 0ULL;
@@ -131,7 +136,7 @@ bool append_dataset(HybridCalibrationConfig *config, const std::string &selector
                     const std::string &query_label_file, const uint32_t sample_limit) {
   const pipeann::HybridFilterKind filter_kind = parse_filter_kind(selector_type);
   if (filter_kind == pipeann::HybridFilterKind::kUnsupported) {
-    LOG(ERROR) << "Calibration only supports intersect/subset selectors. Got: " << selector_type;
+    LOG(ERROR) << "Calibration only supports intersect/subset/range selectors. Got: " << selector_type;
     return false;
   }
 

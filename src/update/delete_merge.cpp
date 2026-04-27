@@ -274,21 +274,11 @@ namespace pipeann {
     this->nbr_handler = new_nbr_handler;
     delete tmp;
     // tags.
-    this->reset_tags();
+    this->install_tags_from_vector(new_tags);
     // no need to clear id2loc & loc2id as they are arrays.
     // out-of-bound loc2id is initialized in reload().
-    size_t non_identity_count = 0;
-    for (size_t i = 0; i < new_tags.size(); ++i) {
-      if (new_tags[i] != static_cast<TagT>(i)) {
-        ++non_identity_count;
-      }
-    }
-    auto *tag_map = non_identity_count == 0 ? nullptr : this->ensure_tags_map(non_identity_count);
 #pragma omp parallel for num_threads(nthreads)
     for (size_t i = 0; i < new_tags.size(); ++i) {
-      if (tag_map != nullptr && new_tags[i] != static_cast<TagT>(i)) {
-        tag_map->insert_or_assign(i, new_tags[i]);
-      }
       set_id2loc(i, i);
       set_loc2id(i, i);
     }

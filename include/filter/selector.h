@@ -1,6 +1,10 @@
 #ifndef SELECTOR_H_
 #define SELECTOR_H_
 
+#include <algorithm>
+#include <cstring>
+#include <vector>
+
 #include "ssd_index_defs.h"
 
 namespace pipeann {
@@ -24,20 +28,81 @@ namespace pipeann {
   };
 
   // A simple range filter selector.
-  // Query metadata is a range [low, high]; target metadata is a single value or nullptr.
-  // The selector checks if the target metadata is within the range [low, high].
+  // Query metadata is normally a label buffer:
+  //   [count=1][value] means equality, [count=2][low][high] means range.
+  // Target metadata is normally [count=1][value].
+  // For compatibility with older callers, target metadata with count != 0/1 is treated as a raw uint32 scalar.
   // If target_labels is nullptr, returns false (no extra data).
   struct RangeSelector : public AbstractSelector {
     bool is_member(uint32_t target_id, const void *query_labels, const void *target_labels) override {
+      (void) target_id;
       if (unlikely(target_labels == nullptr)) {
         return false; /* nullptr means no extra data */
       }
 
-      uint32_t low, high, target;
-      memcpy(&low, (char *) query_labels, sizeof(uint32_t));
-      memcpy(&high, (char *) query_labels + sizeof(uint32_t), sizeof(uint32_t));
-      memcpy(&target, (char *) target_labels, sizeof(uint32_t));
-      return target >= low && target <= high;
+      uint32_t low = 0, high = 0;
+      if (!decode_query_range(query_labels, &low, &high)) {
+        return false;
+      }
+
+      return target_matches_range(target_labels, low, high);
+    }
+
+   private:
+    static bool decode_query_range(const void *query_labels, uint32_t *low, uint32_t *high) {
+      if (query_labels == nullptr || low == nullptr || high == nullptr) {
+        return false;
+      }
+
+      uint32_t count_or_low = 0;
+      memcpy(&count_or_low, query_labels, sizeof(uint32_t));
+      if (count_or_low == 0) {
+        return false;
+      }
+
+      if (count_or_low == 1 || count_or_low == 2) {
+        uint32_t first = 0, second = 0;
+        memcpy(&first, static_cast<const char *>(query_labels) + sizeof(uint32_t), sizeof(uint32_t));
+        if (count_or_low == 1) {
+          *low = first;
+          *high = first;
+          return true;
+        }
+        memcpy(&second, static_cast<const char *>(query_labels) + 2 * sizeof(uint32_t), sizeof(uint32_t));
+        *low = std::min(first, second);
+        *high = std::max(first, second);
+        return true;
+      }
+
+      uint32_t raw_high = 0;
+      memcpy(&raw_high, static_cast<const char *>(query_labels) + sizeof(uint32_t), sizeof(uint32_t));
+      *low = std::min(count_or_low, raw_high);
+      *high = std::max(count_or_low, raw_high);
+      return true;
+    }
+
+    static bool target_matches_range(const void *target_labels, uint32_t low, uint32_t high) {
+      if (target_labels == nullptr) {
+        return false;
+      }
+
+      uint32_t count = 0;
+      memcpy(&count, target_labels, sizeof(uint32_t));
+      if (count == 0) {
+        return false;
+      }
+      if (count <= 1024) {
+        for (uint32_t idx = 0; idx < count; ++idx) {
+          uint32_t value = 0;
+          memcpy(&value, static_cast<const char *>(target_labels) + sizeof(uint32_t) * (idx + 1), sizeof(uint32_t));
+          if (value >= low && value <= high) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      return count >= low && count <= high;
     }
   };
 

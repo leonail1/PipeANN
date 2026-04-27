@@ -134,9 +134,7 @@ namespace pipeann {
     target_node.nnbrs = new_nhood.size();
     *(target_node.nbrs - 1) = target_node.nnbrs;
     memcpy(target_node.nbrs, new_nhood.data(), new_nhood.size() * sizeof(uint32_t));
-    if (tag != target_id || this->tags != nullptr) {
-      this->ensure_tags_map()->insert_or_assign(target_id, tag);
-    }
+    this->set_tag(target_id, tag);
 
     // update the neighbors
     for (uint32_t i = 0; i < new_nhood.size(); ++i) {

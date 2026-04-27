@@ -225,30 +225,64 @@ class DenseBitsetSidecar:
             scratch[-1] &= self.tail_mask
         return popcount_u64(scratch)
 
-    def count_candidates(self, selector_type: str, labels: Sequence[int]) -> int:
+    def candidate_bitset(self, selector_type: str, labels: Sequence[int]) -> np.ndarray:
         normalized = sorted(set(int(label) for label in labels))
         if selector_type == "subset":
             if not normalized:
-                return self.npoints
+                scratch = np.full(self.words_per_label, UINT64_ALL_ONES, dtype=np.uint64)
+                if scratch.size > 0:
+                    scratch[-1] &= self.tail_mask
+                return scratch
             if any(label < 0 or label >= self.nlabels for label in normalized):
-                return 0
+                return np.zeros(self.words_per_label, dtype=np.uint64)
             scratch = np.array(self.words[normalized[0]], copy=True)
             for label in normalized[1:]:
                 np.bitwise_and(scratch, self.words[label], out=scratch)
         elif selector_type == "intersect":
             if not normalized:
-                return 0
+                return np.zeros(self.words_per_label, dtype=np.uint64)
             scratch = np.zeros(self.words_per_label, dtype=np.uint64)
             for label in normalized:
                 if label < 0 or label >= self.nlabels:
                     continue
+                np.bitwise_or(scratch, self.words[label], out=scratch)
+        elif selector_type == "range":
+            if not normalized:
+                return np.zeros(self.words_per_label, dtype=np.uint64)
+            low = normalized[0]
+            high = normalized[-1]
+            if high < 0 or low >= self.nlabels:
+                return np.zeros(self.words_per_label, dtype=np.uint64)
+            low = max(low, 0)
+            high = min(high, self.nlabels - 1)
+            scratch = np.zeros(self.words_per_label, dtype=np.uint64)
+            for label in range(low, high + 1):
                 np.bitwise_or(scratch, self.words[label], out=scratch)
         else:
             raise ValueError(f"unsupported selector_type: {selector_type}")
 
         if scratch.size > 0:
             scratch[-1] &= self.tail_mask
-        return popcount_u64(scratch)
+        return scratch
+
+    def count_candidates(self, selector_type: str, labels: Sequence[int]) -> int:
+        return popcount_u64(self.candidate_bitset(selector_type, labels))
+
+    def materialize_candidates(self, selector_type: str, labels: Sequence[int]) -> np.ndarray:
+        scratch = self.candidate_bitset(selector_type, labels)
+        ids: list[int] = []
+        for word_index, word_value in enumerate(scratch.tolist()):
+            word = int(word_value)
+            while word:
+                low_bit = word & -word
+                bit = low_bit.bit_length() - 1
+                point_id = word_index * 64 + bit
+                if point_id < self.npoints:
+                    ids.append(point_id)
+                word ^= low_bit
+        if not ids:
+            return np.empty(0, dtype=np.uint32)
+        return np.asarray(ids, dtype=np.uint32)
 
 
 def popcount_u64(values: np.ndarray) -> int:
@@ -351,6 +385,21 @@ def load_bin_matrix(path: Path, dtype_name: str) -> tuple[int, int, np.memmap]:
         npts, dim = BIN_HEADER.unpack(header)
     data = np.memmap(path, mode="r", dtype=dtype_map[dtype_name], offset=BIN_HEADER.size, shape=(npts, dim))
     return int(npts), int(dim), data
+
+
+def load_tags_by_id(index_prefix: Path, npoints: int) -> np.ndarray:
+    tag_path = Path(f"{index_prefix}_disk.index.tags")
+    if not tag_path.exists():
+        return np.arange(npoints, dtype=np.uint32)
+
+    with tag_path.open("rb") as reader:
+        header = reader.read(BIN_HEADER.size)
+        if len(header) != BIN_HEADER.size:
+            raise ValueError(f"invalid tag bin header: {tag_path}")
+        tag_npts, tag_dim = BIN_HEADER.unpack(header)
+    if tag_npts != npoints or tag_dim != 1:
+        raise ValueError(f"tag file shape mismatch for {tag_path}: got {tag_npts}x{tag_dim}, expected {npoints}x1")
+    return np.memmap(tag_path, mode="r", dtype=np.uint32, offset=BIN_HEADER.size, shape=(tag_npts,))
 
 
 def write_bin_subset(path: Path, rows: np.memmap, row_ids: Sequence[int]) -> None:
@@ -1799,17 +1848,10 @@ def calibrate_prefilter_rerank(args: argparse.Namespace) -> Path:
     base_bin_path = require_file(resolve_path(summary["base_bin"]), "base bin")
     base_labels_path = require_file(resolve_path(summary["base_labels"]), "base labels")
     _, _, base_rows = load_bin_matrix(base_bin_path, index_type)
-
-    needed_label_ids = [
-        int(item["label_id"])
-        for item in selected_workloads
-        if float(item["selectivity"]) <= args.max_selectivity
-    ]
-    _, _, candidate_ids_by_label = collect_label_row_ids_from_spmat(
-        base_labels_path,
-        needed_label_ids,
-        chunk_nnz=args.chunk_nnz,
-    )
+    sidecar = DenseBitsetSidecar.load(require_file(Path(f"{index_prefix}_labels.densebit"), "densebit sidecar"))
+    tags_by_id = load_tags_by_id(index_prefix, sidecar.npoints)
+    if tags_by_id.size and int(np.max(tags_by_id)) >= int(base_rows.shape[0]):
+        raise ValueError(f"tag file for {index_prefix} references rows beyond base data {base_bin_path}")
 
     calibration_results: list[dict[str, Any]] = []
     overrides: dict[str, int] = {}
@@ -1820,7 +1862,7 @@ def calibrate_prefilter_rerank(args: argparse.Namespace) -> Path:
         result_record: dict[str, Any] = {
             "bucket_name": bucket_name,
             "bucket_label": str(workload["bucket_label"]),
-            "label_id": int(workload["label_id"]),
+            "label_id": None if "label_id" not in workload else int(workload["label_id"]),
             "selectivity": selectivity,
             "candidate_count": candidate_count,
         }
@@ -1860,10 +1902,17 @@ def calibrate_prefilter_rerank(args: argparse.Namespace) -> Path:
         write_bin_subset(calibration_query_bin, query_rows, calibration_row_ids)
         write_spmat_subset(calibration_query_labels, query_labels, calibration_row_ids)
 
-        candidate_ids = candidate_ids_by_label[int(workload["label_id"])]
+        filter_labels = query_labels.row_labels(calibration_row_ids[0])
+        for row_id in calibration_row_ids[1:]:
+            if query_labels.row_labels(row_id) != filter_labels:
+                raise ValueError(
+                    f"calibration currently requires one filter per bucket; {bucket_name} has varying query labels"
+                )
+        candidate_index_ids = sidecar.materialize_candidates(selector_type, filter_labels)
+        candidate_ids = np.asarray(tags_by_id[candidate_index_ids], dtype=np.uint32)
         if int(candidate_ids.shape[0]) != candidate_count:
             raise ValueError(
-                f"candidate count mismatch for {bucket_name}: summary says {candidate_count}, labels resolve to {candidate_ids.shape[0]}"
+                f"candidate count mismatch for {bucket_name}: summary says {candidate_count}, sidecar resolves to {candidate_ids.shape[0]}"
             )
 
         exact_topk_ids = compute_exact_topk_ids(
@@ -2318,7 +2367,7 @@ def build_parser() -> argparse.ArgumentParser:
     synth_parser.add_argument("--base-bin", required=True)
     synth_parser.add_argument("--query-bin", required=True)
     synth_parser.add_argument("--index-type", default="uint8", choices=["float", "int8", "uint8"])
-    synth_parser.add_argument("--selector-type", default="intersect", choices=["intersect", "subset"])
+    synth_parser.add_argument("--selector-type", default="intersect", choices=["intersect", "subset", "range"])
     synth_parser.add_argument("--out-dir", required=True)
     synth_parser.add_argument("--index-prefix")
     synth_parser.add_argument("--chunk-rows", type=int, default=1_000_000)
@@ -2330,7 +2379,7 @@ def build_parser() -> argparse.ArgumentParser:
     exact_uniform_parser.add_argument("--base-bin", required=True)
     exact_uniform_parser.add_argument("--query-bin", required=True)
     exact_uniform_parser.add_argument("--index-type", default="uint8", choices=["float", "int8", "uint8"])
-    exact_uniform_parser.add_argument("--selector-type", default="intersect", choices=["intersect", "subset"])
+    exact_uniform_parser.add_argument("--selector-type", default="intersect", choices=["intersect", "subset", "range"])
     exact_uniform_parser.add_argument("--out-dir", required=True)
     exact_uniform_parser.add_argument(
         "--selectivity-spec",
@@ -2358,7 +2407,7 @@ def build_parser() -> argparse.ArgumentParser:
     random_single_label_parser.add_argument("--label-stats-jsonl")
     random_single_label_parser.add_argument("--out-dir", required=True)
     random_single_label_parser.add_argument("--index-type", default="uint8", choices=["float", "int8", "uint8"])
-    random_single_label_parser.add_argument("--selector-type", default="intersect", choices=["intersect", "subset"])
+    random_single_label_parser.add_argument("--selector-type", default="intersect", choices=["intersect", "subset", "range"])
     random_single_label_parser.add_argument("--chunk-nnz", type=int, default=10_000_000)
     random_single_label_parser.add_argument("--chunk-rows", type=int, default=1_000_000)
     random_single_label_parser.add_argument("--extra-real-label", action="append", help="Additional real label id to include.")
@@ -2380,7 +2429,7 @@ def build_parser() -> argparse.ArgumentParser:
     manifest_from_summary_parser.add_argument("--summary-json", required=True)
     manifest_from_summary_parser.add_argument("--index-prefix", required=True)
     manifest_from_summary_parser.add_argument("--index-type", default="uint8", choices=["float", "int8", "uint8"])
-    manifest_from_summary_parser.add_argument("--selector-type", default="intersect", choices=["intersect", "subset"])
+    manifest_from_summary_parser.add_argument("--selector-type", default="intersect", choices=["intersect", "subset", "range"])
     manifest_from_summary_parser.add_argument("--manifest")
 
     prepare_parser = subparsers.add_parser("prepare", help="Bucket queries by real selectivity and write subset files.")
@@ -2388,7 +2437,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--index-type", default="uint8", choices=["float", "int8", "uint8"])
     prepare_parser.add_argument("--query-bin", required=True)
     prepare_parser.add_argument("--query-labels", required=True)
-    prepare_parser.add_argument("--selector-type", required=True, choices=["intersect", "subset"])
+    prepare_parser.add_argument("--selector-type", required=True, choices=["intersect", "subset", "range"])
     prepare_parser.add_argument("--out-dir", required=True)
     prepare_parser.add_argument("--manifest")
     prepare_parser.add_argument("--bucket", action="append", help="Bucket spec in the form name:lower,upper.")
@@ -2448,7 +2497,7 @@ def build_parser() -> argparse.ArgumentParser:
     all_parser.add_argument("--index-type", default="uint8", choices=["float", "int8", "uint8"])
     all_parser.add_argument("--query-bin", required=True)
     all_parser.add_argument("--query-labels", required=True)
-    all_parser.add_argument("--selector-type", required=True, choices=["intersect", "subset"])
+    all_parser.add_argument("--selector-type", required=True, choices=["intersect", "subset", "range"])
     all_parser.add_argument("--work-dir", required=True)
     all_parser.add_argument("--manifest")
     all_parser.add_argument("--results-jsonl")

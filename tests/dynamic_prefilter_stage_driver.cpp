@@ -200,6 +200,9 @@ pipeann::HybridFilterKind parse_filter_kind(const std::string &selector_type) {
   if (selector_type == "subset") {
     return pipeann::HybridFilterKind::kSubset;
   }
+  if (selector_type == "range") {
+    return pipeann::HybridFilterKind::kRange;
+  }
   throw std::runtime_error("unsupported selector_type: " + selector_type);
 }
 
@@ -209,6 +212,8 @@ uint64_t selector_mask_for_kind(pipeann::HybridFilterKind filter_kind) {
       return 1ULL;
     case pipeann::HybridFilterKind::kSubset:
       return 2ULL;
+    case pipeann::HybridFilterKind::kRange:
+      return 4ULL;
     case pipeann::HybridFilterKind::kUnsupported:
     default:
       return 0ULL;
@@ -405,7 +410,7 @@ void write_seed_hybrid_metadata(const std::string &index_prefix, pipeann::Hybrid
   const auto densebit = pipeann::DenseBitsetIndex::load(sidecar_path, 0);
   pipeann::HybridMetadataHeaderV1 header;
   header.flags = kMetadataValidFlag;
-  header.route_selector_mask = selector_mask_for_kind(filter_kind);
+  header.route_selector_mask = 1ULL | 2ULL | 4ULL;
   header.tau_m = 0;
   header.n_calib = live_count == 0 ? 0 : 1;
   header.n_live_snapshot = live_count;

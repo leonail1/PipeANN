@@ -79,6 +79,8 @@ namespace pipeann {
           return "intersect";
         case HybridFilterKind::kSubset:
           return "subset";
+        case HybridFilterKind::kRange:
+          return "range";
         case HybridFilterKind::kUnsupported:
         default:
           return nullptr;
@@ -161,6 +163,8 @@ namespace pipeann {
           return 1ULL;
         case HybridFilterKind::kSubset:
           return 2ULL;
+        case HybridFilterKind::kRange:
+          return 4ULL;
         case HybridFilterKind::kUnsupported:
         default:
           return 0ULL;
@@ -186,6 +190,10 @@ namespace pipeann {
         if (target_count == 0) {
           return false;
         }
+      } else if (filter_kind == HybridFilterKind::kRange) {
+        if (query_count == 0 || target_count == 0) {
+          return false;
+        }
       } else {
         return false;
       }
@@ -202,6 +210,18 @@ namespace pipeann {
             if (query_label == target_label) {
               return true;
             }
+          }
+        }
+        return false;
+      }
+
+      if (filter_kind == HybridFilterKind::kRange) {
+        std::sort(query_labels_vec.begin(), query_labels_vec.end());
+        const uint32_t low = query_labels_vec.front();
+        const uint32_t high = query_labels_vec.back();
+        for (uint32_t target_label : *target_labels) {
+          if (target_label >= low && target_label <= high) {
+            return true;
           }
         }
         return false;
@@ -283,6 +303,36 @@ namespace pipeann {
               for (size_t word_idx = 0; word_idx < scratch->bitset_words.size(); ++word_idx) {
                 scratch->bitset_words[word_idx] &= iter->second[word_idx];
               }
+            }
+          }
+        }
+      } else if (filter_kind == HybridFilterKind::kRange) {
+        if (scratch->normalized_labels.empty()) {
+          return 0;
+        }
+        const uint32_t low = scratch->normalized_labels.front();
+        const uint32_t high = scratch->normalized_labels.back();
+        const uint64_t span = static_cast<uint64_t>(high) - static_cast<uint64_t>(low) + 1ULL;
+        const uint64_t sparse_scan_cutoff = static_cast<uint64_t>(label_bitsets.size()) * 2ULL + 64ULL;
+        if (span > sparse_scan_cutoff) {
+          for (const auto &entry : label_bitsets) {
+            if (entry.first < low || entry.first > high) {
+              continue;
+            }
+            for (size_t word_idx = 0; word_idx < scratch->bitset_words.size(); ++word_idx) {
+              scratch->bitset_words[word_idx] |= entry.second[word_idx];
+            }
+          }
+        } else {
+          for (uint32_t label = low; label <= high; ++label) {
+            auto iter = label_bitsets.find(label);
+            if (iter != label_bitsets.end()) {
+              for (size_t word_idx = 0; word_idx < scratch->bitset_words.size(); ++word_idx) {
+                scratch->bitset_words[word_idx] |= iter->second[word_idx];
+              }
+            }
+            if (label == std::numeric_limits<uint32_t>::max()) {
+              break;
             }
           }
         }
@@ -837,7 +887,7 @@ namespace pipeann {
       const auto existing_metadata = HybridMetadata::load(meta_path, false);
       HybridMetadataHeaderV1 header = existing_metadata->header();
       header.flags = kMetadataValidFlag | kCalibrationValidFlag | kMetadataAllowPrefilterFlag;
-      header.route_selector_mask = route_selector_mask;
+      header.route_selector_mask = route_selector_mask | 1ULL | 2ULL | 4ULL;
       header.tau_m = tau_m;
       header.n_calib = live_point_count_snapshot;
       header.n_live_snapshot = live_point_count_snapshot;

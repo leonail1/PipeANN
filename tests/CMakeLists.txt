@@ -15,6 +15,9 @@ target_link_libraries(calibrate_hybrid_threshold ${PROJECT_NAME})
 add_executable(hybrid_metadata_roundtrip hybrid_metadata_roundtrip.cpp)
 target_link_libraries(hybrid_metadata_roundtrip ${PROJECT_NAME})
 
+add_executable(densebit_range densebit_range.cpp)
+target_link_libraries(densebit_range ${PROJECT_NAME})
+
 add_executable(overall_performance overall_performance.cpp)
 target_link_libraries(overall_performance ${PROJECT_NAME})
 

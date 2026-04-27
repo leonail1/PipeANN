@@ -29,6 +29,9 @@ pipeann::HybridFilterKind parse_filter_kind(const std::string &selector_type) {
   if (selector_type == "subset") {
     return pipeann::HybridFilterKind::kSubset;
   }
+  if (selector_type == "range") {
+    return pipeann::HybridFilterKind::kRange;
+  }
   return pipeann::HybridFilterKind::kUnsupported;
 }
 
@@ -159,7 +162,7 @@ int search_disk_index(int argc, char **argv) {
 
   const pipeann::HybridFilterKind filter_kind = parse_filter_kind(selector_type);
   if (filter_kind == pipeann::HybridFilterKind::kUnsupported) {
-    LOG(ERROR) << "Hybrid search driver only supports intersect/subset selectors. Got: " << selector_type;
+    LOG(ERROR) << "Hybrid search driver only supports intersect/subset/range selectors. Got: " << selector_type;
     return -1;
   }
 

@@ -14,11 +14,14 @@ namespace pipeann {
     AbstractSelector *selector_from_kind(HybridFilterKind filter_kind) {
       static LabelIntersectionSelector intersect_selector;
       static LabelSubsetSelector subset_selector;
+      static RangeSelector range_selector;
       switch (filter_kind) {
         case HybridFilterKind::kIntersect:
           return &intersect_selector;
         case HybridFilterKind::kSubset:
           return &subset_selector;
+        case HybridFilterKind::kRange:
+          return &range_selector;
         case HybridFilterKind::kUnsupported:
         default:
           return nullptr;
@@ -31,6 +34,8 @@ namespace pipeann {
           return 1ULL;
         case HybridFilterKind::kSubset:
           return 2ULL;
+        case HybridFilterKind::kRange:
+          return 4ULL;
         case HybridFilterKind::kUnsupported:
         default:
           return 0ULL;

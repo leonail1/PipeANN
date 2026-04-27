@@ -15,7 +15,7 @@ namespace pipeann {
     constexpr uint64_t kCalibrationValidFlag = 1ULL << 1;
     constexpr uint64_t kPendingRecalibrationFlag = 1ULL << 3;
     constexpr uint64_t kRunningRecalibrationFlag = 1ULL << 4;
-    constexpr uint64_t kAllowedSelectorMask = 0x3ULL;
+    constexpr uint64_t kAllowedSelectorMask = 0x7ULL;
 
     static_assert(sizeof(HybridMetadataHeaderV1) == 256, "HybridMetadataHeaderV1 size must be 256 bytes");
     static_assert(sizeof(HybridCalibrationBucketV1) == 40, "HybridCalibrationBucketV1 size must be 40 bytes");

@@ -10,6 +10,7 @@ namespace pipeann {
     kUnsupported = 0,
     kIntersect = 1,
     kSubset = 2,
+    kRange = 3,
   };
 
   struct DenseBitsetFileHeaderV1 {

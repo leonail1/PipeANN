@@ -273,6 +273,8 @@ namespace pipeann {
     // If ID == tag, then it is not stored.
     std::unique_ptr<libcuckoo::cuckoohash_map<uint32_t, TagT>> tags;
     std::mutex tags_init_mu_;
+    std::vector<TagT> dense_tags_;
+    mutable std::shared_timed_mutex dense_tags_lock_;
     std::unique_ptr<DenseBitsetIndex> densebit_index_;
     std::unique_ptr<HybridMetadata> hybrid_metadata_;
 
@@ -292,6 +294,8 @@ namespace pipeann {
     void load_tags(const std::string &tag_file, size_t offset = 0);
     void reset_tags();
     libcuckoo::cuckoohash_map<uint32_t, TagT> *ensure_tags_map(size_t initial_size = 4);
+    void install_tags_from_vector(const std::vector<TagT> &tag_v);
+    void set_tag(uint32_t id, TagT tag);
 
     // Direct insert related.
     void do_beam_search(const T *vec, uint32_t mem_L, uint32_t Lsize, const uint32_t beam_width,

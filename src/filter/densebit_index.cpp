@@ -264,6 +264,25 @@ namespace pipeann {
           }
         }
       }
+    } else if (kind == HybridFilterKind::kRange) {
+      if (scratch->normalized_labels.empty() || header_.nlabels == 0) {
+        return 0;
+      }
+      uint32_t low = scratch->normalized_labels.front();
+      uint32_t high = scratch->normalized_labels.back();
+      if (low >= header_.nlabels) {
+        return 0;
+      }
+      high = std::min<uint32_t>(high, static_cast<uint32_t>(header_.nlabels - 1));
+      for (uint32_t label = low; label <= high; ++label) {
+        const uint64_t *label_words = base_words_ + static_cast<size_t>(label) * static_cast<size_t>(header_.words_per_label);
+        for (uint64_t word_idx = 0; word_idx < header_.words_per_label; ++word_idx) {
+          scratch->bitset_words[static_cast<size_t>(word_idx)] |= label_words[static_cast<size_t>(word_idx)];
+        }
+        if (label == std::numeric_limits<uint32_t>::max()) {
+          break;
+        }
+      }
     }
 
     if (!scratch->bitset_words.empty()) {

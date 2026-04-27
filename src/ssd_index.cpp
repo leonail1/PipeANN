@@ -343,32 +343,47 @@ namespace pipeann {
     } else {
       LOG(INFO) << "Load tags from existing file: " << tag_file_name;
       pipeann::load_bin<TagT>(tag_file_name, tag_v, tag_num, tag_dim, offset);
-      size_t non_identity_count = 0;
-      for (size_t i = 0; i < tag_num; ++i) {
-        if (tag_v[i] != static_cast<TagT>(i)) {
-          ++non_identity_count;
-        }
+      install_tags_from_vector(tag_v);
+    }
+  }
+
+  template<typename T, typename TagT>
+  void SSDIndex<T, TagT>::install_tags_from_vector(const std::vector<TagT> &tag_v) {
+    this->reset_tags();
+    size_t non_identity_count = 0;
+    for (size_t i = 0; i < tag_v.size(); ++i) {
+      if (tag_v[i] != static_cast<TagT>(i)) {
+        ++non_identity_count;
       }
-      if (non_identity_count == 0) {
-        LOG(INFO) << "Tags file is identity-mapped; skip tag table allocation";
-        return;
-      }
-      auto *tag_map = ensure_tags_map(non_identity_count);
+    }
+    if (non_identity_count == 0) {
+      LOG(INFO) << "Tags file is identity-mapped; skip tag table allocation";
+      return;
+    }
+    if (non_identity_count * 4 >= tag_v.size()) {
+      std::unique_lock<std::shared_timed_mutex> dense_lock(dense_tags_lock_);
+      dense_tags_ = tag_v;
+      LOG(INFO) << "Loaded dense tag table with " << dense_tags_.size() << " entries and " << non_identity_count
+                << " non-identity tags";
+      return;
+    }
+    auto *tag_map = ensure_tags_map(non_identity_count);
 
 #pragma omp parallel for num_threads(max_nthreads)
-      for (size_t i = 0; i < tag_num; ++i) {
-        if (tag_v[i] != static_cast<TagT>(i)) {
-          tag_map->insert_or_assign(i, tag_v[i]);
-        }
+    for (size_t i = 0; i < tag_v.size(); ++i) {
+      if (tag_v[i] != static_cast<TagT>(i)) {
+        tag_map->insert_or_assign(i, tag_v[i]);
       }
-      LOG(INFO) << "Loaded " << tag_map->size() << " non-identity tags";
     }
+    LOG(INFO) << "Loaded " << tag_map->size() << " non-identity tags";
   }
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::reset_tags() {
     std::lock_guard<std::mutex> guard(tags_init_mu_);
     tags.reset();
+    std::unique_lock<std::shared_timed_mutex> dense_lock(dense_tags_lock_);
+    dense_tags_.clear();
   }
 
   template<typename T, typename TagT>
@@ -381,6 +396,28 @@ namespace pipeann {
       tags = std::make_unique<libcuckoo::cuckoohash_map<uint32_t, TagT>>(std::max<size_t>(initial_size, 4));
     }
     return tags.get();
+  }
+
+  template<typename T, typename TagT>
+  void SSDIndex<T, TagT>::set_tag(uint32_t id, TagT tag) {
+    {
+      std::unique_lock<std::shared_timed_mutex> dense_lock(dense_tags_lock_);
+      if (!dense_tags_.empty()) {
+        const size_t old_size = dense_tags_.size();
+        if (id >= old_size) {
+          dense_tags_.resize(static_cast<size_t>(id) + 1);
+          for (size_t idx = old_size; idx < dense_tags_.size(); ++idx) {
+            dense_tags_[idx] = static_cast<TagT>(idx);
+          }
+        }
+        dense_tags_[id] = tag;
+        return;
+      }
+    }
+
+    if (tag != static_cast<TagT>(id) || tags != nullptr) {
+      ensure_tags_map()->insert_or_assign(id, tag);
+    }
   }
 
   template<typename T, typename TagT>
@@ -475,6 +512,12 @@ namespace pipeann {
 #ifdef NO_MAPPING
     return id;  // use ID to replace tags.
 #else
+    {
+      std::shared_lock<std::shared_timed_mutex> dense_lock(dense_tags_lock_);
+      if (id < dense_tags_.size()) {
+        return dense_tags_[id];
+      }
+    }
     TagT ret;
     if (tags != nullptr && tags->find(id, ret)) {
       return ret;
