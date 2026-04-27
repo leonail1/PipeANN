@@ -292,7 +292,7 @@ DriverConfig parse_args(int argc, char **argv) {
           "[--data-bin <bin>] [--probe-jsonl <path>] [--insert-summary-json <path>] "
           "[--bucket-spec name:selectivity ...] [--insert-threads N] [--search-threads N] "
           "[--materialize-threads N] [--beamwidth N] [--k N] [--search-l N] [--mem-l N] "
-          "[--selector-type intersect|subset] [--metric l2|cosine|mips] [--skip-final-merge]"
+          "[--selector-type intersect|subset|range] [--metric l2|cosine|mips] [--skip-final-merge]"
       );
     } else {
       throw std::runtime_error("unknown argument: " + arg);
@@ -410,7 +410,7 @@ void write_seed_hybrid_metadata(const std::string &index_prefix, pipeann::Hybrid
   const auto densebit = pipeann::DenseBitsetIndex::load(sidecar_path, 0);
   pipeann::HybridMetadataHeaderV1 header;
   header.flags = kMetadataValidFlag;
-  header.route_selector_mask = 1ULL | 2ULL | 4ULL;
+  header.route_selector_mask = selector_mask_for_kind(filter_kind);
   header.tau_m = 0;
   header.n_calib = live_count == 0 ? 0 : 1;
   header.n_live_snapshot = live_count;

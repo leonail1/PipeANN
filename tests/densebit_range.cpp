@@ -94,13 +94,13 @@ int main() {
     pipeann::RangeSelector selector;
     const auto query_range = label_buffer({1, 2});
     const auto query_equal = label_buffer({3});
-    const auto target_two = label_buffer({2});
-    const auto target_zero = label_buffer({0});
-    const auto target_multi = label_buffer({0, 2});
-    require(selector.is_member(0, query_range.data(), target_two.data()), "range selector should match label 2");
-    require(selector.is_member(0, query_range.data(), target_multi.data()), "range selector should match one label in a multi-label target");
-    require(!selector.is_member(0, query_equal.data(), target_two.data()), "equality selector should reject label 2");
-    require(!selector.is_member(0, query_range.data(), target_zero.data()), "range selector should reject label 0");
+    uint32_t raw_target_two = 2;
+    uint32_t raw_target_zero = 0;
+    uint32_t raw_target_five = 5;
+    require(selector.is_member(0, query_range.data(), &raw_target_two), "range selector should match raw scalar 2");
+    require(!selector.is_member(0, query_equal.data(), &raw_target_two), "equality selector should reject raw scalar 2");
+    require(!selector.is_member(0, query_range.data(), &raw_target_zero), "range selector should reject raw scalar 0");
+    require(!selector.is_member(0, query_range.data(), &raw_target_five), "range selector should reject raw scalar 5 without overreading");
 
     const std::filesystem::path meta_path = temp_dir.path / "sample_hybrid.meta";
     pipeann::HybridMetadataHeaderV1 header;

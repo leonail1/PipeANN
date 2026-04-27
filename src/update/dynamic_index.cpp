@@ -887,7 +887,7 @@ namespace pipeann {
       const auto existing_metadata = HybridMetadata::load(meta_path, false);
       HybridMetadataHeaderV1 header = existing_metadata->header();
       header.flags = kMetadataValidFlag | kCalibrationValidFlag | kMetadataAllowPrefilterFlag;
-      header.route_selector_mask = route_selector_mask | 1ULL | 2ULL | 4ULL;
+      header.route_selector_mask = route_selector_mask;
       header.tau_m = tau_m;
       header.n_calib = live_point_count_snapshot;
       header.n_live_snapshot = live_point_count_snapshot;

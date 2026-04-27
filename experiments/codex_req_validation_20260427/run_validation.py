@@ -370,13 +370,24 @@ def prepare_runtime_prefix(stage: dict[str, Any]) -> Path:
             log_path=EXP_ROOT / "logs" / "prepare_runtime_stage_1m.log",
             timeout=3600,
         )
-    bootstrap_runtime_metadata(stage, runtime_prefix)
+    bootstrap_runtime_metadata(stage, runtime_prefix, "intersect")
     return runtime_prefix
 
 
-def bootstrap_runtime_metadata(stage: dict[str, Any], runtime_prefix: Path) -> None:
+def selector_mask(selector_type: str) -> int:
+    if selector_type == "intersect":
+        return 1
+    if selector_type == "subset":
+        return 2
+    if selector_type == "range":
+        return 4
+    raise ValueError(f"unsupported selector_type: {selector_type}")
+
+
+def bootstrap_runtime_metadata(stage: dict[str, Any], runtime_prefix: Path, selector_type: str) -> None:
     meta_path = Path(f"{runtime_prefix}_hybrid.meta")
-    if meta_path.exists() and (hybrid_metadata_selector_mask(meta_path) & 0x5) == 0x5:
+    wanted_mask = selector_mask(selector_type)
+    if meta_path.exists() and (hybrid_metadata_selector_mask(meta_path) & wanted_mask) == wanted_mask:
         return
     if meta_path.exists():
         meta_path.unlink()
@@ -411,7 +422,7 @@ def bootstrap_runtime_metadata(stage: dict[str, Any], runtime_prefix: Path) -> N
         "--mem-l",
         "0",
         "--selector-type",
-        "intersect",
+        selector_type,
         "--metric",
         "l2",
         "--recalibration-sample-limit",
@@ -422,9 +433,9 @@ def bootstrap_runtime_metadata(stage: dict[str, Any], runtime_prefix: Path) -> N
     for bucket_name, selectivity in SELECTIVITY_SPECS:
         cmd.extend(["--bucket-spec", f"{bucket_name}:{selectivity}"])
     run_command(
-        "bootstrap_runtime_stage_1m",
+        f"bootstrap_runtime_stage_1m_{selector_type}",
         cmd,
-        log_path=EXP_ROOT / "runtime" / "bootstrap_runtime_stage_1m.log",
+        log_path=EXP_ROOT / "runtime" / f"bootstrap_runtime_stage_1m_{selector_type}.log",
         timeout=1800,
     )
 
@@ -608,11 +619,20 @@ def run_hybrid_search(
 
 
 def evaluate_range(stage: dict[str, Any], index_prefix: Path) -> dict[str, Any]:
+    bootstrap_runtime_metadata(stage, index_prefix, "range")
     metadata = create_range_workload(stage, index_prefix)
     range_dir = EXP_ROOT / "range"
     result_json = range_dir / "result.json"
     if result_json.exists():
-        return read_json(result_json)
+        existing = read_json(result_json)
+        best = existing.get("best", {})
+        if (
+            existing.get("pass") is True
+            and int(best.get("fallback_count", 0)) == 0
+            and int(best.get("prefilter_count", 0)) > 0
+        ):
+            return existing
+        result_json.unlink()
 
     candidate_count = int(metadata["candidate_count"])
     evaluations: list[dict[str, Any]] = []
@@ -753,15 +773,20 @@ def measure_memory_case(
     return payload
 
 
-def measure_memory(index_prefix: Path, equality_calibration: Path, range_result: dict[str, Any]) -> dict[str, Any]:
+def measure_memory(stage: dict[str, Any], index_prefix: Path, equality_calibration: Path,
+                   range_result: dict[str, Any]) -> dict[str, Any]:
     output_json = EXP_ROOT / "memory" / "summary.json"
     if output_json.exists():
-        return read_json(output_json)
+        existing = read_json(output_json)
+        if "failing_cases" in existing:
+            return existing
+        output_json.unlink()
     calibration = read_json(equality_calibration)
     overrides = {str(k): int(v) for k, v in calibration["overrides"].items()}
 
     cases: list[dict[str, Any]] = []
     for bucket in ("u1e-03", "u100"):
+        bootstrap_runtime_metadata(stage, index_prefix, "intersect")
         bucket_dir = equality_calibration.parent / bucket
         qbin, qspmat, truth = make_single_query_case(
             f"equality_{bucket}",
@@ -783,6 +808,7 @@ def measure_memory(index_prefix: Path, equality_calibration: Path, range_result:
 
     range_best = range_result["best"]
     range_metadata = range_result["metadata"]
+    bootstrap_runtime_metadata(stage, index_prefix, "range")
     qbin, qspmat, truth = make_single_query_case(
         "range_0_2",
         Path(range_metadata["query_bin"]),
@@ -802,12 +828,18 @@ def measure_memory(index_prefix: Path, equality_calibration: Path, range_result:
     )
 
     min_case = min(cases, key=lambda item: int(item["max_rss_kb"]))
+    failing_cases = [
+        item["case"]
+        for item in cases
+        if int(item["max_rss_kb"]) > MEMORY_LIMIT_KB
+    ]
     payload = {
         "cases": cases,
         "min_single_query_max_rss_kb": int(min_case["max_rss_kb"]),
         "min_case": min_case["case"],
         "limit_kb": MEMORY_LIMIT_KB,
-        "pass": int(min_case["max_rss_kb"]) <= MEMORY_LIMIT_KB,
+        "failing_cases": failing_cases,
+        "pass": not failing_cases,
     }
     write_json(output_json, payload)
     return payload
@@ -845,12 +877,45 @@ def compute_bloat(stage: dict[str, Any], index_prefix: Path) -> dict[str, Any]:
 def load_dynamic_results(dynamic_runs: list[dict[str, Any]]) -> dict[str, Any]:
     transitions: list[dict[str, Any]] = []
     for run in dynamic_runs:
-        summary = read_json(Path(run["insert_summary"]))
-        probes = read_jsonl(Path(run["probe_jsonl"]))
-        transitions.append({**run, "summary": summary, "probes": probes})
+        insert_summary_path = Path(run["insert_summary"])
+        probe_jsonl_path = Path(run["probe_jsonl"])
+        files_present = insert_summary_path.exists() and probe_jsonl_path.exists()
+        summary = read_json(insert_summary_path) if insert_summary_path.exists() else {}
+        probes = read_jsonl(probe_jsonl_path) if probe_jsonl_path.exists() else []
+        probe_validations: list[dict[str, Any]] = []
+        for probe in probes:
+            recall = probe.get("recall")
+            avg_latency_us = float(probe.get("avg_latency_us", float("inf")))
+            latency_pass = avg_latency_us <= LATENCY_LIMIT_US
+            recall_pass = recall is not None and float(recall) >= TARGET_RECALL
+            probe_validations.append(
+                {
+                    "bucket_name": probe.get("bucket_name"),
+                    "avg_latency_us": avg_latency_us,
+                    "latency_pass": latency_pass,
+                    "recall": recall,
+                    "recall_pass": recall_pass,
+                    "pass": latency_pass and recall_pass,
+                }
+            )
+        transition_pass = (
+            files_present
+            and bool(probes)
+            and bool(summary.get("probe_started_near_insert_begin"))
+            and all(item["pass"] for item in probe_validations)
+        )
+        transitions.append(
+            {
+                **run,
+                "summary": summary,
+                "probes": probes,
+                "probe_validations": probe_validations,
+                "pass": transition_pass,
+            }
+        )
     payload = {
         "transitions": transitions,
-        "pass": all(Path(run["insert_summary"]).exists() and Path(run["probe_jsonl"]).exists() for run in dynamic_runs),
+        "pass": all(item["pass"] for item in transitions),
     }
     write_json(EXP_ROOT / "dynamic" / "summary.json", payload)
     return payload
@@ -905,7 +970,7 @@ def main() -> int:
     equality_calibration = calibrate_equality(stage_1m, runtime_prefix)
     equality_summary = collect_equality_results(equality_calibration)
     range_summary = evaluate_range(stage_1m, runtime_prefix)
-    memory_summary = measure_memory(runtime_prefix, equality_calibration, range_summary)
+    memory_summary = measure_memory(stage_1m, runtime_prefix, equality_calibration, range_summary)
     bloat_summary = compute_bloat(stage_1m, runtime_prefix)
 
     summary = {

@@ -30,8 +30,9 @@ namespace pipeann {
   // A simple range filter selector.
   // Query metadata is normally a label buffer:
   //   [count=1][value] means equality, [count=2][low][high] means range.
-  // Target metadata is normally [count=1][value].
-  // For compatibility with older callers, target metadata with count != 0/1 is treated as a raw uint32 scalar.
+  // Target metadata is a raw uint32 scalar. The selector deliberately does not infer
+  // variable-length label buffers from target_labels because the interface does not
+  // carry a buffer length, and old callers may pass only four bytes.
   // If target_labels is nullptr, returns false (no extra data).
   struct RangeSelector : public AbstractSelector {
     bool is_member(uint32_t target_id, const void *query_labels, const void *target_labels) override {
@@ -45,7 +46,9 @@ namespace pipeann {
         return false;
       }
 
-      return target_matches_range(target_labels, low, high);
+      uint32_t target = 0;
+      memcpy(&target, target_labels, sizeof(uint32_t));
+      return target >= low && target <= high;
     }
 
    private:
@@ -81,29 +84,6 @@ namespace pipeann {
       return true;
     }
 
-    static bool target_matches_range(const void *target_labels, uint32_t low, uint32_t high) {
-      if (target_labels == nullptr) {
-        return false;
-      }
-
-      uint32_t count = 0;
-      memcpy(&count, target_labels, sizeof(uint32_t));
-      if (count == 0) {
-        return false;
-      }
-      if (count <= 1024) {
-        for (uint32_t idx = 0; idx < count; ++idx) {
-          uint32_t value = 0;
-          memcpy(&value, static_cast<const char *>(target_labels) + sizeof(uint32_t) * (idx + 1), sizeof(uint32_t));
-          if (value >= low && value <= high) {
-            return true;
-          }
-        }
-        return false;
-      }
-
-      return count >= low && count <= high;
-    }
   };
 
   // The selector checks if query and target label sets have non-empty intersection.
