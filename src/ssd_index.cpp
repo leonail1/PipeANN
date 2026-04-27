@@ -245,7 +245,6 @@ namespace pipeann {
     try {
       hybrid_metadata_ = HybridMetadata::load(meta_path);
       hybrid_metadata_->validate_against_densebit(densebit_index_->header());
-      hybrid_metadata_->validate_against_npoints(meta_.npoints);
       hybrid_runtime_enabled_ = true;
       LOG(INFO) << "Hybrid metadata loaded from " << meta_path;
       return 0;

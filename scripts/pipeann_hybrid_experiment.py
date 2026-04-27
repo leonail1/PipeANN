@@ -60,6 +60,8 @@ DEFAULT_UNIFORM_EXACT_SELECTIVITY_SPECS = (
 DEFAULT_EXTRA_REAL_HIGH_SELECTIVITY_LABELS = (8, 89, 29, 23)
 DEFAULT_SYNTHETIC_QUERY_COUNT = 10_000
 DEFAULT_SYNTHETIC_RANDOM_SEED = 20260424
+DEFAULT_UNIFORM_EXACT_QUERY_COUNT = 1_000
+DEFAULT_UNIFORM_EXACT_PROBE_QUERY_COUNT = 5_000
 DEFAULT_CALIBRATION_QUERY_COUNT = 200
 DEFAULT_CALIBRATION_BLOCK_CANDIDATES = 16_384
 DEFAULT_CALIBRATION_MAX_SELECTIVITY = 0.1
@@ -76,6 +78,13 @@ SPMAT_HEADER = struct.Struct("<qqq")
 DENSEBIT_HEADER = struct.Struct("<QQQQQQ")
 UINT64_ALL_ONES = np.uint64(0xFFFFFFFFFFFFFFFF)
 PREFILTER_RERANK_ENV = "PIPEANN_PREFILTER_RERANK_L"
+
+
+def configure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(line_buffering=True, write_through=True)
 
 
 @dataclass(frozen=True)
@@ -1298,6 +1307,20 @@ def create_uniform_exact_selectivity_workloads(args: argparse.Namespace) -> Path
     if query_npts == 0:
         raise ValueError(f"query bin has no rows: {query_bin_path}")
 
+    compare_query_npts = min(args.queries_per_bucket, query_npts)
+    probe_query_npts = min(args.probe_queries_per_bucket, query_npts)
+    if compare_query_npts <= 0:
+        raise ValueError("queries_per_bucket must be positive")
+    if probe_query_npts <= 0:
+        raise ValueError("probe_queries_per_bucket must be positive")
+
+    compare_query_ids = list(range(compare_query_npts))
+    probe_query_ids = list(range(probe_query_npts))
+    compare_query_bin_path = out_dir / "queries.bin"
+    probe_query_bin_path = out_dir / "probe_queries.bin"
+    write_bin_subset(compare_query_bin_path, query_rows, compare_query_ids)
+    write_bin_subset(probe_query_bin_path, query_rows, probe_query_ids)
+
     rng = np.random.default_rng(args.seed)
     masks: list[np.ndarray] = []
     candidate_counts: dict[str, int] = {}
@@ -1326,12 +1349,10 @@ def create_uniform_exact_selectivity_workloads(args: argparse.Namespace) -> Path
         bucket_dir = out_dir / spec.name
         bucket_dir.mkdir(parents=True, exist_ok=True)
         query_labels_path = bucket_dir / "queries.spmat"
-        probe_query_bin_path = bucket_dir / "probe_query.bin"
         probe_query_labels_path = bucket_dir / "probe_query.spmat"
 
-        write_one_hot_spmat(query_labels_path, query_npts, len(specs), spec.label_id)
-        write_bin_subset(probe_query_bin_path, query_rows, [0])
-        write_one_hot_spmat(probe_query_labels_path, 1, len(specs), spec.label_id)
+        write_one_hot_spmat(query_labels_path, compare_query_npts, len(specs), spec.label_id)
+        write_one_hot_spmat(probe_query_labels_path, probe_query_npts, len(specs), spec.label_id)
 
         candidate_count = candidate_counts[spec.name]
         selectivity = 0.0 if npoints == 0 else candidate_count / npoints
@@ -1342,10 +1363,10 @@ def create_uniform_exact_selectivity_workloads(args: argparse.Namespace) -> Path
                 "lower": selectivity,
                 "upper": selectivity,
                 "midpoint": selectivity,
-                "query_count": query_npts,
-                "candidate_counts": [candidate_count] * query_npts,
-                "selectivities": [selectivity] * query_npts,
-                "query_bin": str(query_bin_path),
+                "query_count": compare_query_npts,
+                "candidate_counts": [candidate_count] * compare_query_npts,
+                "selectivities": [selectivity] * compare_query_npts,
+                "query_bin": str(compare_query_bin_path),
                 "query_labels": str(query_labels_path),
                 "probe_query_bin": str(probe_query_bin_path),
                 "probe_query_labels": str(probe_query_labels_path),
@@ -1359,10 +1380,11 @@ def create_uniform_exact_selectivity_workloads(args: argparse.Namespace) -> Path
                 "requested_selectivity": spec.selectivity,
                 "candidate_count": candidate_count,
                 "selectivity": selectivity,
-                "query_count": query_npts,
+                "query_count": compare_query_npts,
+                "probe_query_count": probe_query_npts,
                 "query_generation_mode": "original-query-bin-relabeled",
                 "query_source_pool_size": query_npts,
-                "query_bin": str(query_bin_path),
+                "query_bin": str(compare_query_bin_path),
                 "query_labels": str(query_labels_path),
                 "probe_query_bin": str(probe_query_bin_path),
                 "probe_query_labels": str(probe_query_labels_path),
@@ -1378,12 +1400,12 @@ def create_uniform_exact_selectivity_workloads(args: argparse.Namespace) -> Path
             "index_prefix": str(index_prefix),
             "index_type": args.index_type,
             "selector_type": args.selector_type,
-            "query_bin": str(query_bin_path),
+            "query_bin": str(compare_query_bin_path),
             "query_labels": None,
             "sidecar_path": str(Path(f"{index_prefix}_labels.densebit")),
             "npoints": npoints,
-            "scanned_queries": len(specs) * query_npts,
-            "queries_per_bucket": query_npts,
+            "scanned_queries": len(specs) * compare_query_npts,
+            "queries_per_bucket": compare_query_npts,
             "buckets": manifest_buckets,
         }
         with manifest_path.open("w", encoding="utf-8") as writer:
@@ -1395,13 +1417,15 @@ def create_uniform_exact_selectivity_workloads(args: argparse.Namespace) -> Path
         "format": "pipeann.hybrid.uniform_exact_selectivity.v1",
         "base_bin": str(base_bin_path),
         "base_labels": str(base_labels_path),
-        "query_bin": str(query_bin_path),
+        "query_bin": str(compare_query_bin_path),
+        "probe_query_bin": str(probe_query_bin_path),
         "index_type": args.index_type,
         "selector_type": args.selector_type,
         "random_seed": args.seed,
         "npoints": npoints,
         "dim": dim,
-        "queries_per_selectivity": query_npts,
+        "queries_per_selectivity": compare_query_npts,
+        "probe_queries_per_selectivity": probe_query_npts,
         "manifest": None if manifest_path is None else str(manifest_path),
         "workloads": workload_summary,
     }
@@ -2316,6 +2340,12 @@ def build_parser() -> argparse.ArgumentParser:
     exact_uniform_parser.add_argument("--index-prefix")
     exact_uniform_parser.add_argument("--chunk-rows", type=int, default=1_000_000)
     exact_uniform_parser.add_argument("--seed", type=int, default=DEFAULT_SYNTHETIC_RANDOM_SEED)
+    exact_uniform_parser.add_argument("--queries-per-bucket", type=int, default=DEFAULT_UNIFORM_EXACT_QUERY_COUNT)
+    exact_uniform_parser.add_argument(
+        "--probe-queries-per-bucket",
+        type=int,
+        default=DEFAULT_UNIFORM_EXACT_PROBE_QUERY_COUNT,
+    )
 
     random_single_label_parser = subparsers.add_parser(
         "generate-random-single-label-workloads",
@@ -2446,6 +2476,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    configure_stdio()
     args = build_parser().parse_args()
     if args.command == "scan-single-label":
         scan_single_label_distribution(args)
@@ -2486,5 +2517,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception as exc:
-        print(f"[error] {exc}", file=sys.stderr)
+        print(f"[error] {exc}", file=sys.stderr, flush=True)
         sys.exit(1)

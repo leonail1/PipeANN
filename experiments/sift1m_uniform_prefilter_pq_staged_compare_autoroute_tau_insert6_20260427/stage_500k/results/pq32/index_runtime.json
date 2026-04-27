@@ -1,0 +1,15 @@
+{
+  "copied_files": [
+    "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_500k/runtime_indexes/sift1m_uniform_prefilter_compare_500k_pq32_disk.index",
+    "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_500k/runtime_indexes/sift1m_uniform_prefilter_compare_500k_pq32_disk.index.tags",
+    "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_500k/runtime_indexes/sift1m_uniform_prefilter_compare_500k_pq32_pq_compressed.bin",
+    "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_500k/runtime_indexes/sift1m_uniform_prefilter_compare_500k_pq32_pq_pivots.bin"
+  ],
+  "dest_prefix": "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_500k/runtime_indexes/sift1m_uniform_prefilter_compare_500k_pq32",
+  "format": "pipeann.hybrid.label_runtime.v1",
+  "hybrid_meta_path": "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_500k/runtime_indexes/sift1m_uniform_prefilter_compare_500k_pq32_hybrid.meta",
+  "label_file": "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_500k/workloads/base.uniform_exact_selectivity.spmat",
+  "npoints": 500000,
+  "sidecar_path": "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_500k/runtime_indexes/sift1m_uniform_prefilter_compare_500k_pq32_labels.densebit",
+  "source_prefix": "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_500k/source_indexes/sift1m_stage_500k_pq32"
+}

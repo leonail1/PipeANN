@@ -1190,9 +1190,6 @@ namespace pipeann {
         auto hybrid_metadata = HybridMetadata::load(meta_path, false);
         hybrid_metadata->set_densebit_header(densebit_index->header());
         hybrid_metadata->set_n_live_snapshot(live_count);
-        if (hybrid_metadata->header().n_calib != live_count) {
-          hybrid_metadata->disable_routing();
-        }
         hybrid_metadata->write_atomically(meta_path);
       }
 
