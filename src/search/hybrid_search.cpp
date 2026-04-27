@@ -42,6 +42,25 @@ namespace pipeann {
       }
     }
 
+    struct DenseBitsetSelector : public AbstractSelector {
+      const std::vector<uint64_t> *bitset_words = nullptr;
+      uint64_t npoints = 0;
+
+      bool is_member(uint32_t target_id, const void *query_labels, const void *target_labels) override {
+        (void) query_labels;
+        (void) target_labels;
+        if (bitset_words == nullptr || target_id >= npoints) {
+          return false;
+        }
+        const uint64_t word_idx = static_cast<uint64_t>(target_id) >> 6U;
+        if (word_idx >= bitset_words->size()) {
+          return false;
+        }
+        const uint64_t bit_mask = 1ULL << (static_cast<uint64_t>(target_id) & 63ULL);
+        return ((*bitset_words)[static_cast<size_t>(word_idx)] & bit_mask) != 0;
+      }
+    };
+
     std::vector<uint32_t> decode_label_filter_data(const void *filter_data) {
       if (filter_data == nullptr) {
         return {};
@@ -83,14 +102,15 @@ namespace pipeann {
     }
 
     AbstractSelector *selector = selector_from_kind(filter_kind);
-    auto finish_graph_path = [&](HybridRouteDecision decision) -> size_t {
+    auto finish_graph_path = [&](HybridRouteDecision decision, AbstractSelector *graph_selector,
+                                 const void *graph_filter_data) -> size_t {
       const uint64_t route_overhead_us = route_timer.elapsed();
       if (hybrid_stats != nullptr) {
         hybrid_stats->decision = decision;
         hybrid_stats->route_overhead_us = route_overhead_us;
       }
       const size_t result_count = pipe_search(query, k_search, mem_L, l_search, res_tags, res_dists, beam_width,
-                                              stats, selector, filter_data, 0);
+                                              stats, graph_selector, graph_filter_data, 0);
       if (stats != nullptr) {
         stats->total_us += static_cast<double>(route_overhead_us);
       }
@@ -98,18 +118,18 @@ namespace pipeann {
     };
 
     if (filter_kind == HybridFilterKind::kUnsupported || selector == nullptr) {
-      return finish_graph_path(HybridRouteDecision::kAutoGraphFallback);
+      return finish_graph_path(HybridRouteDecision::kAutoGraphFallback, selector, filter_data);
     }
 
     if (!hybrid_enabled() || densebit_index_ == nullptr || hybrid_metadata_ == nullptr) {
-      return finish_graph_path(HybridRouteDecision::kAutoGraphFallback);
+      return finish_graph_path(HybridRouteDecision::kAutoGraphFallback, selector, filter_data);
     }
 
     const auto &meta_header = hybrid_metadata_->header();
     const uint64_t selector_mask = selector_mask_for_kind(filter_kind);
     if ((meta_header.flags & kMetadataAllowPrefilterFlag) == 0
         || (meta_header.route_selector_mask & selector_mask) == 0) {
-      return finish_graph_path(HybridRouteDecision::kAutoGraphFallback);
+      return finish_graph_path(HybridRouteDecision::kAutoGraphFallback, selector, filter_data);
     }
 
     HybridQueryScratch scratch;
@@ -141,10 +161,19 @@ namespace pipeann {
     const bool choose_prefilter = force_prefilter || (!force_graph_only && candidate_count <= meta_header.tau_m);
 
     if (!choose_prefilter) {
+      DenseBitsetSelector densebit_selector;
+      AbstractSelector *graph_selector = selector;
+      const void *graph_filter_data = filter_data;
+      if (meta_.label_size == 0) {
+        densebit_selector.bitset_words = &scratch.bitset_words;
+        densebit_selector.npoints = densebit_index_->header().npoints;
+        graph_selector = &densebit_selector;
+        graph_filter_data = nullptr;
+      }
       if (hybrid_stats != nullptr) {
         hybrid_stats->decision = HybridRouteDecision::kGraphOnly;
       }
-      return finish_graph_path(HybridRouteDecision::kGraphOnly);
+      return finish_graph_path(HybridRouteDecision::kGraphOnly, graph_selector, graph_filter_data);
     }
 
     std::vector<uint32_t> candidate_ids;

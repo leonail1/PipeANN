@@ -921,15 +921,36 @@ def load_dynamic_results(dynamic_runs: list[dict[str, Any]]) -> dict[str, Any]:
     return payload
 
 
-def collect_equality_results(calibration_path: Path) -> dict[str, Any]:
+def collect_equality_results(index_prefix: Path, calibration_path: Path) -> dict[str, Any]:
     payload = read_json(calibration_path)
     results: list[dict[str, Any]] = []
     for record in payload.get("results", []):
         bucket = record["bucket_name"]
         rerank_l = int(record["prefilter_rerank_l"])
-        jsonl_path = calibration_path.parent / bucket / f"rerank_{rerank_l}.jsonl"
-        search_record = extract_search_record(jsonl_path)
-        results.append({**record, "search_record": search_record})
+        bucket_dir = calibration_path.parent / bucket
+        prefilter_record = extract_search_record(bucket_dir / f"rerank_{rerank_l}.jsonl")
+        auto_record = run_hybrid_search(
+            f"equality_auto_{bucket}",
+            index_prefix,
+            bucket_dir / "queries.bin",
+            bucket_dir / "truthset.bin",
+            "intersect",
+            bucket_dir / "queries.spmat",
+            "auto",
+            rerank_l,
+            bucket_dir / "auto.jsonl",
+            bucket_dir / "auto.log",
+        )
+        results.append(
+            {
+                **record,
+                "achieved_avg_latency_us": float(auto_record.get("avg_latency_us", float("inf"))),
+                "achieved_qps": float(auto_record.get("qps", 0.0)),
+                "achieved_recall": float(auto_record.get("recall", 0.0)),
+                "prefilter_calibration_record": prefilter_record,
+                "search_record": auto_record,
+            }
+        )
     output = {
         "results": results,
         "overrides": payload.get("overrides", {}),
@@ -968,7 +989,7 @@ def main() -> int:
 
     runtime_prefix = prepare_runtime_prefix(stage_1m)
     equality_calibration = calibrate_equality(stage_1m, runtime_prefix)
-    equality_summary = collect_equality_results(equality_calibration)
+    equality_summary = collect_equality_results(runtime_prefix, equality_calibration)
     range_summary = evaluate_range(stage_1m, runtime_prefix)
     memory_summary = measure_memory(stage_1m, runtime_prefix, equality_calibration, range_summary)
     bloat_summary = compute_bloat(stage_1m, runtime_prefix)
