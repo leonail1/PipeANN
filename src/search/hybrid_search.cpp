@@ -121,14 +121,8 @@ namespace pipeann {
       return finish_graph_path(HybridRouteDecision::kAutoGraphFallback, selector, filter_data);
     }
 
-    if (!hybrid_enabled() || densebit_index_ == nullptr || hybrid_metadata_ == nullptr) {
-      return finish_graph_path(HybridRouteDecision::kAutoGraphFallback, selector, filter_data);
-    }
-
-    const auto &meta_header = hybrid_metadata_->header();
     const uint64_t selector_mask = selector_mask_for_kind(filter_kind);
-    if ((meta_header.flags & kMetadataAllowPrefilterFlag) == 0
-        || (meta_header.route_selector_mask & selector_mask) == 0) {
+    if (densebit_index_ == nullptr) {
       return finish_graph_path(HybridRouteDecision::kAutoGraphFallback, selector, filter_data);
     }
 
@@ -136,11 +130,17 @@ namespace pipeann {
     const std::vector<uint32_t> labels = decode_label_filter_data(filter_data);
     const uint64_t candidate_count = densebit_index_->count_candidates(filter_kind, labels, &scratch);
     const uint64_t route_overhead_us = route_timer.elapsed();
+    const bool routing_metadata_ready = hybrid_enabled() && hybrid_metadata_ != nullptr;
+    const HybridMetadataHeaderV1 *meta_header = routing_metadata_ready ? &hybrid_metadata_->header() : nullptr;
+    const bool calibrated_for_selector =
+        meta_header != nullptr && (meta_header->flags & kMetadataAllowPrefilterFlag) != 0
+        && (meta_header->route_selector_mask & selector_mask) != 0;
+    const uint64_t tau_m = calibrated_for_selector ? meta_header->tau_m : 0;
 
     if (hybrid_stats != nullptr) {
       hybrid_stats->candidate_count = candidate_count;
-      hybrid_stats->threshold = meta_header.tau_m;
-      hybrid_stats->threshold_version = meta_header.threshold_version;
+      hybrid_stats->threshold = tau_m;
+      hybrid_stats->threshold_version = meta_header == nullptr ? 0 : meta_header->threshold_version;
       hybrid_stats->route_overhead_us = route_overhead_us;
     }
 
@@ -158,7 +158,8 @@ namespace pipeann {
 
     const bool force_prefilter = route_override == HybridRouteOverride::kForcePrefilter;
     const bool force_graph_only = route_override == HybridRouteOverride::kForceGraphOnly;
-    const bool choose_prefilter = force_prefilter || (!force_graph_only && candidate_count <= meta_header.tau_m);
+    const bool choose_prefilter = force_prefilter || (!force_graph_only && calibrated_for_selector
+                                                      && candidate_count <= tau_m);
 
     if (!choose_prefilter) {
       DenseBitsetSelector densebit_selector;
@@ -171,9 +172,13 @@ namespace pipeann {
         graph_filter_data = nullptr;
       }
       if (hybrid_stats != nullptr) {
-        hybrid_stats->decision = HybridRouteDecision::kGraphOnly;
+        hybrid_stats->decision = calibrated_for_selector || force_graph_only
+                                      ? HybridRouteDecision::kGraphOnly
+                                      : HybridRouteDecision::kAutoGraphFallback;
       }
-      return finish_graph_path(HybridRouteDecision::kGraphOnly, graph_selector, graph_filter_data);
+      return finish_graph_path(calibrated_for_selector || force_graph_only ? HybridRouteDecision::kGraphOnly
+                                                                           : HybridRouteDecision::kAutoGraphFallback,
+                               graph_selector, graph_filter_data);
     }
 
     std::vector<uint32_t> candidate_ids;

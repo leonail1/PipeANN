@@ -71,6 +71,7 @@ namespace pipeann {
       pq_dist_lookup(query_buf->nbr_vec_scratch, n_ids, pq_table.n_chunks, query_buf->nbr_ctx_scratch,
                      query_buf->aligned_dist_scratch);
       pq_mu.unlock_shared();
+      maybe_drop_mmap_resident_pages();
     }
 
     void compute_dists(const uint32_t query_id, const uint32_t *ids, const uint64_t n_ids, float *dists_out,
@@ -83,6 +84,7 @@ namespace pipeann {
       // compute distances
       this->pq_table.compute_distances_alltoall(src_ptr, aligned_scratch, dists_out, n_ids);
       pq_mu.unlock_shared();
+      maybe_drop_mmap_resident_pages();
     }
 
     void load(const char *index_prefix) {
@@ -272,12 +274,37 @@ namespace pipeann {
 #ifdef MADV_RANDOM
       madvise(mapped, map_length, MADV_RANDOM);
 #endif
+#ifdef MADV_NOHUGEPAGE
+      madvise(mapped, map_length, MADV_NOHUGEPAGE);
+#endif
       mmap_base_ = mapped;
       mmap_payload_ = reinterpret_cast<const uint8_t *>(mapped) + delta;
       mmap_length_ = map_length;
       mmap_payload_bytes_ = payload_bytes;
       mmap_enabled_ = true;
       return true;
+    }
+
+    static bool should_drop_mmap_resident_pages() {
+      static const bool enabled = [] {
+        const char *value = std::getenv("PIPEANN_PQ_MMAP_DROP_CACHE");
+        if (value == nullptr) {
+          return false;
+        }
+        if (strcmp(value, "0") == 0 || strcasecmp(value, "false") == 0 || strcasecmp(value, "off") == 0) {
+          return false;
+        }
+        return true;
+      }();
+      return enabled;
+    }
+
+    void maybe_drop_mmap_resident_pages() {
+#ifdef MADV_DONTNEED
+      if (mmap_enabled_ && should_drop_mmap_resident_pages()) {
+        madvise(mmap_base_, mmap_length_, MADV_DONTNEED);
+      }
+#endif
     }
 
     inline void aggregate_coords(const unsigned *ids, const uint64_t n_ids, const uint8_t *all_coords,

@@ -1,13 +1,36 @@
 #include "ssd_index.h"
 
 #include <algorithm>
+#include <cstring>
+#include <cstdlib>
 #include <queue>
+#include <strings.h>
 #include <utility>
 #include <vector>
 
 #include "utils/timer.h"
 
 namespace pipeann {
+  namespace {
+    size_t prefilter_batch_size() {
+      constexpr size_t kDefaultBatchSize = MAX_N_EDGES;
+      const char *explicit_value = std::getenv("PIPEANN_PREFILTER_BATCH_SIZE");
+      if (explicit_value != nullptr) {
+        const unsigned long parsed = std::strtoul(explicit_value, nullptr, 10);
+        if (parsed > 0) {
+          return std::min<size_t>(kDefaultBatchSize, std::max<size_t>(1, static_cast<size_t>(parsed)));
+        }
+      }
+
+      const char *drop_cache = std::getenv("PIPEANN_PQ_MMAP_DROP_CACHE");
+      if (drop_cache != nullptr && std::strcmp(drop_cache, "0") != 0 && strcasecmp(drop_cache, "false") != 0
+          && strcasecmp(drop_cache, "off") != 0) {
+        return 64;
+      }
+      return kDefaultBatchSize;
+    }
+  }  // namespace
+
   template<typename T, typename TagT>
   size_t SSDIndex<T, TagT>::hybrid_prefilter_search(const T *query, const uint64_t k_search, TagT *res_tags,
                                                     float *res_dists, const std::vector<uint32_t> &candidate_ids,
@@ -29,7 +52,7 @@ namespace pipeann {
     using PQCandidate = std::pair<float, uint32_t>;
     std::priority_queue<PQCandidate> top_candidates;
 
-    constexpr size_t kBatchSize = MAX_N_EDGES;
+    const size_t kBatchSize = prefilter_batch_size();
     for (size_t offset = 0; offset < candidate_ids.size(); offset += kBatchSize) {
       const size_t current_batch = std::min(kBatchSize, candidate_ids.size() - offset);
       nbr_handler->compute_dists(query_buf, candidate_ids.data() + offset, current_batch);

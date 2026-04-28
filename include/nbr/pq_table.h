@@ -152,11 +152,15 @@ namespace pipeann {
           tables_T[j * 256 + i] = tables[i * ndims + j];
         }
       }
+    }
 
-      // added this for easy PQ-PQ squared-distance calculations
+    void ensure_all_to_all_dists() {
       if (all_to_all_dists != nullptr) {
-        delete[] all_to_all_dists;
+        return;
       }
+
+      // Added for PQ-PQ squared-distance calculations. Query-to-PQ search does not need
+      // this table, so allocate it lazily to keep single-query RSS low.
       all_to_all_dists = new float[256 * 256 * n_chunks];
       std::memset(all_to_all_dists, 0, 256 * 256 * n_chunks * sizeof(float));
 
@@ -296,6 +300,7 @@ namespace pipeann {
     // dists: [count]
     void compute_distances_alltoall(const uint8_t *comp_src, const uint8_t *comp_dsts, float *dists,
                                     const uint32_t count) {
+      ensure_all_to_all_dists();
       std::memset(dists, 0, count * sizeof(float));
       for (uint64_t i = 0; i < count; i++) {
         for (uint64_t c = 0; c < n_chunks; c++) {
