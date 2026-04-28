@@ -1,4 +1,5 @@
 build/
+.venv/
 experiments/**
 !experiments/**/
 !experiments/**/*.json
