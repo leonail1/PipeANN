@@ -5,6 +5,16 @@ experiments/**
 !experiments/**/*.jsonl
 !experiments/**/*.png
 !experiments/**/*.md
+
+# Large/generated experiment artifacts. Keep only compact result files above.
+experiments/**/*.bin
+experiments/**/*.densebit
+experiments/**/*.index
+experiments/**/*.index.tags
+experiments/**/*.log
+experiments/**/*.meta
+experiments/**/*.spmat
+experiments/**/*.tags
 .vscode/
 indices/
 .cache/
@@ -18,3 +28,4 @@ pipeann.egg-info/
 dist/
 docs/**/.*
 assets/
+.codex

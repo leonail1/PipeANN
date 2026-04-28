@@ -1,0 +1,38 @@
+[
+  {
+    "bucket": "u3e-03",
+    "route": "auto",
+    "recall": 98.449997,
+    "avg_latency_us": 210.175003,
+    "p99_latency_us": 3222,
+    "prefilter_count": 200,
+    "graph_count": 0,
+    "mean_candidate_count": 3000,
+    "mean_ios": 19,
+    "prefilter_rerank_l": 19
+  },
+  {
+    "bucket": "u5e-02",
+    "route": "auto",
+    "recall": 98.099998,
+    "avg_latency_us": 1998.050049,
+    "p99_latency_us": 6598,
+    "prefilter_count": 200,
+    "graph_count": 0,
+    "mean_candidate_count": 50000,
+    "mean_ios": 25,
+    "prefilter_rerank_l": 25
+  },
+  {
+    "bucket": "u30",
+    "route": "auto",
+    "recall": 98.050003,
+    "avg_latency_us": 9434.530273,
+    "p99_latency_us": 14073,
+    "prefilter_count": 0,
+    "graph_count": 200,
+    "mean_candidate_count": 300000,
+    "mean_ios": 121.330002,
+    "prefilter_rerank_l": 30
+  }
+]

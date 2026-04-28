@@ -1,0 +1,41 @@
+[
+  {
+    "case": "equality_u1e-03",
+    "selector_type": "intersect",
+    "route": "auto",
+    "recall": 0,
+    "avg_latency_us": 3662,
+    "prefilter_count": 1,
+    "graph_count": 0,
+    "fallback_count": 0,
+    "mean_candidate_count": 1000,
+    "max_rss_kb": 39208,
+    "max_rss_mib": 38.2890625
+  },
+  {
+    "case": "equality_u100",
+    "selector_type": "intersect",
+    "route": "auto",
+    "recall": 100,
+    "avg_latency_us": 25371,
+    "prefilter_count": 0,
+    "graph_count": 1,
+    "fallback_count": 0,
+    "mean_candidate_count": 1000000,
+    "max_rss_kb": 16876,
+    "max_rss_mib": 16.48046875
+  },
+  {
+    "case": "range_0_2",
+    "selector_type": "range",
+    "route": "auto",
+    "recall": 0,
+    "avg_latency_us": 22151,
+    "prefilter_count": 0,
+    "graph_count": 0,
+    "fallback_count": 1,
+    "mean_candidate_count": 13948,
+    "max_rss_kb": 17284,
+    "max_rss_mib": 16.87890625
+  }
+]

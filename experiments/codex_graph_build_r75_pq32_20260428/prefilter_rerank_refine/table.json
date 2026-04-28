@@ -1,0 +1,62 @@
+[
+  {
+    "bucket": "u1e-02",
+    "prefilter_rerank_l": 21,
+    "recall": 98.300003,
+    "avg_latency_us": 434.899994,
+    "p99_latency_us": 3237,
+    "prefilter_count": 200,
+    "graph_count": 0,
+    "mean_ios": 21
+  },
+  {
+    "bucket": "u1e-02",
+    "prefilter_rerank_l": 22,
+    "recall": 98.599998,
+    "avg_latency_us": 422.915009,
+    "p99_latency_us": 2343,
+    "prefilter_count": 200,
+    "graph_count": 0,
+    "mean_ios": 22
+  },
+  {
+    "bucket": "u1e-02",
+    "prefilter_rerank_l": 24,
+    "recall": 99,
+    "avg_latency_us": 422.994995,
+    "p99_latency_us": 2144,
+    "prefilter_count": 200,
+    "graph_count": 0,
+    "mean_ios": 24
+  },
+  {
+    "bucket": "u1e-01",
+    "prefilter_rerank_l": 28,
+    "recall": 98.25,
+    "avg_latency_us": 2840.334961,
+    "p99_latency_us": 6896,
+    "prefilter_count": 200,
+    "graph_count": 0,
+    "mean_ios": 28
+  },
+  {
+    "bucket": "u1e-01",
+    "prefilter_rerank_l": 30,
+    "recall": 98.900002,
+    "avg_latency_us": 3716.344971,
+    "p99_latency_us": 6478,
+    "prefilter_count": 200,
+    "graph_count": 0,
+    "mean_ios": 30
+  },
+  {
+    "bucket": "u1e-01",
+    "prefilter_rerank_l": 32,
+    "recall": 99,
+    "avg_latency_us": 2876.274902,
+    "p99_latency_us": 6198,
+    "prefilter_count": 200,
+    "graph_count": 0,
+    "mean_ios": 32
+  }
+]

@@ -1,0 +1,82 @@
+[
+  {
+    "L": 50,
+    "recall": 98.75,
+    "avg_latency_us": 2046.665039,
+    "p99_latency_us": 6469,
+    "mean_candidate_count": 1000000,
+    "mean_ios": 57.044998
+  },
+  {
+    "L": 75,
+    "recall": 99.400002,
+    "avg_latency_us": 5327.875,
+    "p99_latency_us": 7607,
+    "mean_candidate_count": 1000000,
+    "mean_ios": 81.684998
+  },
+  {
+    "L": 100,
+    "recall": 99.800003,
+    "avg_latency_us": 7561.584961,
+    "p99_latency_us": 9709,
+    "mean_candidate_count": 1000000,
+    "mean_ios": 106.410004
+  },
+  {
+    "L": 125,
+    "recall": 99.949997,
+    "avg_latency_us": 9710.514648,
+    "p99_latency_us": 11707,
+    "mean_candidate_count": 1000000,
+    "mean_ios": 131.270004
+  },
+  {
+    "L": 150,
+    "recall": 100,
+    "avg_latency_us": 11645.81543,
+    "p99_latency_us": 13492,
+    "mean_candidate_count": 1000000,
+    "mean_ios": 156.134995
+  },
+  {
+    "L": 200,
+    "recall": 100,
+    "avg_latency_us": 15875.455078,
+    "p99_latency_us": 18432,
+    "mean_candidate_count": 1000000,
+    "mean_ios": 205.910004
+  },
+  {
+    "L": 300,
+    "recall": 100,
+    "avg_latency_us": 24118.099609,
+    "p99_latency_us": 26591,
+    "mean_candidate_count": 1000000,
+    "mean_ios": 305.684998
+  },
+  {
+    "L": 400,
+    "recall": 100,
+    "avg_latency_us": 32341.304688,
+    "p99_latency_us": 34828,
+    "mean_candidate_count": 1000000,
+    "mean_ios": 405.459991
+  },
+  {
+    "L": 600,
+    "recall": 100,
+    "avg_latency_us": 49082.769531,
+    "p99_latency_us": 52465,
+    "mean_candidate_count": 1000000,
+    "mean_ios": 605.275024
+  },
+  {
+    "L": 800,
+    "recall": 100,
+    "avg_latency_us": 65762.320312,
+    "p99_latency_us": 68641,
+    "mean_candidate_count": 1000000,
+    "mean_ios": 805.094971
+  }
+]

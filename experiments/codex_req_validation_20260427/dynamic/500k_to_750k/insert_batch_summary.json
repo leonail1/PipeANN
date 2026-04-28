@@ -1,0 +1,17 @@
+{
+  "mode": "insert_batch",
+  "source_prefix": "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_500k/runtime_indexes/sift1m_uniform_prefilter_compare_500k_pq8",
+  "dest_prefix": "/mnt/data/lzg/PipeANN/experiments/sift1m_uniform_prefilter_pq_staged_compare_autoroute_tau_insert6_20260427/stage_750k/source_indexes/sift1m_stage_750k_pq8",
+  "insert_start": 500000,
+  "insert_count": 250000,
+  "insert_elapsed_s": 338.054825,
+  "insert_qps": 739.525015,
+  "p50_insert_latency_us": 10610.000000,
+  "p90_insert_latency_us": 12922.000000,
+  "p95_insert_latency_us": 13889.000000,
+  "p99_insert_latency_us": 16430.000000,
+  "probe_ran": true,
+  "first_probe_start_progress_count": 0,
+  "max_probe_end_progress_count": 2444,
+  "probe_started_near_insert_begin": true
+}

@@ -1,0 +1,32 @@
+{
+  "case": "equality_u1e-03",
+  "max_rss_kb": 30448,
+  "prefilter_rerank_l": 48,
+  "search_record": {
+    "L": 100,
+    "avg_latency_us": 750.0,
+    "beamwidth": 4,
+    "empty_count": 0,
+    "fallback_count": 0,
+    "format": "pipeann.hybrid.search.v1",
+    "graph_count": 0,
+    "hybrid_enabled": true,
+    "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+    "mean_candidate_count": 1000.0,
+    "mean_hops": 0.0,
+    "mean_ios": 48.0,
+    "mean_route_overhead_us": 78.0,
+    "mem_L": 0,
+    "p99_latency_us": 750.0,
+    "prefilter_count": 1,
+    "qps": 1180.279419,
+    "query_count": 1,
+    "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/memory/equality_u1e-03/query.spmat",
+    "recall": 90.0,
+    "recall_at": 10,
+    "route": "prefilter",
+    "selector_type": "intersect",
+    "threads": 1
+  },
+  "selector_type": "intersect"
+}

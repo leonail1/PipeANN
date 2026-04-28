@@ -1,0 +1,663 @@
+{
+  "overrides": {
+    "u100": 689,
+    "u1e-01": 264,
+    "u1e-02": 119,
+    "u1e-03": 48,
+    "u25": 435
+  },
+  "pass": false,
+  "results": [
+    {
+      "achieved_avg_latency_us": 258.100006,
+      "achieved_qps": 3127.30542,
+      "achieved_recall": 98.099998,
+      "bucket_label": "1.0e-03",
+      "bucket_name": "u1e-03",
+      "calibration_query_count": 100,
+      "candidate_count": 1000,
+      "evaluations": [
+        {
+          "avg_latency_us": 137.0,
+          "qps": 5132.637695,
+          "recall": 93.5,
+          "rerank_l": 31
+        },
+        {
+          "avg_latency_us": 174.130005,
+          "qps": 4310.938965,
+          "recall": 97.099998,
+          "rerank_l": 42
+        },
+        {
+          "avg_latency_us": 190.279999,
+          "qps": 4018.133789,
+          "recall": 97.5,
+          "rerank_l": 45
+        },
+        {
+          "avg_latency_us": 219.639999,
+          "qps": 3593.960693,
+          "recall": 97.699997,
+          "rerank_l": 47
+        },
+        {
+          "avg_latency_us": 197.330002,
+          "qps": 3913.607422,
+          "recall": 98.099998,
+          "rerank_l": 48
+        },
+        {
+          "avg_latency_us": 207.559998,
+          "qps": 3764.426514,
+          "recall": 98.599998,
+          "rerank_l": 53
+        },
+        {
+          "avg_latency_us": 657.869995,
+          "qps": 1354.332642,
+          "recall": 99.900002,
+          "rerank_l": 96
+        }
+      ],
+      "label_id": 0,
+      "prefilter_calibration_record": {
+        "L": 100,
+        "avg_latency_us": 197.330002,
+        "beamwidth": 4,
+        "empty_count": 0,
+        "fallback_count": 0,
+        "format": "pipeann.hybrid.search.v1",
+        "graph_count": 0,
+        "hybrid_enabled": true,
+        "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+        "mean_candidate_count": 1000.0,
+        "mean_hops": 0.0,
+        "mean_ios": 48.0,
+        "mean_route_overhead_us": 14.62,
+        "mem_L": 0,
+        "p99_latency_us": 648.0,
+        "prefilter_count": 100,
+        "qps": 3913.607422,
+        "query_count": 100,
+        "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/equality_calibration/u1e-03/queries.spmat",
+        "recall": 98.099998,
+        "recall_at": 10,
+        "route": "prefilter",
+        "selector_type": "intersect",
+        "threads": 1
+      },
+      "prefilter_rerank_l": 48,
+      "search_record": {
+        "L": 100,
+        "avg_latency_us": 258.100006,
+        "beamwidth": 4,
+        "empty_count": 0,
+        "fallback_count": 0,
+        "format": "pipeann.hybrid.search.v1",
+        "graph_count": 0,
+        "hybrid_enabled": true,
+        "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+        "mean_candidate_count": 1000.0,
+        "mean_hops": 0.0,
+        "mean_ios": 48.0,
+        "mean_route_overhead_us": 18.32,
+        "mem_L": 0,
+        "p99_latency_us": 1177.0,
+        "prefilter_count": 100,
+        "prefilter_rerank_l": 48,
+        "qps": 3127.30542,
+        "query_count": 100,
+        "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/equality_calibration/u1e-03/queries.spmat",
+        "recall": 98.099998,
+        "recall_at": 10,
+        "route": "auto",
+        "selector_type": "intersect",
+        "threads": 1
+      },
+      "selectivity": 0.001,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 1088.939941,
+      "achieved_qps": 770.296448,
+      "achieved_recall": 98.0,
+      "bucket_label": "1.0%",
+      "bucket_name": "u1e-02",
+      "calibration_query_count": 100,
+      "candidate_count": 10000,
+      "evaluations": [
+        {
+          "avg_latency_us": 453.829987,
+          "qps": 1656.490356,
+          "recall": 95.699997,
+          "rerank_l": 69
+        },
+        {
+          "avg_latency_us": 537.359985,
+          "qps": 1493.897339,
+          "recall": 97.300003,
+          "rerank_l": 99
+        },
+        {
+          "avg_latency_us": 596.950012,
+          "qps": 1372.536255,
+          "recall": 97.800003,
+          "rerank_l": 114
+        },
+        {
+          "avg_latency_us": 637.059998,
+          "qps": 1286.205078,
+          "recall": 97.900002,
+          "rerank_l": 118
+        },
+        {
+          "avg_latency_us": 818.719971,
+          "qps": 1028.679688,
+          "recall": 98.0,
+          "rerank_l": 119
+        },
+        {
+          "avg_latency_us": 763.619995,
+          "qps": 1091.952393,
+          "recall": 98.0,
+          "rerank_l": 120
+        },
+        {
+          "avg_latency_us": 698.47998,
+          "qps": 1169.508789,
+          "recall": 98.0,
+          "rerank_l": 121
+        },
+        {
+          "avg_latency_us": 977.73999,
+          "qps": 874.531555,
+          "recall": 98.099998,
+          "rerank_l": 128
+        }
+      ],
+      "label_id": 2,
+      "prefilter_calibration_record": {
+        "L": 100,
+        "avg_latency_us": 818.719971,
+        "beamwidth": 4,
+        "empty_count": 0,
+        "fallback_count": 0,
+        "format": "pipeann.hybrid.search.v1",
+        "graph_count": 0,
+        "hybrid_enabled": true,
+        "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+        "mean_candidate_count": 10000.0,
+        "mean_hops": 0.0,
+        "mean_ios": 119.0,
+        "mean_route_overhead_us": 32.36,
+        "mem_L": 0,
+        "p99_latency_us": 1432.0,
+        "prefilter_count": 100,
+        "qps": 1028.679688,
+        "query_count": 100,
+        "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/equality_calibration/u1e-02/queries.spmat",
+        "recall": 98.0,
+        "recall_at": 10,
+        "route": "prefilter",
+        "selector_type": "intersect",
+        "threads": 1
+      },
+      "prefilter_rerank_l": 119,
+      "search_record": {
+        "L": 100,
+        "avg_latency_us": 1088.939941,
+        "beamwidth": 4,
+        "empty_count": 0,
+        "fallback_count": 0,
+        "format": "pipeann.hybrid.search.v1",
+        "graph_count": 0,
+        "hybrid_enabled": true,
+        "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+        "mean_candidate_count": 10000.0,
+        "mean_hops": 0.0,
+        "mean_ios": 119.0,
+        "mean_route_overhead_us": 36.48,
+        "mem_L": 0,
+        "p99_latency_us": 2400.0,
+        "prefilter_count": 100,
+        "prefilter_rerank_l": 119,
+        "qps": 770.296448,
+        "query_count": 100,
+        "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/equality_calibration/u1e-02/queries.spmat",
+        "recall": 98.0,
+        "recall_at": 10,
+        "route": "auto",
+        "selector_type": "intersect",
+        "threads": 1
+      },
+      "selectivity": 0.01,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 9009.870117,
+      "achieved_qps": 109.116165,
+      "achieved_recall": 43.5,
+      "bucket_label": "10%",
+      "bucket_name": "u1e-01",
+      "calibration_query_count": 100,
+      "candidate_count": 100000,
+      "evaluations": [
+        {
+          "avg_latency_us": 2019.420044,
+          "qps": 428.954071,
+          "recall": 94.699997,
+          "rerank_l": 160
+        },
+        {
+          "avg_latency_us": 2569.22998,
+          "qps": 339.14856,
+          "recall": 95.099998,
+          "rerank_l": 165
+        },
+        {
+          "avg_latency_us": 3567.23999,
+          "qps": 249.848434,
+          "recall": 97.400002,
+          "rerank_l": 243
+        },
+        {
+          "avg_latency_us": 3249.110107,
+          "qps": 272.236603,
+          "recall": 97.900002,
+          "rerank_l": 263
+        },
+        {
+          "avg_latency_us": 2985.72998,
+          "qps": 298.254547,
+          "recall": 98.099998,
+          "rerank_l": 264
+        },
+        {
+          "avg_latency_us": 3507.929932,
+          "qps": 253.959549,
+          "recall": 98.099998,
+          "rerank_l": 265
+        },
+        {
+          "avg_latency_us": 2896.879883,
+          "qps": 307.528931,
+          "recall": 98.199997,
+          "rerank_l": 266
+        },
+        {
+          "avg_latency_us": 3300.870117,
+          "qps": 268.464569,
+          "recall": 98.199997,
+          "rerank_l": 268
+        },
+        {
+          "avg_latency_us": 3226.060059,
+          "qps": 276.222717,
+          "recall": 98.300003,
+          "rerank_l": 273
+        },
+        {
+          "avg_latency_us": 3314.860107,
+          "qps": 268.230621,
+          "recall": 98.300003,
+          "rerank_l": 282
+        },
+        {
+          "avg_latency_us": 6528.560059,
+          "qps": 146.237671,
+          "recall": 98.599998,
+          "rerank_l": 320
+        }
+      ],
+      "label_id": 4,
+      "prefilter_calibration_record": {
+        "L": 100,
+        "avg_latency_us": 2985.72998,
+        "beamwidth": 4,
+        "empty_count": 0,
+        "fallback_count": 0,
+        "format": "pipeann.hybrid.search.v1",
+        "graph_count": 0,
+        "hybrid_enabled": true,
+        "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+        "mean_candidate_count": 100000.0,
+        "mean_hops": 0.0,
+        "mean_ios": 264.0,
+        "mean_route_overhead_us": 30.34,
+        "mem_L": 0,
+        "p99_latency_us": 5756.0,
+        "prefilter_count": 100,
+        "qps": 298.254547,
+        "query_count": 100,
+        "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/equality_calibration/u1e-01/queries.spmat",
+        "recall": 98.099998,
+        "recall_at": 10,
+        "route": "prefilter",
+        "selector_type": "intersect",
+        "threads": 1
+      },
+      "prefilter_rerank_l": 264,
+      "search_record": {
+        "L": 100,
+        "avg_latency_us": 9009.870117,
+        "beamwidth": 4,
+        "empty_count": 0,
+        "fallback_count": 0,
+        "format": "pipeann.hybrid.search.v1",
+        "graph_count": 100,
+        "hybrid_enabled": true,
+        "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+        "mean_candidate_count": 100000.0,
+        "mean_hops": 0.0,
+        "mean_ios": 107.18,
+        "mean_route_overhead_us": 61.45,
+        "mem_L": 0,
+        "p99_latency_us": 11570.0,
+        "prefilter_count": 0,
+        "prefilter_rerank_l": 264,
+        "qps": 109.116165,
+        "query_count": 100,
+        "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/equality_calibration/u1e-01/queries.spmat",
+        "recall": 43.5,
+        "recall_at": 10,
+        "route": "auto",
+        "selector_type": "intersect",
+        "threads": 1
+      },
+      "selectivity": 0.1,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 8964.889648,
+      "achieved_qps": 109.673279,
+      "achieved_recall": 61.0,
+      "bucket_label": "25%",
+      "bucket_name": "u25",
+      "calibration_query_count": 100,
+      "candidate_count": 250000,
+      "evaluations": [
+        {
+          "avg_latency_us": 3262.189941,
+          "qps": 270.639191,
+          "recall": 93.099998,
+          "rerank_l": 192
+        },
+        {
+          "avg_latency_us": 7899.330078,
+          "qps": 118.555702,
+          "recall": 97.300003,
+          "rerank_l": 384
+        },
+        {
+          "avg_latency_us": 5055.25,
+          "qps": 175.969086,
+          "recall": 97.400002,
+          "rerank_l": 389
+        },
+        {
+          "avg_latency_us": 5151.569824,
+          "qps": 172.680832,
+          "recall": 97.800003,
+          "rerank_l": 413
+        },
+        {
+          "avg_latency_us": 5710.180176,
+          "qps": 155.400085,
+          "recall": 97.900002,
+          "rerank_l": 425
+        },
+        {
+          "avg_latency_us": 5091.689941,
+          "qps": 174.370667,
+          "recall": 97.900002,
+          "rerank_l": 431
+        },
+        {
+          "avg_latency_us": 5102.549805,
+          "qps": 175.040939,
+          "recall": 97.900002,
+          "rerank_l": 434
+        },
+        {
+          "avg_latency_us": 5722.390137,
+          "qps": 155.400223,
+          "recall": 98.0,
+          "rerank_l": 435
+        },
+        {
+          "avg_latency_us": 5321.540039,
+          "qps": 167.473495,
+          "recall": 98.0,
+          "rerank_l": 436
+        },
+        {
+          "avg_latency_us": 5237.180176,
+          "qps": 168.30983,
+          "recall": 98.0,
+          "rerank_l": 437
+        },
+        {
+          "avg_latency_us": 5268.720215,
+          "qps": 169.210312,
+          "recall": 98.199997,
+          "rerank_l": 484
+        },
+        {
+          "avg_latency_us": 6094.100098,
+          "qps": 147.366302,
+          "recall": 98.699997,
+          "rerank_l": 579
+        },
+        {
+          "avg_latency_us": 10978.209961,
+          "qps": 85.73996,
+          "recall": 99.400002,
+          "rerank_l": 768
+        }
+      ],
+      "label_id": 5,
+      "prefilter_calibration_record": {
+        "L": 100,
+        "avg_latency_us": 5722.390137,
+        "beamwidth": 4,
+        "empty_count": 0,
+        "fallback_count": 0,
+        "format": "pipeann.hybrid.search.v1",
+        "graph_count": 0,
+        "hybrid_enabled": true,
+        "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+        "mean_candidate_count": 250000.0,
+        "mean_hops": 0.0,
+        "mean_ios": 435.0,
+        "mean_route_overhead_us": 39.76,
+        "mem_L": 0,
+        "p99_latency_us": 10625.0,
+        "prefilter_count": 100,
+        "qps": 155.400223,
+        "query_count": 100,
+        "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/equality_calibration/u25/queries.spmat",
+        "recall": 98.0,
+        "recall_at": 10,
+        "route": "prefilter",
+        "selector_type": "intersect",
+        "threads": 1
+      },
+      "prefilter_rerank_l": 435,
+      "search_record": {
+        "L": 100,
+        "avg_latency_us": 8964.889648,
+        "beamwidth": 4,
+        "empty_count": 0,
+        "fallback_count": 0,
+        "format": "pipeann.hybrid.search.v1",
+        "graph_count": 100,
+        "hybrid_enabled": true,
+        "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+        "mean_candidate_count": 250000.0,
+        "mean_hops": 0.0,
+        "mean_ios": 107.18,
+        "mean_route_overhead_us": 61.42,
+        "mem_L": 0,
+        "p99_latency_us": 11159.0,
+        "prefilter_count": 0,
+        "prefilter_rerank_l": 435,
+        "qps": 109.673279,
+        "query_count": 100,
+        "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/equality_calibration/u25/queries.spmat",
+        "recall": 61.0,
+        "recall_at": 10,
+        "route": "auto",
+        "selector_type": "intersect",
+        "threads": 1
+      },
+      "selectivity": 0.25,
+      "status": "calibrated",
+      "target_recall": 98.0
+    },
+    {
+      "achieved_avg_latency_us": 9012.259766,
+      "achieved_qps": 109.116035,
+      "achieved_recall": 79.300003,
+      "bucket_label": "100%",
+      "bucket_name": "u100",
+      "calibration_query_count": 100,
+      "candidate_count": 1000000,
+      "evaluations": [
+        {
+          "avg_latency_us": 9288.80957,
+          "qps": 94.97271,
+          "recall": 87.300003,
+          "rerank_l": 192
+        },
+        {
+          "avg_latency_us": 10463.110352,
+          "qps": 83.708862,
+          "recall": 94.599998,
+          "rerank_l": 384
+        },
+        {
+          "avg_latency_us": 11015.910156,
+          "qps": 77.865051,
+          "recall": 94.599998,
+          "rerank_l": 389
+        },
+        {
+          "avg_latency_us": 11637.870117,
+          "qps": 76.175201,
+          "recall": 97.199997,
+          "rerank_l": 579
+        },
+        {
+          "avg_latency_us": 12656.259766,
+          "qps": 70.503456,
+          "recall": 97.699997,
+          "rerank_l": 674
+        },
+        {
+          "avg_latency_us": 12253.870117,
+          "qps": 72.918213,
+          "recall": 97.800003,
+          "rerank_l": 686
+        },
+        {
+          "avg_latency_us": 12445.540039,
+          "qps": 71.707802,
+          "recall": 97.900002,
+          "rerank_l": 688
+        },
+        {
+          "avg_latency_us": 13384.160156,
+          "qps": 66.391853,
+          "recall": 98.0,
+          "rerank_l": 689
+        },
+        {
+          "avg_latency_us": 13157.080078,
+          "qps": 67.686432,
+          "recall": 98.0,
+          "rerank_l": 692
+        },
+        {
+          "avg_latency_us": 13021.620117,
+          "qps": 68.82299,
+          "recall": 98.0,
+          "rerank_l": 698
+        },
+        {
+          "avg_latency_us": 12623.070312,
+          "qps": 71.11512,
+          "recall": 98.0,
+          "rerank_l": 721
+        },
+        {
+          "avg_latency_us": 14275.049805,
+          "qps": 63.596458,
+          "recall": 98.099998,
+          "rerank_l": 768
+        }
+      ],
+      "label_id": 9,
+      "prefilter_calibration_record": {
+        "L": 100,
+        "avg_latency_us": 13384.160156,
+        "beamwidth": 4,
+        "empty_count": 0,
+        "fallback_count": 0,
+        "format": "pipeann.hybrid.search.v1",
+        "graph_count": 0,
+        "hybrid_enabled": true,
+        "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+        "mean_candidate_count": 1000000.0,
+        "mean_hops": 0.0,
+        "mean_ios": 689.0,
+        "mean_route_overhead_us": 34.91,
+        "mem_L": 0,
+        "p99_latency_us": 22315.0,
+        "prefilter_count": 100,
+        "qps": 66.391853,
+        "query_count": 100,
+        "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/equality_calibration/u100/queries.spmat",
+        "recall": 98.0,
+        "recall_at": 10,
+        "route": "prefilter",
+        "selector_type": "intersect",
+        "threads": 1
+      },
+      "prefilter_rerank_l": 689,
+      "search_record": {
+        "L": 100,
+        "avg_latency_us": 9012.259766,
+        "beamwidth": 4,
+        "empty_count": 0,
+        "fallback_count": 0,
+        "format": "pipeann.hybrid.search.v1",
+        "graph_count": 100,
+        "hybrid_enabled": true,
+        "index_prefix": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/runtime/sift1m_validation_1m_pq8",
+        "mean_candidate_count": 1000000.0,
+        "mean_hops": 0.0,
+        "mean_ios": 107.18,
+        "mean_route_overhead_us": 61.3,
+        "mem_L": 0,
+        "p99_latency_us": 11905.0,
+        "prefilter_count": 0,
+        "prefilter_rerank_l": 689,
+        "qps": 109.116035,
+        "query_count": 100,
+        "query_label_file": "/mnt/data/lzg/PipeANN/experiments/codex_req_validation_20260427/equality_calibration/u100/queries.spmat",
+        "recall": 79.300003,
+        "recall_at": 10,
+        "route": "auto",
+        "selector_type": "intersect",
+        "threads": 1
+      },
+      "selectivity": 1.0,
+      "status": "calibrated",
+      "target_recall": 98.0
+    }
+  ]
+}

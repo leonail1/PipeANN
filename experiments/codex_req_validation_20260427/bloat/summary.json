@@ -1,0 +1,17 @@
+{
+  "dim": 128,
+  "extra_over_raw_ratio": 0.6261542890625,
+  "files": {
+    "_disk.index": 819204096,
+    "_disk.index.tags": 4000008,
+    "_hybrid.meta": 576,
+    "_labels.densebit": 1250048,
+    "_pq_compressed.bin": 8000008,
+    "_pq_pivots.bin": 136260
+  },
+  "npoints": 1000000,
+  "pass": true,
+  "raw_vector_bytes": 512000000,
+  "total_index_bytes": 832590996,
+  "total_to_raw_ratio": 1.6261542890625
+}

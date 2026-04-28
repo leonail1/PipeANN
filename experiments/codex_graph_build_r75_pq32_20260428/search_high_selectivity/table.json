@@ -1,0 +1,110 @@
+[
+  {
+    "bucket": "u25",
+    "L": 50,
+    "recall": 81.349998,
+    "avg_latency_us": 2112.97998,
+    "p99_latency_us": 6417,
+    "mean_candidate_count": 250000,
+    "mean_ios": 57.044998
+  },
+  {
+    "bucket": "u25",
+    "L": 75,
+    "recall": 92.300003,
+    "avg_latency_us": 5333.225098,
+    "p99_latency_us": 7971,
+    "mean_candidate_count": 250000,
+    "mean_ios": 81.684998
+  },
+  {
+    "bucket": "u25",
+    "L": 100,
+    "recall": 96.699997,
+    "avg_latency_us": 7603.015137,
+    "p99_latency_us": 9427,
+    "mean_candidate_count": 250000,
+    "mean_ios": 106.410004
+  },
+  {
+    "bucket": "u25",
+    "L": 125,
+    "recall": 98.300003,
+    "avg_latency_us": 9765.415039,
+    "p99_latency_us": 11861,
+    "mean_candidate_count": 250000,
+    "mean_ios": 131.270004
+  },
+  {
+    "bucket": "u50",
+    "L": 50,
+    "recall": 94.5,
+    "avg_latency_us": 2017.155029,
+    "p99_latency_us": 5098,
+    "mean_candidate_count": 500000,
+    "mean_ios": 57.044998
+  },
+  {
+    "bucket": "u50",
+    "L": 75,
+    "recall": 98.400002,
+    "avg_latency_us": 5295.709961,
+    "p99_latency_us": 7629,
+    "mean_candidate_count": 500000,
+    "mean_ios": 81.684998
+  },
+  {
+    "bucket": "u50",
+    "L": 100,
+    "recall": 99.25,
+    "avg_latency_us": 7661.174805,
+    "p99_latency_us": 10108,
+    "mean_candidate_count": 500000,
+    "mean_ios": 106.410004
+  },
+  {
+    "bucket": "u50",
+    "L": 125,
+    "recall": 99.599998,
+    "avg_latency_us": 9779.584961,
+    "p99_latency_us": 11510,
+    "mean_candidate_count": 500000,
+    "mean_ios": 131.270004
+  },
+  {
+    "bucket": "u75",
+    "L": 50,
+    "recall": 97.550003,
+    "avg_latency_us": 2040.150024,
+    "p99_latency_us": 5357,
+    "mean_candidate_count": 750000,
+    "mean_ios": 57.044998
+  },
+  {
+    "bucket": "u75",
+    "L": 75,
+    "recall": 98.949997,
+    "avg_latency_us": 5334.694824,
+    "p99_latency_us": 7747,
+    "mean_candidate_count": 750000,
+    "mean_ios": 81.684998
+  },
+  {
+    "bucket": "u75",
+    "L": 100,
+    "recall": 99.5,
+    "avg_latency_us": 7670.615234,
+    "p99_latency_us": 9948,
+    "mean_candidate_count": 750000,
+    "mean_ios": 106.410004
+  },
+  {
+    "bucket": "u75",
+    "L": 125,
+    "recall": 99.699997,
+    "avg_latency_us": 9791.120117,
+    "p99_latency_us": 11929,
+    "mean_candidate_count": 750000,
+    "mean_ios": 131.270004
+  }
+]
