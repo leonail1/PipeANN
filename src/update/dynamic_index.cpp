@@ -1025,14 +1025,16 @@ namespace pipeann {
           || (route_override != HybridRouteOverride::kForceGraphOnly
               && auto_routing_ready && candidate_count <= threshold);
 
+      uint64_t search_overhead_us = route_timer.elapsed();
       if (choose_prefilter) {
         std::vector<uint32_t> candidate_ids;
         materialize_candidate_ids(&scratch, &candidate_ids);
+        search_overhead_us = route_timer.elapsed();
         n = _disk_index->hybrid_prefilter_search(query, search_L, result_tags.data(), result_distances.data(),
                                                  candidate_ids, stats, live_point_count_.load());
         if (hybrid_stats != nullptr) {
           hybrid_stats->decision = HybridRouteDecision::kPrefilter;
-          hybrid_stats->route_overhead_us = route_timer.elapsed();
+          hybrid_stats->route_overhead_us = search_overhead_us;
         }
       } else {
         LiveLabelSelector selector;
@@ -1044,12 +1046,12 @@ namespace pipeann {
         if (hybrid_stats != nullptr) {
           hybrid_stats->decision = auto_routing_ready ? HybridRouteDecision::kGraphOnly
                                                       : HybridRouteDecision::kAutoGraphFallback;
-          hybrid_stats->route_overhead_us = route_timer.elapsed();
+          hybrid_stats->route_overhead_us = search_overhead_us;
         }
       }
 
       if (stats != nullptr) {
-        stats->total_us += static_cast<double>(route_timer.elapsed());
+        stats->total_us += static_cast<double>(search_overhead_us);
       }
     } else {
       auto *deletion_set = &deletion_sets[active_delete_set];

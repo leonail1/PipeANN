@@ -27,6 +27,9 @@ target_link_libraries(test_insert_search ${PROJECT_NAME})
 add_executable(dynamic_prefilter_stage_driver dynamic_prefilter_stage_driver.cpp)
 target_link_libraries(dynamic_prefilter_stage_driver ${PROJECT_NAME})
 
+add_executable(dynamic_update_suite_driver dynamic_update_suite_driver.cpp)
+target_link_libraries(dynamic_update_suite_driver ${PROJECT_NAME})
+
 add_executable(overall_perf_mem overall_perf_mem.cpp)
 target_link_libraries(overall_perf_mem ${PROJECT_NAME})
 

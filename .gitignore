@@ -4,8 +4,10 @@ experiments/**
 !experiments/**/
 !experiments/**/*.json
 !experiments/**/*.jsonl
+!experiments/**/*.csv
 !experiments/**/*.png
 !experiments/**/*.md
+!experiments/**/*.sh
 
 # Large/generated experiment artifacts. Keep only compact result files above.
 experiments/**/*.bin
