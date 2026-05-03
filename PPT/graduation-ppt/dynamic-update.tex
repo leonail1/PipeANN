@@ -1,0 +1,130 @@
+% !TEX TS-program = xelatex
+% !TEX encoding = UTF-8 Unicode
+\documentclass[aspectratio=169]{xmu-slide}
+
+\usepackage{amssymb}
+\usepackage{makecell}
+\pgfplotsset{compat=1.18}
+
+\title{PipeANN 动态更新实验汇报}
+\author{林正刚}
+\teacher{沈志荣教授}
+\pubdate{}
+
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+
+\newcommand{\ok}{\textcolor{green!45!black}{通过}}
+\newcommand{\warn}{\textcolor{orange!85!black}{部分通过}}
+\newcommand{\bad}{\textcolor{red!75!black}{未达标}}
+
+\begin{document}
+
+\maketitle
+
+\begin{frame}[c]{需求 1：召回率对比}
+    \centering
+    \scriptsize
+    固定 $L=100$。左图比较直接构建、10k/250k/500k seed 增量插入的阶段召回；右图比较原始、删除、重插后的高选择性 graph-search 召回。
+    \vfill
+
+    \begin{columns}[c,onlytextwidth]
+        \column{0.50\textwidth}
+        \centering
+        \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{../../experiments/r116_suite/exp2_stage_recall_build_vs_insert/seed_sweep_recall.png}
+
+        \column{0.50\textwidth}
+        \centering
+        \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/fixed_graph_recall_high_selectivity.png}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[c]{需求 2：插入期间前台查询}
+    \centering
+    \begin{minipage}{0.93\textwidth}
+        \centering
+        \small
+        BIGANN/SIFT 前 2M；无插入为 1M initial，插入曲线为从 1M initial 后台插入到 2M。每个选择性重新从干净 1M initial 开始，route/L 校准到 recall@10 $\geq$ 98。圆点表示 $L=10$/prefilter，三角表示 $L>10$/graph。
+    \end{minipage}
+    \vfill
+
+    \includegraphics[width=0.94\linewidth,height=0.64\textheight,keepaspectratio]{../../experiments/r116_suite/exp3_search_during_insert/search_during_insert_selectivity.png}
+\end{frame}
+
+\begin{frame}[c]{需求 3：选择性查询延迟/QPS}
+    \centering
+    \scriptsize
+    PQ32 + route/L 校准后，30 个选择性点 recall@10 均不低于 98；高选择性 graph 点中，删除/重插后仍有少量平均延迟接近或略超 10ms。
+    \vfill
+
+    \begin{columns}[c,onlytextwidth]
+        \column{0.49\textwidth}
+        \centering
+        \includegraphics[width=0.96\linewidth,height=0.30\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/selectivity_1m_initial.png}
+
+        \column{0.49\textwidth}
+        \centering
+        \includegraphics[width=0.96\linewidth,height=0.30\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/selectivity_750k_after_delete.png}
+    \end{columns}
+
+    \vspace{0.3em}
+    \begin{columns}[c,onlytextwidth]
+        \column{0.49\textwidth}
+        \centering
+        \includegraphics[width=0.96\linewidth,height=0.30\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/selectivity_1m_after_reinsert.png}
+
+        \column{0.49\textwidth}
+        \centering
+        \footnotesize
+        三个状态分别对应：原始 1M、删除到 750k、重插回 1M。图中延迟/QPS 均是在满足 recall@10 $\geq$ 98 后测得。
+    \end{columns}
+\end{frame}
+
+\begin{frame}[c]{需求 4：单查询 RSS}
+    \centering
+    \begin{columns}[c,onlytextwidth]
+        \column{0.66\textwidth}
+        \centering
+        \includegraphics[width=0.98\linewidth,height=0.54\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/rss_by_selectivity.png}
+
+        \column{0.32\textwidth}
+        \centering
+        \begin{minipage}{0.96\linewidth}
+            \scriptsize
+            \raggedright
+            \textbf{结论：满足 30MB 限制。}
+
+            \vspace{0.25em}
+            口径：干净单查询进程总内存；query vector 和过滤 label 通过命令行传入，不加载 query file、groundtruth 或 query spmat。
+
+            \vspace{0.25em}
+            30 个 RSS 点峰值为 \textbf{22.26 MiB}。
+
+            \vspace{0.25em}
+            范围：1M initial 为 12.52--17.75 MiB；750k delete 为 15.22--20.60 MiB；1M reinsert 为 16.80--22.26 MiB。
+
+            \vspace{0.25em}
+            重插 1M 更高，主要因为非 identity tags 会加载 dense tag table；初始 1M 走 equal mapping。
+        \end{minipage}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[c]{需求 5：索引空间组成}
+    \centering
+    \begin{minipage}{0.92\textwidth}
+        \small
+        原始向量空间按 \texttt{npoints * 128 * 4} 计算；额外索引空间均满足 extra/raw $\leq 1.0$。
+        \vspace{0.5em}
+
+        \scriptsize
+        \begin{itemize}
+            \item 250k：raw 122.07 MiB；其他文件合计 252.20 MiB，其中 disk.index 244.14 MiB，PQ compressed 7.63 MiB，PQ pivots 0.13 MiB，labels.densebit 0.30 MiB。
+            \item 500k：raw 244.14 MiB；其他文件合计 504.27 MiB，其中 disk.index 488.29 MiB，PQ compressed 15.26 MiB，PQ pivots 0.13 MiB，labels.densebit 0.60 MiB。
+            \item 750k：raw 366.21 MiB；其他文件合计 756.34 MiB，其中 disk.index 732.43 MiB，PQ compressed 22.89 MiB，PQ pivots 0.13 MiB，labels.densebit 0.89 MiB。
+            \item 1M：raw 488.28 MiB；其他文件合计 1008.41 MiB，其中 disk.index 976.57 MiB，PQ compressed 30.52 MiB，PQ pivots 0.13 MiB，labels.densebit 1.19 MiB。
+        \end{itemize}
+    \end{minipage}
+\end{frame}
+
+\thanksforlistening{谢谢}
+
+\end{document}

@@ -8,6 +8,8 @@ experiments/**
 !experiments/**/*.png
 !experiments/**/*.md
 !experiments/**/*.sh
+experiments/*_backup*/
+experiments/*_backup*/**
 
 # Large/generated experiment artifacts. Keep only compact result files above.
 experiments/**/*.bin
@@ -32,3 +34,10 @@ dist/
 docs/**/.*
 assets/
 .codex
+
+# PPT outputs: keep only LaTeX source and compiled PDFs under the PPT directory.
+PPT/**/*
+!PPT/
+!PPT/**/
+!PPT/**/*.tex
+!PPT/**/*.pdf

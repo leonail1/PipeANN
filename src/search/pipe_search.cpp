@@ -103,9 +103,13 @@ namespace pipeann {
     auto compute_and_push_nbrs = [&](DiskNode<T> &node, unsigned &nk) {
       unsigned nbors_cand_size = 0;
       for (unsigned m = 0; m < node.nnbrs; ++m) {
-        if (visited.find(node.nbrs[m]) == visited.end()) {
-          node.nbrs[nbors_cand_size++] = node.nbrs[m];
-          visited.insert(node.nbrs[m]);
+        const unsigned nbor_id = node.nbrs[m];
+        if (nbor_id >= meta_.npoints) {
+          continue;
+        }
+        if (visited.find(nbor_id) == visited.end()) {
+          node.nbrs[nbors_cand_size++] = nbor_id;
+          visited.insert(nbor_id);
         }
       }
 
@@ -143,6 +147,9 @@ namespace pipeann {
 
     auto add_to_retset = [&](const unsigned *node_ids, const uint64_t n_ids, float *dists) {
       for (uint64_t i = 0; i < n_ids; ++i) {
+        if (node_ids[i] >= meta_.npoints) {
+          continue;
+        }
         retset[cur_list_size++] = Neighbor(node_ids[i], dists[i], true);
         visited.insert(node_ids[i]);
       }
@@ -187,10 +194,20 @@ namespace pipeann {
     std::queue<io_t> on_flight_ios;
     auto send_read_req = [&](Neighbor &item) -> bool {
       item.flag = false;
+      if (item.id >= meta_.npoints) {
+        item.visited = true;
+        return false;
+      }
 
       // lock the corresponding page.
       this->lock_idx(idx_lock_table, item.id, std::vector<uint32_t>(), true);
-      const unsigned loc = id2loc(item.id), pid = loc_sector_no(loc);
+      const unsigned loc = id2loc(item.id);
+      if (loc == kInvalidID || loc >= cur_loc) {
+        this->unlock_idx(idx_lock_table, item.id);
+        item.visited = true;
+        return false;
+      }
+      const unsigned pid = loc_sector_no(loc);
 
       uint64_t &cur_buf_idx = query_buf->sector_idx;
       auto buf = sector_scratch + cur_buf_idx * size_per_io;

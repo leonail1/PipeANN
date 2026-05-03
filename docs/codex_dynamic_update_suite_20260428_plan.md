@@ -4,19 +4,19 @@
 
 本文档记录当前已经实现并正在执行的动态索引实验方案。实验入口和结果目录位于：
 
-`experiments/codex_dynamic_update_suite_20260428/`
+`experiments/`
 
 ## 运行入口
 
 当前不再使用 suite 根目录下的统一 `start.sh`。每个实验目录都有自己的 `start.sh`，在仓库根目录运行对应入口即可：
 
 ```bash
-./experiments/codex_dynamic_update_suite_20260428/exp1_insert_vs_build_threads/start.sh
-./experiments/codex_dynamic_update_suite_20260428/exp2_stage_recall_build_vs_insert/start.sh
-./experiments/codex_dynamic_update_suite_20260428/exp3_search_during_insert/start.sh
-./experiments/codex_dynamic_update_suite_20260428/exp4_delete_reinsert_selectivity/start.sh
-./experiments/codex_dynamic_update_suite_20260428/exp5_index_bloat_by_size/start.sh
-./experiments/codex_dynamic_update_suite_20260428/exp_baseline/start.sh
+./experiments/exp1_insert_vs_build_threads/start.sh
+./experiments/exp2_stage_recall_build_vs_insert/start.sh
+./experiments/exp3_search_during_insert/start.sh
+./experiments/exp4_delete_reinsert_selectivity/start.sh
+./experiments/exp5_index_bloat_by_size/start.sh
+./experiments/exp_baseline/start.sh
 ```
 
 每个 `start.sh` 都会优先使用仓库里的 `.venv/bin/python`，因为绘图依赖 `matplotlib`。脚本会调用：
@@ -31,9 +31,9 @@
 如果只想运行某个实验，直接进入对应目录或调用对应路径的 `start.sh`。例如：
 
 ```bash
-./experiments/codex_dynamic_update_suite_20260428/exp2_stage_recall_build_vs_insert/start.sh --skip-build
-./experiments/codex_dynamic_update_suite_20260428/exp4_delete_reinsert_selectivity/start.sh --skip-build --exp4-pq-bytes 32
-./experiments/codex_dynamic_update_suite_20260428/exp_baseline/start.sh --skip-build --rerun-baseline --baseline-query-count 1000 --baseline-pq-bytes 32
+./experiments/exp2_stage_recall_build_vs_insert/start.sh --skip-build
+./experiments/exp4_delete_reinsert_selectivity/start.sh --skip-build --exp4-pq-bytes 32
+./experiments/exp_baseline/start.sh --skip-build --rerun-baseline --baseline-query-count 1000 --baseline-pq-bytes 32
 ```
 
 实验完成后会自动调用 `scripts/plot_codex_dynamic_update_suite.py` 绘图，并清理临时索引、GT、临时数据和标签等大文件。
@@ -270,7 +270,7 @@
 运行方式：
 
 ```bash
-./experiments/codex_dynamic_update_suite_20260428/exp_baseline/start.sh --rerun-baseline --baseline-query-count 1000 --baseline-pq-bytes 32
+./experiments/exp_baseline/start.sh --rerun-baseline --baseline-query-count 1000 --baseline-pq-bytes 32
 ```
 
 配置：
@@ -319,13 +319,13 @@
 本轮先使用：
 
 ```bash
-./experiments/codex_dynamic_update_suite_20260428/exp4_delete_reinsert_selectivity/start.sh --rerun-exp4
+./experiments/exp4_delete_reinsert_selectivity/start.sh --rerun-exp4
 ```
 
 排查中发现旧的 `calibrate_hybrid_threshold` 阶段会在 `1m_after_reinsert` 上长时间运行，而且重插后的索引加载时出现 `_hybrid.meta` 缺失提示。随后移除 `exp4` 对该阶段的依赖，并使用：
 
 ```bash
-./experiments/codex_dynamic_update_suite_20260428/exp4_delete_reinsert_selectivity/start.sh
+./experiments/exp4_delete_reinsert_selectivity/start.sh
 ```
 
 从已有 `exp4` 进度继续完成剩余点。最终主脚本正常退出，绘图完成，清理检查中实验目录下没有残留 `.bin/.index/.spmat/.densebit/.meta/.tags/.log` 大文件。
@@ -347,7 +347,7 @@
 随后追加运行了直接构建 1M 的 forced route baseline：
 
 ```bash
-./experiments/codex_dynamic_update_suite_20260428/exp_baseline/start.sh --rerun-baseline --baseline-query-count 1000 --baseline-pq-bytes 32
+./experiments/exp_baseline/start.sh --rerun-baseline --baseline-query-count 1000 --baseline-pq-bytes 32
 ```
 
 本次 baseline 正常退出，绘图完成，清理检查中实验目录下没有残留 `.bin/.index/.spmat/.densebit/.meta/.tags/.log` 大文件。脚本也已改成所有选择性都实测 forced graph；低选择性点只有在“平均延迟超过 100 ms 仍未达到 98% recall”时才跳过，不再人工跳过。输出位于：
@@ -404,7 +404,7 @@
 重跑命令：
 
 ```bash
-./experiments/codex_dynamic_update_suite_20260428/exp4_delete_reinsert_selectivity/start.sh \
+./experiments/exp4_delete_reinsert_selectivity/start.sh \
   --rerun-exp4 \
   --skip-build \
   --exp4-pq-bytes 32
@@ -447,7 +447,7 @@
 运行命令：
 
 ```bash
-./experiments/codex_dynamic_update_suite_20260428/exp2_stage_recall_build_vs_insert/start.sh \
+./experiments/exp2_stage_recall_build_vs_insert/start.sh \
   --rerun-exp2-seed-sweep \
   --skip-build \
   --exp2-seed-sweep-starts 250000,500000 \
@@ -509,7 +509,7 @@
 实验结束后，应检查实验目录中是否还残留大文件：
 
 ```bash
-find experiments/codex_dynamic_update_suite_20260428 -type f \
+find experiments -type f \
   | grep -E '\\.(bin|index|spmat|densebit|meta|tags|log)$'
 ```
 

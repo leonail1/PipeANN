@@ -1,8 +1,0 @@
-status,path,start_points,points,chosen_L,mode,route,threads,insert_threads,max_rss_kb,live_point_count,elapsed_s,qps,avg_latency_us,p50_latency_us,p95_latency_us,p99_latency_us,recall@10,mean_candidate_count,mean_route_overhead_us,prefilter_count,graph_count,fallback_count,empty_count,min_threshold,max_threshold
-ok,direct_seed_250k,250000,250000,40,measure-dynamic-search,auto,1,1,150476,250000,51.232742,195.18768,5122.876827,4897.29,6927.454,8383.91,91.674,0.0,0.0,0,0,0,0,0,0
-ok,direct_seed_250k,250000,500000,40,measure-dynamic-search,auto,1,1,150476,500000,45.474307,219.904394,4547.071354,4470.552,6213.033,7368.924,88.923,0.0,0.0,0,0,0,0,0,0
-ok,direct_seed_250k,250000,750000,40,measure-dynamic-search,auto,1,1,203048,750000,45.042162,222.014208,4503.895325,4420.859,6573.503,8144.171,87.14,0.0,0.0,0,0,0,0,0,0
-ok,direct_seed_250k,250000,1000000,40,measure-dynamic-search,auto,1,1,245848,1000000,47.74646,209.439609,4774.340161,4528.659,6528.363,8568.019,85.991,0.0,0.0,0,0,0,0,0,0
-ok,direct_seed_500k,500000,500000,40,measure-dynamic-search,auto,1,1,150476,500000,43.363803,230.607078,4336.080348,4288.013,5798.063,6649.584,89.917,0.0,0.0,0,0,0,0,0,0
-ok,direct_seed_500k,500000,750000,40,measure-dynamic-search,auto,1,1,207100,750000,48.571625,205.881519,4856.864908,4508.24,7457.842,9272.781,88.184,0.0,0.0,0,0,0,0,0,0
-ok,direct_seed_500k,500000,1000000,40,measure-dynamic-search,auto,1,1,250964,1000000,46.440418,215.329671,4643.68104,4458.548,6504.575,7535.333,86.832,0.0,0.0,0,0,0,0,0,0

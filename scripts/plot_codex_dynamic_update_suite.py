@@ -23,6 +23,18 @@ BUCKET_LABELS = {
     "u75": "75%",
     "u100": "100%",
 }
+BUCKET_SELECTIVITY = {
+    "u1e-03": 0.001,
+    "u3e-03": 0.003,
+    "u1e-02": 0.01,
+    "u5e-02": 0.05,
+    "u1e-01": 0.10,
+    "u25": 0.25,
+    "u30": 0.30,
+    "u50": 0.50,
+    "u75": 0.75,
+    "u100": 1.00,
+}
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -90,33 +102,6 @@ def plot(root: Path, dpi: int) -> None:
     exp2 = load_jsonl(root / "exp2_stage_recall_build_vs_insert/results.jsonl")
     exp2_dir = root / "exp2_stage_recall_build_vs_insert"
     exp2_seed_sweep = load_csv(exp2_dir / "seed_sweep_table.csv")
-    if exp2:
-        fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
-        direct_rows = sorted([r for r in exp2 if r.get("path") == "direct_build"], key=lambda r: r["points"])
-        if direct_rows:
-            ax.plot([r["points"] for r in direct_rows], [r.get("recall@10", 0) for r in direct_rows],
-                    marker="o", linewidth=2.0, label="Direct build")
-        if exp2_seed_sweep:
-            for start_n in [250_000, 500_000]:
-                rows = sorted(
-                    [r for r in exp2_seed_sweep if as_int(r, "start_points") == start_n],
-                    key=lambda r: as_int(r, "points"),
-                )
-                if rows:
-                    ax.plot([as_int(r, "points") for r in rows], [as_float(r, "recall@10") for r in rows],
-                            marker="s", linestyle="-.", label=f"{start_n // 1000}k seed insert")
-        else:
-            rows = sorted([r for r in exp2 if r.get("path") == "incremental_insert"], key=lambda r: r["points"])
-            if rows:
-                ax.plot([r["points"] for r in rows], [r.get("recall@10", 0) for r in rows],
-                        marker="o", label="10k seed insert")
-        ax.set_xlabel("Index vectors")
-        ax.set_ylabel("Recall@10 (%)")
-        ax.set_title("Stage Recall: Direct Build vs Larger-Seed Insert")
-        ax.grid(axis="y", alpha=0.3)
-        ax.legend()
-        fig.savefig(exp2_dir / "stage_recall_build_vs_insert.png", dpi=dpi)
-        plt.close(fig)
 
     if exp2_seed_sweep:
         fig, ax = plt.subplots(figsize=(8.5, 5.0), constrained_layout=True)
@@ -125,6 +110,10 @@ def plot(root: Path, dpi: int) -> None:
             if rows:
                 ax.plot([r["points"] for r in rows], [r.get("recall@10", 0) for r in rows],
                         marker="o", linestyle="-", label="Direct build")
+            rows = sorted([r for r in exp2 if r.get("path") == "incremental_insert"], key=lambda r: r["points"])
+            if rows:
+                ax.plot([r["points"] for r in rows], [r.get("recall@10", 0) for r in rows],
+                        marker="^", linestyle="--", label="10k seed insert")
         for start_n in sorted({as_int(r, "start_points") for r in exp2_seed_sweep}):
             rows = sorted([r for r in exp2_seed_sweep if as_int(r, "start_points") == start_n],
                           key=lambda r: as_int(r, "points"))
@@ -140,27 +129,64 @@ def plot(root: Path, dpi: int) -> None:
 
     exp3 = load_csv(root / "exp3_search_during_insert/table.csv")
     if exp3:
-        for ins_t in sorted({as_int(r, "insert_threads") for r in exp3}):
-            rows = sorted([r for r in exp3 if as_int(r, "insert_threads") == ins_t], key=lambda r: as_int(r, "query_threads"))
-            x = [as_int(r, "query_threads") for r in rows]
-            fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), constrained_layout=True)
-            axes[0].plot(x, [as_float(r, "avg_latency_us") / 1000.0 for r in rows], marker="o", label="Avg")
-            axes[0].plot(x, [as_float(r, "p95_latency_us") / 1000.0 for r in rows], marker="o", label="P95")
-            axes[0].set_xlabel("Query threads")
-            axes[0].set_ylabel("Latency (ms)")
-            axes[0].set_title(f"Latency during insert, insert threads={ins_t}")
-            axes[0].grid(axis="y", alpha=0.3)
-            axes[0].legend()
-            axes[1].plot(x, [as_float(r, "qps") for r in rows], marker="o", color="#166534")
-            axes[1].set_xlabel("Query threads")
+        exp3_dir = root / "exp3_search_during_insert"
+        if any(row.get("bucket") for row in exp3):
+            for stale in [
+                exp3_dir / "search_during_insert_2x3.png",
+                exp3_dir / "search_during_insert_ins1.png",
+                exp3_dir / "search_during_insert_ins2.png",
+                exp3_dir / "search_during_insert_ins4.png",
+            ]:
+                if stale.exists():
+                    stale.unlink()
+            colors = {0: "#1d4ed8", 1: "#16a34a", 2: "#d97706", 4: "#dc2626"}
+            labels_by_threads = {0: "no insert", 1: "insert 1 thread", 2: "insert 2 threads", 4: "insert 4 threads"}
+            fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), constrained_layout=True)
+            x_all = list(range(len(BUCKET_ORDER)))
+            x_labels = [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER]
+            for ins_t in sorted({as_int(r, "insert_threads") for r in exp3}):
+                rows_by_bucket = {r["bucket"]: r for r in exp3 if as_int(r, "insert_threads") == ins_t and r.get("bucket")}
+                rows = [rows_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
+                if not rows:
+                    continue
+                x = [BUCKET_ORDER.index(row["bucket"]) for row in rows]
+                color = colors.get(ins_t)
+                label = labels_by_threads.get(ins_t, f"insert {ins_t} threads")
+                axes[0].plot(x, [as_float(r, "avg_latency_us") / 1000.0 for r in rows],
+                             marker="o", linewidth=2.0, color=color, label=label)
+                axes[1].plot(x, [as_float(r, "qps") for r in rows],
+                             marker="o", linewidth=2.0, color=color, label=label)
+                for ax, values in [
+                    (axes[0], [as_float(r, "avg_latency_us") / 1000.0 for r in rows]),
+                    (axes[1], [as_float(r, "qps") for r in rows]),
+                ]:
+                    graph_x = [xi for xi, row in zip(x, rows) if as_int(row, "chosen_L") > 10]
+                    graph_y = [yi for yi, row in zip(values, rows) if as_int(row, "chosen_L") > 10]
+                    if graph_x:
+                        ax.scatter(graph_x, graph_y, marker="^", s=52, color=color, edgecolor="black", linewidth=0.4, zorder=4)
+            for ax in axes:
+                ax.set_xticks(x_all, x_labels, rotation=25, ha="right")
+                ax.grid(axis="y", alpha=0.3)
+            axes[0].axhline(10.0, color="#991b1b", linestyle="--", linewidth=1.0, label="10 ms")
+            axes[0].set_xlabel("Selectivity")
+            axes[0].set_ylabel("Avg latency (ms)")
+            axes[0].set_title("Foreground latency")
+            axes[1].set_xlabel("Selectivity")
             axes[1].set_ylabel("QPS")
-            axes[1].set_title("Foreground query throughput")
-            axes[1].grid(axis="y", alpha=0.3)
-            fig.savefig(root / f"exp3_search_during_insert/search_during_insert_ins{ins_t}.png", dpi=dpi)
+            axes[1].set_title("Foreground QPS")
+            axes[1].legend(loc="best")
+            axes[0].legend(loc="best")
+            fig.suptitle("Exp3: foreground search during insertion")
+            fig.savefig(exp3_dir / "search_during_insert_selectivity.png", dpi=dpi)
             plt.close(fig)
 
     exp4 = load_csv(root / "exp4_delete_reinsert_selectivity/table.csv")
     if exp4:
+        state_styles = [
+            ("1m_initial", "1M initial", "o", "#2563eb"),
+            ("750k_after_delete", "750k after delete", "s", "#16a34a"),
+            ("1m_after_reinsert", "1M after reinsert", "^", "#dc2626"),
+        ]
         for state, filename in [
             ("1m_initial", "selectivity_1m_initial.png"),
             ("750k_after_delete", "selectivity_750k_after_delete.png"),
@@ -203,19 +229,76 @@ def plot(root: Path, dpi: int) -> None:
             fig.savefig(root / f"exp4_delete_reinsert_selectivity/{filename}", dpi=dpi)
             plt.close(fig)
 
-    exp5 = load_csv(root / "exp5_index_bloat_by_size/table.csv")
-    if exp5:
-        rows = sorted(exp5, key=lambda r: as_int(r, "points"))
-        fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
-        ax.plot([as_int(r, "points") for r in rows], [as_float(r, "extra_over_raw_ratio") for r in rows], marker="o", label="Extra/raw")
-        ax.plot([as_int(r, "points") for r in rows], [as_float(r, "total_to_raw_ratio") for r in rows], marker="o", label="Total/raw")
-        ax.axhline(1.0, color="#c43c35", linestyle="--", linewidth=1.5, label="Extra <= 1.0")
-        ax.set_xlabel("Index vectors")
-        ax.set_ylabel("Ratio")
-        ax.set_title("Index Bloat by Size")
+        rss_rows = [r for r in exp4 if as_float(r, "rss_single_query_kb") > 0 or as_float(r, "max_rss_kb") > 0]
+        if rss_rows:
+            x_all = list(range(len(BUCKET_ORDER)))
+            labels_all = [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER]
+            fig, ax = plt.subplots(figsize=(10.5, 5.2), constrained_layout=True)
+            max_rss_mb = 0.0
+            max_point: tuple[int, float, str] | None = None
+            for state, label, marker, color in state_styles:
+                rows_by_bucket = {r["bucket"]: r for r in rss_rows if r.get("state") == state}
+                ordered = [rows_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
+                if not ordered:
+                    continue
+                x = [i for i, bucket in enumerate(BUCKET_ORDER) if bucket in rows_by_bucket]
+                y = [
+                    (as_float(row, "rss_single_query_kb") or as_float(row, "max_rss_kb")) / 1024.0
+                    for row in ordered
+                ]
+                ax.plot(x, y, marker=marker, linewidth=2.0, markersize=6, color=color, label=label)
+                for xi, yi, row in zip(x, y, ordered):
+                    route = row.get("selected_route") or row.get("route", "")
+                    ax.annotate("G" if route == "graph" else "P", (xi, yi), textcoords="offset points",
+                                xytext=(0, 7), ha="center", fontsize=8, color=color)
+                    if yi > max_rss_mb:
+                        max_rss_mb = yi
+                        max_point = (xi, yi, label)
+            ax.axhline(30.0, color="#dc2626", linestyle="--", linewidth=1.4, label="30 MB limit")
+            if max_point is not None:
+                ax.annotate(f"max {max_point[1]:.2f} MB", (max_point[0], max_point[1]),
+                            textcoords="offset points", xytext=(12, 10), ha="left", fontsize=9,
+                            arrowprops={"arrowstyle": "->", "color": "#374151", "lw": 0.9})
+            ax.set_xticks(x_all, labels_all, rotation=35, ha="right")
+            ax.set_ylabel("Single-query process RSS (MB)")
+            ax.set_xlabel("Selectivity")
+            ax.set_title("Exp4 RSS by Selectivity and Index State")
+            ax.grid(axis="y", alpha=0.3)
+            ax.legend(ncols=2)
+            ax.text(0.01, 0.02, "P=prefilter, G=graph; RSS process does not load query/GT/query-spmat files.",
+                    transform=ax.transAxes, fontsize=8, color="#4b5563")
+            fig.savefig(root / "exp4_delete_reinsert_selectivity/rss_by_selectivity.png", dpi=dpi)
+            plt.close(fig)
+
+    fixed_exp4 = load_csv(root / "exp4_delete_reinsert_selectivity/fixed_graph_recall_table.csv")
+    if fixed_exp4:
+        rows_by_state = {}
+        for state in ["1m_initial", "750k_after_delete", "1m_after_reinsert"]:
+            rows_by_bucket = {r["bucket"]: r for r in fixed_exp4 if r.get("state") == state}
+            rows_by_state[state] = [rows_by_bucket[b] for b in BUCKET_ORDER if b in rows_by_bucket and as_float(rows_by_bucket[b], "recall@10") > 0]
+        fig, ax = plt.subplots(figsize=(8.5, 5.0), constrained_layout=True)
+        labels = [BUCKET_LABELS.get(b, b) for b in BUCKET_ORDER if BUCKET_SELECTIVITY.get(b, 0.0) >= 0.25]
+        x = list(range(len(labels)))
+        for state, label, marker in [
+            ("1m_initial", "1M initial", "o"),
+            ("750k_after_delete", "750k after delete", "s"),
+            ("1m_after_reinsert", "1M after reinsert", "^"),
+        ]:
+            state_rows = rows_by_state.get(state, [])
+            if not state_rows:
+                continue
+            y_by_bucket = {r["bucket"]: as_float(r, "recall@10") for r in state_rows}
+            y = [y_by_bucket.get(b, float("nan")) for b in BUCKET_ORDER if BUCKET_SELECTIVITY.get(b, 0.0) >= 0.25]
+            ax.plot(x, y, marker=marker, linewidth=2.0, label=label)
+        fixed_l = as_int(fixed_exp4[0], "fixed_L") if fixed_exp4 else 0
+        ax.axhline(98.0, color="#dc2626", linestyle="--", linewidth=1.2, label="98%")
+        ax.set_xticks(x, labels)
+        ax.set_xlabel("Selectivity")
+        ax.set_ylabel("Recall@10 (%)")
+        ax.set_title(f"Exp4 fixed graph-search recall, L={fixed_l}")
         ax.grid(axis="y", alpha=0.3)
         ax.legend()
-        fig.savefig(root / "exp5_index_bloat_by_size/index_bloat_by_size.png", dpi=dpi)
+        fig.savefig(root / "exp4_delete_reinsert_selectivity/fixed_graph_recall_high_selectivity.png", dpi=dpi)
         plt.close(fig)
 
     baseline = load_csv(root / "exp_baseline/table.csv")
@@ -227,17 +310,20 @@ def plot(root: Path, dpi: int) -> None:
             markers = {"prefilter": "D", "graph": "o"}
             colors = {"prefilter": "#2ca02c", "graph": "#ff7f0e"}
             for route in ["prefilter", "graph"]:
-                rows = [r for r in single_thread if r.get("route") == route]
-                rows_by_bucket = {r["bucket"]: r for r in rows}
-                x = [i for i, bucket in enumerate(BUCKET_ORDER) if bucket in rows_by_bucket]
-                ordered = [rows_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
-                if not ordered:
+                rows_by_bucket = {r["bucket"]: r for r in single_thread if r.get("route") == route}
+                rows = [rows_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
+                if not rows:
                     continue
-                ax.plot(x, [as_float(r, "avg_latency_us") / 1000.0 for r in ordered],
-                        marker=markers.get(route, "o"), color=colors.get(route), label=route)
-            x_all = list(range(len(BUCKET_ORDER)))
-            labels_all = [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER]
-            ax.set_xticks(x_all, labels_all, rotation=35, ha="right")
+                x = [BUCKET_ORDER.index(r["bucket"]) for r in rows]
+                ax.plot(x, [as_float(r, "avg_latency_us") / 1000.0 for r in rows],
+                        marker=markers[route], color=colors[route], linewidth=2.0, label=route)
+                for xi, row in zip(x, rows):
+                    ax.annotate(f"L={as_int(row, 'chosen_L')}", (xi, as_float(row, "avg_latency_us") / 1000.0),
+                                textcoords="offset points", xytext=(0, 7), ha="center", fontsize=7)
+            ax.axhline(10.0, color="#991b1b", linestyle="--", linewidth=1.0, label="10 ms")
+            ax.set_xticks(list(range(len(BUCKET_ORDER))), [BUCKET_LABELS[b] for b in BUCKET_ORDER],
+                          rotation=35, ha="right")
+            ax.set_xlabel("Selectivity")
             ax.set_ylabel("Avg latency (ms)")
             ax.set_title("SIFT-1M Direct 1M Baseline, 1 Thread")
             ax.grid(alpha=0.25)
@@ -251,15 +337,14 @@ def plot(root: Path, dpi: int) -> None:
                 continue
             fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), constrained_layout=True)
             for threads in sorted({as_int(r, "threads") for r in route_rows}):
-                rows = [r for r in route_rows if as_int(r, "threads") == threads]
-                rows_by_bucket = {r["bucket"]: r for r in rows}
-                x = [i for i, bucket in enumerate(BUCKET_ORDER) if bucket in rows_by_bucket]
-                labels = [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
-                ordered = [rows_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
-                axes[0].plot(x, [as_float(r, "avg_latency_us") / 1000.0 for r in ordered],
-                             marker="o", label=f"{threads} threads")
-                axes[1].plot(x, [as_float(r, "qps") for r in ordered],
-                             marker="o", label=f"{threads} threads")
+                rows_by_bucket = {r["bucket"]: r for r in route_rows if as_int(r, "threads") == threads}
+                rows = [rows_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
+                if not rows:
+                    continue
+                x = [BUCKET_ORDER.index(r["bucket"]) for r in rows]
+                label = f"{threads} thread" if threads == 1 else f"{threads} threads"
+                axes[0].plot(x, [as_float(r, "avg_latency_us") / 1000.0 for r in rows], marker="o", label=label)
+                axes[1].plot(x, [as_float(r, "qps") for r in rows], marker="o", label=label)
             x_all = list(range(len(BUCKET_ORDER)))
             labels_all = [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER]
             axes[0].set_xticks(x_all, labels_all, rotation=35, ha="right")
@@ -280,26 +365,24 @@ def plot(root: Path, dpi: int) -> None:
             fig, axes = plt.subplots(1, 2, figsize=(13, 4.8), constrained_layout=True)
             markers = {"prefilter": "D", "graph": "o"}
             colors = {"prefilter": "#2ca02c", "graph": "#ff7f0e"}
-            x_all = list(range(len(BUCKET_ORDER)))
-            labels_all = [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER]
             for route in ["prefilter", "graph"]:
-                rows = [r for r in single_thread if r.get("route") == route]
-                rows_by_bucket = {r["bucket"]: r for r in rows}
-                x = [i for i, bucket in enumerate(BUCKET_ORDER) if bucket in rows_by_bucket]
-                ordered = [rows_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
-                if not ordered:
+                rows_by_bucket = {r["bucket"]: r for r in single_thread if r.get("route") == route}
+                rows = [rows_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
+                if not rows:
                     continue
-                label = f"{route} (passing points)"
-                axes[0].plot(x, [as_float(r, "avg_latency_us") / 1000.0 for r in ordered],
-                             marker=markers.get(route, "o"), color=colors.get(route), label=label)
-                axes[1].plot(x, [as_float(r, "qps") for r in ordered],
-                             marker=markers.get(route, "o"), color=colors.get(route), label=label)
-            axes[0].set_xticks(x_all, labels_all, rotation=35, ha="right")
+                x = [BUCKET_ORDER.index(r["bucket"]) for r in rows]
+                axes[0].plot(x, [as_float(r, "avg_latency_us") / 1000.0 for r in rows],
+                             marker=markers[route], color=colors[route], linewidth=2.0, label=route)
+                axes[1].plot(x, [as_float(r, "qps") for r in rows],
+                             marker=markers[route], color=colors[route], linewidth=2.0, label=route)
+            labels_all = [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER]
+            for ax in axes:
+                ax.set_xticks(list(range(len(BUCKET_ORDER))), labels_all, rotation=35, ha="right")
+                ax.set_xlabel("Selectivity")
             axes[0].set_ylabel("Avg latency (ms)")
             axes[0].set_title("Latency")
             axes[0].grid(axis="y", alpha=0.3)
             axes[0].legend()
-            axes[1].set_xticks(x_all, labels_all, rotation=35, ha="right")
             axes[1].set_ylabel("QPS")
             axes[1].set_title("QPS")
             axes[1].grid(axis="y", alpha=0.3)
@@ -314,41 +397,33 @@ def plot(root: Path, dpi: int) -> None:
         for row in calibration:
             if as_int(row, "threads") != 1:
                 continue
-            bucket = bucket_from_query_label(row)
             route = row.get("route")
-            l_value = as_int(row, "L")
-            if route == "prefilter" and l_value == 10:
-                fixed_rows[(bucket, route)] = row
-            if route == "graph" and l_value == 100:
-                fixed_rows[(bucket, route)] = row
-        graph_rows = [fixed_rows[(bucket, "graph")] for bucket in BUCKET_ORDER if (bucket, "graph") in fixed_rows]
-        prefilter_rows = [fixed_rows[(bucket, "prefilter")] for bucket in BUCKET_ORDER if (bucket, "prefilter") in fixed_rows]
-        if graph_rows and prefilter_rows:
-            fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
-            x_all = list(range(len(BUCKET_ORDER)))
-            labels_all = [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER]
-
-            def plot_fixed(route_rows: list[dict], color: str, marker: str, label: str) -> None:
-                row_by_bucket = {bucket_from_query_label(row): row for row in route_rows}
-                x = [i for i, bucket in enumerate(BUCKET_ORDER) if bucket in row_by_bucket]
-                ordered = [row_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in row_by_bucket]
-                ax.plot(x, [as_float(row, "avg_latency_us") / 1000.0 for row in ordered],
-                        marker=marker, color=color, label=label)
-
-            plot_fixed(prefilter_rows, "#2ca02c", "D", "prefilter, L=10")
-            plot_fixed(graph_rows, "#ff7f0e", "o", "graph, L=100")
-            ax.set_xticks(x_all, labels_all, rotation=35, ha="right")
+            bucket = bucket_from_query_label(row)
+            if route == "graph" and as_int(row, "chosen_L") == 100 and bucket:
+                fixed_rows[(route, bucket)] = row
+        if fixed_rows:
+            ordered = [fixed_rows[("graph", bucket)] for bucket in BUCKET_ORDER if ("graph", bucket) in fixed_rows]
+            labels = [BUCKET_LABELS[bucket_from_query_label(r)] for r in ordered]
+            x = list(range(len(ordered)))
+            lat_ms = [as_float(r, "avg_latency_us") / 1000.0 for r in ordered]
+            qps = [as_float(r, "qps") for r in ordered]
+            recall = [as_float(r, "recall@10") for r in ordered]
+            fig, ax = plt.subplots(figsize=(8.5, 5.0), constrained_layout=True)
+            ax.plot(x, lat_ms, marker="o", linewidth=2.0, color="#1d4ed8", label="Graph L=100 latency")
+            ax.axhline(10.0, color="#991b1b", linestyle="--", linewidth=1.0, label="10 ms")
+            ax.set_xticks(x, labels, rotation=35, ha="right")
+            ax.set_xlabel("Selectivity")
             ax.set_ylabel("Avg latency (ms)")
-            ax.set_title("SIFT-1M Direct 1M Baseline, Fixed L")
-            ax.grid(alpha=0.25)
-            ax.legend(loc="upper left")
-
-            row_by_bucket = {bucket_from_query_label(row): row for row in graph_rows}
-            x = [i for i, bucket in enumerate(BUCKET_ORDER) if bucket in row_by_bucket]
-            ordered = [row_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in row_by_bucket]
+            ax.set_title("SIFT-1M Direct 1M Graph Baseline, L=100")
+            ax.grid(axis="y", alpha=0.3)
+            ax.legend(loc="upper right")
+            qps_ax = ax.twinx()
+            qps_ax.plot(x, qps, marker="s", linewidth=1.7, color="#16a34a", label="QPS")
+            qps_ax.set_ylabel("QPS")
             recall_ax = ax.twinx()
-            recall_ax.plot(x, [as_float(row, "recall") for row in ordered],
-                           color="#2563eb", linestyle="--", marker="x", label="graph recall@10, L=100")
+            recall_ax.spines.right.set_position(("axes", 1.12))
+            recall_ax.plot(x, recall, marker="^", linestyle=":", linewidth=1.5, color="#7c3aed",
+                           label="Recall@10")
             recall_ax.axhline(98.0, color="#dc2626", linestyle=":", linewidth=1.2)
             recall_ax.set_ylabel("Graph recall@10 (%)")
             recall_ax.set_ylim(0, 105)
@@ -357,9 +432,10 @@ def plot(root: Path, dpi: int) -> None:
             plt.close(fig)
 
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out-dir", type=Path, default=Path("experiments/codex_dynamic_update_suite_20260428"))
+    parser.add_argument("--out-dir", type=Path, default=Path("experiments"))
     parser.add_argument("--dpi", type=int, default=240)
     args = parser.parse_args()
     plot(args.out_dir.resolve(), args.dpi)

@@ -295,6 +295,7 @@ namespace pipeann {
     void reset_tags();
     libcuckoo::cuckoohash_map<uint32_t, TagT> *ensure_tags_map(size_t initial_size = 4);
     void install_tags_from_vector(const std::vector<TagT> &tag_v);
+    void install_tags_from_vector(std::vector<TagT> &&tag_v);
     void set_tag(uint32_t id, TagT tag);
 
     // Direct insert related.

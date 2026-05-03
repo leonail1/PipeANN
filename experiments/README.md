@@ -1,52 +1,39 @@
 # Experiments
 
-## SIFT1M uniform final mixed-PQ run
+当前动态更新实验按图构建参数拆成三套独立 suite：
 
-本目录中的最终 SIFT1M uniform 实验使用混合 PQ 配置：
+1. `r75_suite`
+2. `r96_suite`
+3. `r116_suite`
 
-1. prefilter 路径使用 `data/sift1m/sift1m_pipeann_uniform_pq32`
-2. graph 路径使用 `data/sift1m/sift1m_pipeann_uniform_pq16`
-3. 多查询性能统一使用单线程 `threads=1`
-4. RSS 统一使用单查询 `probe_query.bin` 和 `probe_query.spmat`
-5. `k=10`
-6. `beamwidth=4`
-7. `mem_L=0`
-8. `L=100`
-9. `similarity=l2`
-10. `nbr_type=pq`
+每套 suite 都包含同样的 5 个实验和 baseline：
 
-bucket 分配如下：
+1. `exp1_insert_vs_build_threads`
+2. `exp2_stage_recall_build_vs_insert`
+3. `exp3_search_during_insert`
+4. `exp4_delete_reinsert_selectivity`
+5. `exp5_index_bloat_by_size`
+6. `exp_baseline`
 
-1. prefilter + PQ32: `u1e-05`, `u3e-05`, `u1e-04`, `u3e-04`, `u1e-03`, `u3e-03`, `u1e-02`, `u1e-01`
-2. graph + PQ16: `u50`, `u75`, `u100`
+运行方式：
 
-实验入口脚本：
+```bash
+./experiments/r75_suite/start.sh
+./experiments/r96_suite/start.sh
+./experiments/r116_suite/start.sh
+```
 
-1. `scripts/run_sift1m_uniform_final_mixed_pq.sh`
+参数配置：
 
-脚本行为：
+| suite | R | build_L | PQ bytes | 说明 |
+| --- | ---: | ---: | ---: | --- |
+| `r75_suite` | 75 | 150 | 32 | 原始对照配置 |
+| `r96_suite` | 96 | 150 | 32 | 中等 R 配置 |
+| `r116_suite` | 116 | 220 | 32 | 当前满足 `total/raw <= 2.1x` 的高 R 配置 |
 
-1. 删除旧的 `experiments/sift1m_uniform_pq32`
-2. 删除旧的 `experiments/sift1m_uniform_pq16`
-3. 删除旧的 `experiments/sift1m_uniform_pq8`
-4. 重建 `experiments/sift1m_uniform_final_mixed_pq`
-5. 为 PQ32 生成 manifest，并只保留低选择性 prefilter bucket
-6. 重新校准 PQ32 prefilter rerank，使 `recall@10 >= 98%`
-7. 跑 PQ32 单线程 prefilter 多查询性能，并对每个 bucket 额外测一次单查询 RSS
-8. 为 PQ16 生成 manifest，并只保留高选择性 graph bucket
-9. 跑 PQ16 单线程 graph 多查询性能，并对每个 bucket 额外测一次单查询 RSS
-10. 合并两部分结果为单一路由 `mixed`
-11. 输出最终图
+`exp3` 使用 `data/bigann/sift_base_2m_float.bin` 和
+`data/bigann/sift_query_10000_float.bin` 做 1M 到 2M 插入期间前台查询实验。
+其余实验使用 SIFT1M。
 
-最终产物路径：
-
-1. `experiments/sift1m_uniform_final_mixed_pq/calibration_prefilter_pq32/prefilter_rerank_calibration.json`
-2. `experiments/sift1m_uniform_final_mixed_pq/prefilter_pq32_run/results.jsonl`
-3. `experiments/sift1m_uniform_final_mixed_pq/graph_pq16_run/results.jsonl`
-4. `experiments/sift1m_uniform_final_mixed_pq/results.jsonl`
-5. `experiments/sift1m_uniform_final_mixed_pq/sift1m_uniform_final_mixed_pq_l100.png`
-
-说明：
-
-1. `prefilter_pq32_run/results.jsonl` 和 `graph_pq16_run/results.jsonl` 保留原始 route
-2. `results.jsonl` 会把最终选中的记录统一改写为 `route=mixed`，用于最终汇总和出图
+每个 suite 的 `start.sh` 都会完成实验运行、绘图和结果表生成。实验目录只应保留
+`json/jsonl/csv/png/md/sh` 等小文件；索引、truthset、临时 workload 等大文件应在运行后清理。

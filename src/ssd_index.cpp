@@ -343,12 +343,18 @@ namespace pipeann {
     } else {
       LOG(INFO) << "Load tags from existing file: " << tag_file_name;
       pipeann::load_bin<TagT>(tag_file_name, tag_v, tag_num, tag_dim, offset);
-      install_tags_from_vector(tag_v);
+      install_tags_from_vector(std::move(tag_v));
     }
   }
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::install_tags_from_vector(const std::vector<TagT> &tag_v) {
+    std::vector<TagT> tag_copy(tag_v);
+    install_tags_from_vector(std::move(tag_copy));
+  }
+
+  template<typename T, typename TagT>
+  void SSDIndex<T, TagT>::install_tags_from_vector(std::vector<TagT> &&tag_v) {
     this->reset_tags();
     size_t non_identity_count = 0;
     for (size_t i = 0; i < tag_v.size(); ++i) {
@@ -362,7 +368,7 @@ namespace pipeann {
     }
     if (non_identity_count * 4 >= tag_v.size()) {
       std::unique_lock<std::shared_timed_mutex> dense_lock(dense_tags_lock_);
-      dense_tags_ = tag_v;
+      dense_tags_ = std::move(tag_v);
       LOG(INFO) << "Loaded dense tag table with " << dense_tags_.size() << " entries and " << non_identity_count
                 << " non-identity tags";
       return;

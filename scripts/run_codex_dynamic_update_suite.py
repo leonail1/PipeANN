@@ -35,10 +35,9 @@ BASELINE_THREADS = [1]
 BASELINE_ROUTES = ["prefilter", "graph"]
 BASELINE_LATENCY_CUTOFF_US = 100_000.0
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out-dir", type=Path, default=Path("experiments/codex_dynamic_update_suite_20260428"))
+    parser.add_argument("--out-dir", type=Path, default=Path("experiments"))
     parser.add_argument("--base-bin", type=Path, default=Path("data/sift1m/sift_base.bin"))
     parser.add_argument("--query-bin", type=Path, default=Path("data/sift1m/sift_query.bin"))
     parser.add_argument("--smoke", action="store_true")
@@ -116,8 +115,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--exp2-seed-sweep-l",
         type=int,
-        default=40,
-        help="Fixed search L for exp2 seed sweep, kept comparable with the original exp2 result.",
+        default=100,
+        help="Fixed search L for exp2 seed sweep, matching the PPT recall curve.",
+    )
+    parser.add_argument(
+        "--exp2-l",
+        type=int,
+        default=100,
+        help="Fixed search L for exp2 direct-build and 10k-seed insert curves.",
     )
     parser.add_argument(
         "--rerun-baseline",
@@ -141,6 +146,36 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=32,
         help="PQ bytes for exp4 direct-build starting index. Kept separate from the global dynamic-suite PQ bytes.",
+    )
+    parser.add_argument(
+        "--exp3-pq-bytes",
+        type=int,
+        default=32,
+        help="PQ bytes for exp3 selectivity/during-insert indexes. Matches exp4 by default.",
+    )
+    parser.add_argument(
+        "--exp3-total-n",
+        type=int,
+        default=0,
+        help="Override total vectors for exp3 only. Used for 1M->2M foreground-query insertion runs.",
+    )
+    parser.add_argument(
+        "--exp3-start-n",
+        type=int,
+        default=0,
+        help="Override starting vectors for exp3 only. Defaults to half of --exp3-total-n when set.",
+    )
+    parser.add_argument(
+        "--exp3-no-insert-n",
+        type=int,
+        default=0,
+        help="Override the no-insert baseline size for exp3. Defaults to exp3 total_n.",
+    )
+    parser.add_argument(
+        "--exp4-fixed-graph-l",
+        type=int,
+        default=100,
+        help="Fixed graph-search L for exp4 high-selectivity recall comparison.",
     )
     parser.add_argument("--build-r", type=int, default=64)
     parser.add_argument("--build-l", type=int, default=96)
@@ -239,6 +274,34 @@ def copy_prefix_bin(source: Path, destination: Path, npoints: int, dim: int) -> 
                 raise EOFError(f"unexpected EOF while slicing {source}")
             dst.write(chunk)
             remaining -= len(chunk)
+
+
+def read_first_query_csv(query_bin: Path, dim: int) -> str:
+    with query_bin.open("rb") as reader:
+        npoints, file_dim = struct.unpack("ii", reader.read(8))
+        if npoints < 1:
+            raise RuntimeError(f"query bin has no vectors: {query_bin}")
+        if file_dim != dim:
+            raise RuntimeError(f"query dim mismatch for {query_bin}: {file_dim} != {dim}")
+        values = struct.unpack(f"{dim}f", reader.read(dim * 4))
+    return ",".join(f"{value:.9g}" for value in values)
+
+
+def read_first_spmat_labels_csv(spmat_path: Path) -> str:
+    with spmat_path.open("rb") as reader:
+        header = reader.read(24)
+        if len(header) != 24:
+            raise RuntimeError(f"failed to read spmat header: {spmat_path}")
+        nrow, _ncol, nnz = struct.unpack("<qqq", header)
+        if nrow < 1:
+            return ""
+        indptr = struct.unpack(f"<{nrow + 1}q", reader.read(8 * (nrow + 1)))
+        indices_data = reader.read(4 * nnz)
+        indices = struct.unpack(f"<{nnz}i", indices_data) if nnz else ()
+        data_data = reader.read(4 * nnz)
+        data = struct.unpack(f"<{nnz}f", data_data) if nnz else ()
+    labels = [str(indices[pos]) for pos in range(indptr[0], indptr[1]) if data[pos] != 0.0]
+    return ",".join(labels)
 
 
 def write_spmat(path: Path, nrow: int, ncol: int, rows: Iterable[list[int]]) -> None:
@@ -454,7 +517,8 @@ def driver(repo: Path, args: argparse.Namespace, *, mode: str, source: Path, des
            truthset: Path | None = None, query_label_file: Path | None = None, selector_type: str = "none",
            insert_start: int = 0, insert_count: int = 0, delete_start: int = 0, delete_count: int = 0,
            insert_threads: int = 1, search_threads: int = 1, merge_threads: int = 1, search_l: int = 60,
-           query_limit: int = 0, route: str = "auto") -> dict:
+           query_limit: int = 0, route: str = "auto", query_vector_csv: str | None = None,
+           query_label_csv: str | None = None, single_query_static_rss: bool = False) -> dict:
     before = len(load_jsonl(jsonl))
     command = [
         str(repo / "build/tests/dynamic_update_suite_driver"),
@@ -481,17 +545,26 @@ def driver(repo: Path, args: argparse.Namespace, *, mode: str, source: Path, des
         command += ["--base-label-file", str(base_label_file)]
     if query_bin is not None:
         command += ["--query-bin", str(query_bin)]
+    if query_vector_csv is not None:
+        command += ["--query-vector-csv", query_vector_csv]
     if truthset is not None:
         command += ["--truthset-bin", str(truthset)]
     if query_label_file is not None:
         command += ["--query-label-file", str(query_label_file), "--selector-type", selector_type]
+    if query_label_csv is not None:
+        command += ["--query-label-csv", query_label_csv, "--selector-type", selector_type]
     if insert_count:
         command += ["--insert-start", str(insert_start), "--insert-count", str(insert_count)]
     if delete_count:
         command += ["--delete-start", str(delete_start), "--delete-count", str(delete_count)]
     if query_limit:
         command += ["--query-limit", str(query_limit)]
-    run(command, repo)
+    if single_query_static_rss:
+        command += ["--single-query-static-rss"]
+    env = None
+    if single_query_static_rss:
+        env = {"PIPEANN_PQ_MMAP": "1", "PIPEANN_PQ_MMAP_DROP_CACHE": "1"}
+    run(command, repo, env=env)
     rows = load_jsonl(jsonl)
     if len(rows) <= before:
         raise RuntimeError(f"driver did not append a row to {jsonl}")
@@ -638,8 +711,7 @@ def run_exp2(repo: Path, args: argparse.Namespace, assets: dict, stages: list[in
         insert_prefixes[npoints] = dest
         prev_n, prev_prefix = npoints, dest
 
-    chosen_l, reason = choose_stage_l(repo, args, assets, direct_prefixes[stages[-1]], insert_prefixes[stages[-1]],
-                                      stages[-1], query_count, out)
+    chosen_l, reason = args.exp2_l, f"fixed_L_{args.exp2_l}"
     for npoints in stages:
         truth = out / "truth" / f"gt_{stage_name(npoints)}.bin"
         compute_truth(repo, args, assets["base_bins"][npoints], assets["query_bin"], truth)
@@ -729,24 +801,130 @@ def run_exp3(repo: Path, args: argparse.Namespace, assets: dict, total_n: int, s
              insert_threads: list[int], query_threads: list[int]) -> list[dict]:
     out = exp_dir(args.out_dir, "exp3_search_during_insert")
     clear_experiment_dir(out)
-    truth = out / "truth" / f"gt_{stage_name(start_n)}.bin"
-    compute_truth(repo, args, assets["base_bins"][start_n], assets["query_bin"], truth)
+    del query_threads
+    exp3_query_count = min(query_count, 1000)
+    exp3_query_bin = args.out_dir / "data" / f"sift_query_{exp3_query_count}.bin"
+    copy_prefix_bin(args.query_bin, exp3_query_bin, exp3_query_count, assets["dim"])
+    exp3_query_labels = ensure_query_label_files(args.out_dir / "labels", exp3_query_count)
+
+    no_insert_n = args.exp3_no_insert_n or total_n
+    if no_insert_n not in assets["base_bins"]:
+        raise RuntimeError(f"exp3 no-insert size {no_insert_n} was not prepared")
+
+    initial_no_insert = out / "tmp" / f"initial_{stage_name(no_insert_n)}"
+    insert_source = out / "tmp" / f"insert_source_{stage_name(start_n)}"
+    if no_insert_n == start_n:
+        build_index_with_pq_bytes(repo, args, assets["base_bins"][start_n], insert_source,
+                                  assets["label_files"][start_n], 32, args.exp3_pq_bytes)
+        initial_no_insert = insert_source
+    else:
+        build_index_with_pq_bytes(repo, args, assets["base_bins"][no_insert_n], initial_no_insert,
+                                  assets["label_files"][no_insert_n], 32, args.exp3_pq_bytes)
+        build_index_with_pq_bytes(repo, args, assets["base_bins"][start_n], insert_source,
+                                  assets["label_files"][start_n], 32, args.exp3_pq_bytes)
+
     rows: list[dict] = []
+    calibration_cache: dict[tuple[str, str], list[tuple[str, int, dict]]] = {}
+
+    def calibrated_candidates(prefix: Path, npoints: int, bucket: str, selectivity: float,
+                              state: str) -> tuple[list[tuple[str, int, dict]], Path]:
+        cache_key = (state, bucket)
+        truth = out / "truth" / f"gt_{state}_{bucket}.bin"
+        if not truth.exists():
+            compute_truth(repo, args, assets["base_bins"][npoints], exp3_query_bin, truth,
+                          assets["label_files"][npoints], exp3_query_labels[bucket])
+        if cache_key not in calibration_cache:
+            calibration_cache[cache_key] = calibrate_route_and_l(
+                repo, args, prefix, truth, exp3_query_bin, exp3_query_labels[bucket],
+                out / "calibration_route_l.jsonl", exp3_query_count, selectivity,
+            )
+        return calibration_cache[cache_key], truth
+
+    for bucket, selectivity in BUCKETS:
+        candidates, truth = calibrated_candidates(
+            initial_no_insert, no_insert_n, bucket, selectivity, f"{stage_name(no_insert_n)}_initial_no_insert",
+        )
+        measured_candidates = []
+        for selected_route, chosen_l, calibration_row in candidates:
+            measured = driver(repo, args, mode="measure-dynamic-search", source=initial_no_insert, dest=None,
+                              jsonl=out / "measure_driver.jsonl", query_bin=exp3_query_bin, truthset=truth,
+                              query_label_file=exp3_query_labels[bucket], selector_type="intersect",
+                              search_threads=1, search_l=chosen_l, query_limit=exp3_query_count,
+                              route=selected_route)
+            measured.update({
+                "status": "ok" if float(measured.get("recall@10", 0.0)) >= 98.0 else "failed_recall",
+                "state": f"{stage_name(no_insert_n)}_initial",
+                "bucket": bucket,
+                "selected_route": selected_route,
+                "chosen_L": chosen_l,
+                "insert_threads": 0,
+                "query_threads": 1,
+                "inserted_during_search": 0,
+                "start_points": no_insert_n,
+                "total_points": no_insert_n,
+                "target_recall@10": 98.0,
+                "calibration_recall@10": calibration_row.get("recall@10"),
+                "calibration_avg_latency_us": calibration_row.get("avg_latency_us"),
+                "exp3_pq_bytes": args.exp3_pq_bytes,
+            })
+            append_jsonl(out / "route_selection_candidates.jsonl", measured)
+            measured_candidates.append(measured)
+        passing_measured = [row for row in measured_candidates if float(row.get("recall@10", 0.0)) >= 98.0]
+        measured = min(passing_measured or measured_candidates,
+                       key=lambda row: float(row.get("avg_latency_us", float("inf"))))
+        measured.update({
+            "insert_threads": 0,
+            "inserted_during_search": 0,
+        })
+        rows.append(measured)
+        append_jsonl(out / "results.jsonl", measured)
+
     for ins_t in insert_threads:
-        for search_t in query_threads:
-            source = out / "tmp" / f"source_i{ins_t}_q{search_t}"
-            build_index(repo, args, assets["base_bins"][start_n], source, assets["label_files"][start_n], max(ins_t, search_t))
-            dest = out / "tmp" / f"runtime_i{ins_t}_q{search_t}"
-            row = driver(repo, args, mode="search-during-insert", source=source, dest=dest, jsonl=out / "driver.jsonl",
-                         data_bin=assets["base_bins"][total_n], base_label_file=assets["label_files"][total_n],
-                         query_bin=assets["query_bin"], truthset=truth, insert_start=start_n,
-                         insert_count=total_n - start_n, insert_threads=ins_t, search_threads=search_t,
-                         merge_threads=ins_t, search_l=60, query_limit=query_count)
-            row.update({"status": "ok", "insert_threads": ins_t, "query_threads": search_t})
-            rows.append(row)
-            append_jsonl(out / "results.jsonl", row)
-            clean_prefix(source); clean_prefix(dest)
+        for bucket, selectivity in BUCKETS:
+            candidates, truth = calibrated_candidates(
+                insert_source, start_n, bucket, selectivity, f"{stage_name(start_n)}_insert_source",
+            )
+            measured_candidates = []
+            for candidate_i, (selected_route, chosen_l, calibration_row) in enumerate(candidates):
+                dest = out / "tmp" / f"runtime_i{ins_t}_{bucket}_c{candidate_i}"
+                measured = driver(repo, args, mode="search-during-insert", source=insert_source, dest=dest,
+                                  jsonl=out / "driver.jsonl", data_bin=assets["base_bins"][total_n],
+                                  base_label_file=assets["label_files"][total_n], query_bin=exp3_query_bin,
+                                  truthset=truth, query_label_file=exp3_query_labels[bucket],
+                                  selector_type="intersect", insert_start=start_n,
+                                  insert_count=total_n - start_n, insert_threads=ins_t, search_threads=1,
+                                  merge_threads=ins_t, search_l=chosen_l, query_limit=exp3_query_count,
+                                  route=selected_route)
+                measured.update({
+                    "status": "ok" if float(measured.get("recall@10", 0.0)) >= 98.0 else "failed_recall",
+                    "state": f"during_insert_from_{stage_name(start_n)}",
+                    "bucket": bucket,
+                    "selected_route": selected_route,
+                    "chosen_L": chosen_l,
+                    "insert_threads": ins_t,
+                    "query_threads": 1,
+                    "start_points": start_n,
+                    "total_points": total_n,
+                    "target_recall@10": 98.0,
+                    "calibration_recall@10": calibration_row.get("recall@10"),
+                    "calibration_avg_latency_us": calibration_row.get("avg_latency_us"),
+                    "exp3_pq_bytes": args.exp3_pq_bytes,
+                })
+                append_jsonl(out / "route_selection_candidates.jsonl", measured)
+                measured_candidates.append(measured)
+                clean_prefix(dest)
+            passing_measured = [row for row in measured_candidates if float(row.get("recall@10", 0.0)) >= 98.0]
+            measured = min(passing_measured or measured_candidates,
+                           key=lambda row: float(row.get("avg_latency_us", float("inf"))))
+            measured.update({
+                "insert_threads": ins_t,
+            })
+            rows.append(measured)
+            append_jsonl(out / "results.jsonl", measured)
     write_csv(out / "table.csv", rows)
+    if initial_no_insert != insert_source:
+        clean_prefix(initial_no_insert)
+    clean_prefix(insert_source)
     return rows
 
 
@@ -819,9 +997,12 @@ def run_exp4(repo: Path, args: argparse.Namespace, assets: dict, total_n: int, m
     out.mkdir(parents=True, exist_ok=True)
     exp4_query_bin = args.out_dir / "data" / f"sift_query_{query_count}.bin"
     copy_prefix_bin(args.query_bin, exp4_query_bin, query_count, assets["dim"])
-    exp4_single_query_bin = args.out_dir / "data" / "sift_query_exp4_single.bin"
-    copy_prefix_bin(args.query_bin, exp4_single_query_bin, 1, assets["dim"])
+    exp4_single_query_csv = read_first_query_csv(args.query_bin, assets["dim"])
     exp4_query_labels = ensure_query_label_files(args.out_dir / "labels", query_count)
+    exp4_single_query_label_csv = {
+        bucket: read_first_spmat_labels_csv(label_file)
+        for bucket, label_file in exp4_query_labels.items()
+    }
 
     initial = out / "tmp" / "initial_1m"
     deleted = out / "tmp" / "after_delete_750k"
@@ -879,20 +1060,57 @@ def run_exp4(repo: Path, args: argparse.Namespace, assets: dict, total_n: int, m
             measured = min(passing_measured or measured_candidates,
                            key=lambda row: float(row.get("avg_latency_us", float("inf"))))
             rss_row = driver(repo, args, mode="measure-dynamic-search", source=prefix, dest=None,
-                             jsonl=out / "rss_single_query_driver.jsonl", query_bin=exp4_single_query_bin,
-                             truthset=truth, query_label_file=exp4_query_labels[bucket],
+                             jsonl=out / "rss_single_query_driver.jsonl", query_vector_csv=exp4_single_query_csv,
+                             query_label_csv=exp4_single_query_label_csv[bucket],
                              selector_type="intersect", search_threads=1, search_l=int(measured["chosen_L"]),
-                             query_limit=1, route=str(measured["selected_route"]))
+                             query_limit=1, route=str(measured["selected_route"]), single_query_static_rss=True)
             measured["search_max_rss_kb"] = measured.get("max_rss_kb")
-            measured["max_rss_kb"] = rss_row.get("max_rss_kb")
-            measured["rss_mode"] = "single_query"
-            measured["rss_single_query_kb"] = rss_row.get("max_rss_kb")
+            measured["process_max_rss_kb"] = rss_row.get("process_max_rss_kb", rss_row.get("max_rss_kb"))
+            measured["rss_before_query_kb"] = rss_row.get("rss_before_query_kb")
+            measured["rss_after_query_kb"] = rss_row.get("rss_after_query_kb")
+            measured["query_peak_rss_kb"] = rss_row.get("query_peak_rss_kb")
+            measured["query_peak_delta_kb"] = rss_row.get("query_peak_delta_kb")
+            measured["max_rss_kb"] = measured["process_max_rss_kb"]
+            measured["rss_mode"] = "single_query_process_no_query_files"
+            measured["rss_single_query_kb"] = measured["max_rss_kb"]
             measured["rss_single_query_avg_latency_us"] = rss_row.get("avg_latency_us")
             measured["rss_single_query_recall@10"] = rss_row.get("recall@10")
             rows.append(measured)
             completed.add((state, bucket))
             append_jsonl(out / "results.jsonl", measured)
     write_csv(out / "table.csv", rows)
+    fixed_rows: list[dict] = []
+    fixed_results = out / "fixed_graph_recall_results.jsonl"
+    fixed_driver_log = out / "fixed_graph_recall_driver.jsonl"
+    fixed_table = out / "fixed_graph_recall_table.csv"
+    for stale in [fixed_results, fixed_driver_log, fixed_table]:
+        if stale.exists():
+            stale.unlink()
+    for state, npoints, prefix in states:
+        for bucket, selectivity in BUCKETS:
+            if selectivity < 0.25:
+                continue
+            truth = out / "truth" / f"gt_{state}_{bucket}.bin"
+            if not truth.exists():
+                compute_truth(repo, args, assets["base_bins"][npoints], exp4_query_bin, truth,
+                              state_label_files[state], exp4_query_labels[bucket])
+            row = driver(repo, args, mode="measure-dynamic-search", source=prefix, dest=None,
+                         jsonl=fixed_driver_log, query_bin=exp4_query_bin, truthset=truth,
+                         query_label_file=exp4_query_labels[bucket], selector_type="intersect",
+                         search_threads=1, search_l=args.exp4_fixed_graph_l, query_limit=query_count,
+                         route="graph")
+            row.update({
+                "status": "ok",
+                "state": state,
+                "bucket": bucket,
+                "fixed_L": args.exp4_fixed_graph_l,
+                "selected_route": "graph",
+                "points": npoints,
+                "exp4_pq_bytes": args.exp4_pq_bytes,
+            })
+            fixed_rows.append(row)
+            append_jsonl(fixed_results, row)
+    write_csv(fixed_table, fixed_rows)
     for prefix in [initial, deleted, reinserted]:
         clean_prefix(prefix)
     return rows
@@ -919,7 +1137,7 @@ def run_exp5(repo: Path, args: argparse.Namespace, assets: dict, stages: list[in
 
 
 def calibrate_baseline_l(repo: Path, args: argparse.Namespace, prefix: Path, truth: Path, query_bin: Path,
-                         query_label: Path, route: str, out_jsonl: Path, query_count: int) -> tuple[int | None, dict]:
+                         query_label: Path, route: str, out_jsonl: Path) -> tuple[int | None, dict]:
     best_row: dict = {}
     for l_value in EXP4_L_CANDIDATES:
         row = static_hybrid_search(repo, args, prefix=prefix, jsonl=out_jsonl, query_bin=query_bin,
@@ -946,7 +1164,8 @@ def run_exp_baseline(repo: Path, args: argparse.Namespace, assets: dict, total_n
         write_csv(out / "table.csv", existing)
         return existing
 
-    for stale in [out / "results.jsonl", out / "table.csv", out / "calibration.jsonl", out / "skipped.jsonl"]:
+    for stale in [out / "results.jsonl", out / "table.csv", out / "calibration.jsonl",
+                  out / "measure_driver.jsonl", out / "skipped.jsonl"]:
         if stale.exists():
             stale.unlink()
 
@@ -961,14 +1180,14 @@ def run_exp_baseline(repo: Path, args: argparse.Namespace, assets: dict, total_n
                                   32, args.baseline_pq_bytes)
 
     rows: list[dict] = []
-    for bucket, selectivity in BUCKETS:
+    for bucket, _selectivity in BUCKETS:
         truth = out / "truth" / f"gt_1m_{bucket}.bin"
         compute_truth(repo, args, assets["base_bins"][total_n], query_bin, truth,
                       assets["label_files"][total_n], query_labels[bucket])
         for route in BASELINE_ROUTES:
             chosen_l, calibration_row = calibrate_baseline_l(
                 repo, args, prefix, truth, query_bin, query_labels[bucket], route,
-                out / "calibration.jsonl", query_count,
+                out / "calibration.jsonl",
             )
             if chosen_l is None:
                 skipped = {
@@ -1040,7 +1259,17 @@ def main() -> int:
     else:
         stages = [250_000, 500_000, 750_000, 1_000_000]
         total_n, mid_n, seed_n, start_n, query_count = 1_000_000, 750_000, 10_000, 500_000, 10_000
-        exp1_threads, exp3_insert_threads, exp3_query_threads = [32, 16, 8, 4, 2, 1], [4, 2, 1], [32, 16, 8, 4, 2, 1]
+        exp1_threads, exp3_insert_threads, exp3_query_threads = [32, 16, 8, 4], [4, 2, 1], [32, 16, 8, 4, 2, 1]
+
+    if args.only_exp3 and args.exp3_total_n:
+        total_n = args.exp3_total_n
+        start_n = args.exp3_start_n or total_n // 2
+        no_insert_n = args.exp3_no_insert_n or start_n
+        stages = sorted({start_n, total_n, no_insert_n})
+        seed_n = min(seed_n, start_n)
+        if seed_n not in stages:
+            stages.append(seed_n)
+            stages = sorted(set(stages))
 
     assets = prepare_assets(args.out_dir, args, stages, seed_n, query_count)
     summary = {

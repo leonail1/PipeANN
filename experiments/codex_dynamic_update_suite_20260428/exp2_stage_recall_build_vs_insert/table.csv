@@ -1,9 +1,0 @@
-avg_latency_us,chosen_L,elapsed_s,insert_threads,l_choice,live_point_count,max_rss_kb,mode,p50_latency_us,p95_latency_us,p99_latency_us,path,points,qps,recall@10,status,threads
-4249.7776,40,42.815906,1,selected,250000,82232,measure-dynamic-search,4231.0,4708.0,5016.0,direct_build,250000,233.55806,91.64,ok,1
-4455.3737,40,44.891112,1,selected,250000,82320,measure-dynamic-search,4407.0,5245.0,5851.0,incremental_insert,250000,222.761244,87.91,ok,1
-4896.0198,40,49.284371,1,selected,500000,139376,measure-dynamic-search,4670.0,6626.0,7966.0,direct_build,500000,202.90408,89.868,ok,1
-4567.1432,40,45.995785,1,selected,500000,139236,measure-dynamic-search,4526.0,5318.0,5985.0,incremental_insert,500000,217.411227,85.258,ok,1
-4620.4344,40,46.480341,1,selected,750000,208400,measure-dynamic-search,4550.0,6562.0,7578.0,direct_build,750000,215.144722,88.896,ok,1
-4755.3952,40,47.87876,1,selected,750000,202956,measure-dynamic-search,4688.0,5651.0,6322.0,incremental_insert,750000,208.860882,83.958,ok,1
-4512.2197,40,45.440955,1,selected,1000000,253164,measure-dynamic-search,4476.0,5061.0,5505.0,direct_build,1000000,220.065796,88.13,ok,1
-4757.5716,40,47.895136,1,selected,1000000,244784,measure-dynamic-search,4702.0,5627.0,6284.0,incremental_insert,1000000,208.789468,82.875,ok,1
