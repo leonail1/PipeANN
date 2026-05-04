@@ -180,68 +180,77 @@ def plot(root: Path, dpi: int) -> None:
             fig.savefig(exp3_dir / "search_during_insert_selectivity.png", dpi=dpi)
             plt.close(fig)
 
-    exp4 = load_csv(root / "exp4_delete_reinsert_selectivity/table.csv")
+    exp4_dir = root / "exp4_intersect_range_selectivity"
+    exp4 = load_csv(exp4_dir / "table.csv")
     if exp4:
-        state_styles = [
-            ("1m_initial", "1M initial", "o", "#2563eb"),
-            ("750k_after_delete", "750k after delete", "s", "#16a34a"),
-            ("1m_after_reinsert", "1M after reinsert", "^", "#dc2626"),
-        ]
-        for state, filename in [
-            ("1m_initial", "selectivity_1m_initial.png"),
-            ("750k_after_delete", "selectivity_750k_after_delete.png"),
-            ("1m_after_reinsert", "selectivity_1m_after_reinsert.png"),
-        ]:
-            rows_by_bucket = {r["bucket"]: r for r in exp4 if r.get("state") == state}
-            rows = [rows_by_bucket[b] for b in BUCKET_ORDER if b in rows_by_bucket]
-            labels = [BUCKET_LABELS.get(r["bucket"], r["bucket"]) for r in rows]
-            x = list(range(len(rows)))
-            fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), constrained_layout=True)
-            lat_ms = [as_float(r, "avg_latency_us") / 1000.0 for r in rows]
-            qps = [as_float(r, "qps") for r in rows]
-            recalls = [as_float(r, "recall@10") for r in rows]
-            chosen_l = [as_int(r, "chosen_L") for r in rows]
-            point_colors = ["#2563eb" if recall >= 98.0 else "#dc2626" for recall in recalls]
-            routes = [r.get("selected_route") or r.get("route", "") for r in rows]
-            route_labels = [
-                {"prefilter": "prefilter", "graph": "graph", "auto": "auto"}.get(route, route or "unknown")
-                for route in routes
-            ]
-            axes[0].plot(x, lat_ms, color="#2563eb", linewidth=1.5, alpha=0.75)
-            axes[0].scatter(x, lat_ms, c=point_colors, zorder=3)
-            for xi, yi, l_value, route_label in zip(x, lat_ms, chosen_l, route_labels):
-                axes[0].annotate(f"{route_label}\nL={l_value}", (xi, yi), textcoords="offset points", xytext=(0, 7),
-                                 ha="center", fontsize=7)
-            axes[0].set_xticks(x, labels, rotation=35, ha="right")
-            axes[0].set_ylabel("Latency (ms)")
-            axes[0].set_title(f"{state}: selected-route latency")
-            axes[0].grid(axis="y", alpha=0.3)
-            axes[1].plot(x, qps, color="#166534", linewidth=1.5, alpha=0.75)
-            axes[1].scatter(x, qps, c=point_colors, zorder=3)
-            for xi, yi, l_value, route_label in zip(x, qps, chosen_l, route_labels):
-                axes[1].annotate(f"{route_label}\nL={l_value}", (xi, yi), textcoords="offset points", xytext=(0, 7),
-                                 ha="center", fontsize=7)
-            axes[1].set_xticks(x, labels, rotation=35, ha="right")
-            axes[1].set_ylabel("QPS")
-            axes[1].set_title(f"{state}: selected-route QPS")
-            axes[1].grid(axis="y", alpha=0.3)
-            fig.suptitle("Exp4: latency/QPS after selected-route + L calibration for recall@10 >= 98%")
-            fig.savefig(root / f"exp4_delete_reinsert_selectivity/{filename}", dpi=dpi)
-            plt.close(fig)
+        x_all = list(range(len(BUCKET_ORDER)))
+        labels_all = [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER]
+        selector_styles = {
+            "intersect": ("intersect", "o", "#2563eb"),
+            "range": ("range", "s", "#dc2626"),
+        }
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), constrained_layout=True)
+        point_labels = [{xi: [] for xi in x_all} for _ in axes]
+        for selector, (label, marker, color) in selector_styles.items():
+            rows_by_bucket = {r["bucket"]: r for r in exp4 if r.get("selector_type") == selector}
+            rows = [rows_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
+            if not rows:
+                continue
+            x = [BUCKET_ORDER.index(r["bucket"]) for r in rows]
+            axes[0].plot(x, [as_float(r, "avg_latency_us") / 1000.0 for r in rows],
+                         marker=marker, linewidth=2.0, color=color, label=label)
+            axes[1].plot(x, [as_float(r, "qps") for r in rows],
+                         marker=marker, linewidth=2.0, color=color, label=label)
+            for ax, values in [
+                (axes[0], [as_float(r, "avg_latency_us") / 1000.0 for r in rows]),
+                (axes[1], [as_float(r, "qps") for r in rows]),
+            ]:
+                for xi, yi, row in zip(x, values, rows):
+                    route = row.get("selected_route") or row.get("route", "")
+                    route_short = "G" if route == "graph" else "P"
+                    point_labels[0 if ax is axes[0] else 1][xi].append(
+                        (label[0].upper(), f"{route_short}/L{as_int(row, 'chosen_L')}", yi)
+                    )
+        for ax_idx, ax in enumerate(axes):
+            for xi, items in point_labels[ax_idx].items():
+                if not items:
+                    continue
+                unique = []
+                for selector_short, route_l, _ in items:
+                    if route_l not in unique:
+                        unique.append(route_l)
+                if len(unique) == 1:
+                    text = unique[0]
+                else:
+                    text = "\n".join(f"{selector_short}:{route_l}" for selector_short, route_l, _ in items)
+                yi = max(item[2] for item in items)
+                ax.annotate(text, (xi, yi), textcoords="offset points", xytext=(0, 7),
+                            ha="center", fontsize=7, color="#374151")
+        axes[0].axhline(10.0, color="#991b1b", linestyle="--", linewidth=1.0, label="10 ms")
+        for ax in axes:
+            ax.set_xticks(x_all, labels_all, rotation=35, ha="right")
+            ax.set_xlabel("Selectivity")
+            ax.grid(axis="y", alpha=0.3)
+            ax.legend()
+        axes[0].set_ylabel("Avg latency (ms)")
+        axes[0].set_title("Latency")
+        axes[1].set_ylabel("QPS")
+        axes[1].set_title("QPS")
+        fig.suptitle("Exp4: Direct 1M intersect/range search, selected route and minimum L for recall@10 >= 98%")
+        fig.savefig(exp4_dir / "intersect_range_latency_qps.png", dpi=dpi)
+        plt.close(fig)
 
         rss_rows = [r for r in exp4 if as_float(r, "rss_single_query_kb") > 0 or as_float(r, "max_rss_kb") > 0]
         if rss_rows:
-            x_all = list(range(len(BUCKET_ORDER)))
-            labels_all = [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER]
             fig, ax = plt.subplots(figsize=(10.5, 5.2), constrained_layout=True)
             max_rss_mb = 0.0
             max_point: tuple[int, float, str] | None = None
-            for state, label, marker, color in state_styles:
-                rows_by_bucket = {r["bucket"]: r for r in rss_rows if r.get("state") == state}
+            for selector, (label, marker, color) in selector_styles.items():
+                rows_by_bucket = {r["bucket"]: r for r in rss_rows if r.get("selector_type") == selector}
                 ordered = [rows_by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in rows_by_bucket]
                 if not ordered:
                     continue
-                x = [i for i, bucket in enumerate(BUCKET_ORDER) if bucket in rows_by_bucket]
+                x = [BUCKET_ORDER.index(row["bucket"]) for row in ordered]
                 y = [
                     (as_float(row, "rss_single_query_kb") or as_float(row, "max_rss_kb")) / 1024.0
                     for row in ordered
@@ -262,44 +271,13 @@ def plot(root: Path, dpi: int) -> None:
             ax.set_xticks(x_all, labels_all, rotation=35, ha="right")
             ax.set_ylabel("Single-query process RSS (MB)")
             ax.set_xlabel("Selectivity")
-            ax.set_title("Exp4 RSS by Selectivity and Index State")
+            ax.set_title("Exp4: single-query process RSS by filter type")
             ax.grid(axis="y", alpha=0.3)
             ax.legend(ncols=2)
             ax.text(0.01, 0.02, "P=prefilter, G=graph; RSS process does not load query/GT/query-spmat files.",
                     transform=ax.transAxes, fontsize=8, color="#4b5563")
-            fig.savefig(root / "exp4_delete_reinsert_selectivity/rss_by_selectivity.png", dpi=dpi)
+            fig.savefig(exp4_dir / "rss_by_selectivity.png", dpi=dpi)
             plt.close(fig)
-
-    fixed_exp4 = load_csv(root / "exp4_delete_reinsert_selectivity/fixed_graph_recall_table.csv")
-    if fixed_exp4:
-        rows_by_state = {}
-        for state in ["1m_initial", "750k_after_delete", "1m_after_reinsert"]:
-            rows_by_bucket = {r["bucket"]: r for r in fixed_exp4 if r.get("state") == state}
-            rows_by_state[state] = [rows_by_bucket[b] for b in BUCKET_ORDER if b in rows_by_bucket and as_float(rows_by_bucket[b], "recall@10") > 0]
-        fig, ax = plt.subplots(figsize=(8.5, 5.0), constrained_layout=True)
-        labels = [BUCKET_LABELS.get(b, b) for b in BUCKET_ORDER if BUCKET_SELECTIVITY.get(b, 0.0) >= 0.25]
-        x = list(range(len(labels)))
-        for state, label, marker in [
-            ("1m_initial", "1M initial", "o"),
-            ("750k_after_delete", "750k after delete", "s"),
-            ("1m_after_reinsert", "1M after reinsert", "^"),
-        ]:
-            state_rows = rows_by_state.get(state, [])
-            if not state_rows:
-                continue
-            y_by_bucket = {r["bucket"]: as_float(r, "recall@10") for r in state_rows}
-            y = [y_by_bucket.get(b, float("nan")) for b in BUCKET_ORDER if BUCKET_SELECTIVITY.get(b, 0.0) >= 0.25]
-            ax.plot(x, y, marker=marker, linewidth=2.0, label=label)
-        fixed_l = as_int(fixed_exp4[0], "fixed_L") if fixed_exp4 else 0
-        ax.axhline(98.0, color="#dc2626", linestyle="--", linewidth=1.2, label="98%")
-        ax.set_xticks(x, labels)
-        ax.set_xlabel("Selectivity")
-        ax.set_ylabel("Recall@10 (%)")
-        ax.set_title(f"Exp4 fixed graph-search recall, L={fixed_l}")
-        ax.grid(axis="y", alpha=0.3)
-        ax.legend()
-        fig.savefig(root / "exp4_delete_reinsert_selectivity/fixed_graph_recall_high_selectivity.png", dpi=dpi)
-        plt.close(fig)
 
     baseline = load_csv(root / "exp_baseline/table.csv")
     if baseline:

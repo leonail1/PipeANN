@@ -30,9 +30,9 @@ namespace pipeann {
   // A simple range filter selector.
   // Query metadata is normally a label buffer:
   //   [count=1][value] means equality, [count=2][low][high] means range.
-  // Target metadata is a raw uint32 scalar. The selector deliberately does not infer
-  // variable-length label buffers from target_labels because the interface does not
-  // carry a buffer length, and old callers may pass only four bytes.
+  // Target metadata normally uses the same label-buffer layout as SpmatLabel:
+  // [count][label1]...[labelN]. A target matches when any target label lies in
+  // the query range.
   // If target_labels is nullptr, returns false (no extra data).
   struct RangeSelector : public AbstractSelector {
     bool is_member(uint32_t target_id, const void *query_labels, const void *target_labels) override {
@@ -46,9 +46,21 @@ namespace pipeann {
         return false;
       }
 
-      uint32_t target = 0;
-      memcpy(&target, target_labels, sizeof(uint32_t));
-      return target >= low && target <= high;
+      uint32_t target_count = 0;
+      memcpy(&target_count, target_labels, sizeof(uint32_t));
+      if (target_count == 0) {
+        return false;
+      }
+
+      const char *target_cursor = static_cast<const char *>(target_labels) + sizeof(uint32_t);
+      for (uint32_t idx = 0; idx < target_count; ++idx) {
+        uint32_t target = 0;
+        memcpy(&target, target_cursor + static_cast<size_t>(idx) * sizeof(uint32_t), sizeof(uint32_t));
+        if (target >= low && target <= high) {
+          return true;
+        }
+      }
+      return false;
     }
 
    private:

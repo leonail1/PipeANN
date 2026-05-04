@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <sstream>
 
 #include <omp.h>
 #include <ssd_index.h>
@@ -16,6 +17,9 @@
 namespace {
 struct StructuredOutputOptions {
   std::string jsonl_output;
+  std::string query_vector_csv;
+  std::string query_label_csv;
+  bool single_query_static_rss = false;
 
   bool enabled() const {
     return !jsonl_output.empty();
@@ -74,6 +78,26 @@ bool parse_structured_output_options(int argc, char **argv, int start_index, Str
       options->jsonl_output = argv[++index];
       continue;
     }
+    if (arg == "--query-vector-csv") {
+      if (index + 1 >= argc) {
+        LOG(ERROR) << "Missing value for --query-vector-csv";
+        return false;
+      }
+      options->query_vector_csv = argv[++index];
+      continue;
+    }
+    if (arg == "--query-label-csv") {
+      if (index + 1 >= argc) {
+        LOG(ERROR) << "Missing value for --query-label-csv";
+        return false;
+      }
+      options->query_label_csv = argv[++index];
+      continue;
+    }
+    if (arg == "--single-query-static-rss") {
+      options->single_query_static_rss = true;
+      continue;
+    }
 
     LOG(ERROR) << "Unknown option: " << arg;
     return false;
@@ -120,6 +144,56 @@ void append_jsonl_line(const StructuredOutputOptions &options, const std::string
     throw std::runtime_error("Failed to open JSONL output file: " + options.jsonl_output);
   }
   writer << line << std::endl;
+}
+
+std::vector<float> parse_float_csv(const std::string &csv) {
+  std::vector<float> values;
+  size_t start = 0;
+  while (start < csv.size()) {
+    size_t comma = csv.find(',', start);
+    const std::string token = csv.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+    if (!token.empty()) {
+      values.push_back(std::stof(token));
+    }
+    if (comma == std::string::npos) {
+      break;
+    }
+    start = comma + 1;
+  }
+  return values;
+}
+
+std::vector<uint32_t> parse_uint32_csv(const std::string &csv) {
+  std::vector<uint32_t> values;
+  size_t start = 0;
+  while (start < csv.size()) {
+    size_t comma = csv.find(',', start);
+    const std::string token = csv.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+    if (!token.empty()) {
+      values.push_back(static_cast<uint32_t>(std::stoul(token)));
+    }
+    if (comma == std::string::npos) {
+      break;
+    }
+    start = comma + 1;
+  }
+  return values;
+}
+
+uint64_t current_hwm_kb() {
+  std::ifstream status("/proc/self/status");
+  std::string line;
+  while (std::getline(status, line)) {
+    if (line.rfind("VmHWM:", 0) == 0) {
+      std::istringstream parser(line);
+      std::string key;
+      uint64_t value = 0;
+      std::string unit;
+      parser >> key >> value >> unit;
+      return value;
+    }
+  }
+  return 0;
 }
 }  // namespace
 
@@ -188,7 +262,21 @@ int search_disk_index(int argc, char **argv) {
   LOG(INFO) << "Search parameters: threads=" << num_threads << ", beamwidth=" << beamwidth
             << ", force_route=" << force_route;
 
-  pipeann::load_bin<T>(query_bin, query, query_num, query_dim);
+  if (!structured_output_options.query_vector_csv.empty()) {
+    const std::vector<float> values = parse_float_csv(structured_output_options.query_vector_csv);
+    if (values.empty()) {
+      LOG(ERROR) << "--query-vector-csv is empty";
+      return -1;
+    }
+    query_num = 1;
+    query_dim = values.size();
+    query = new T[values.size()];
+    for (size_t dim = 0; dim < values.size(); ++dim) {
+      query[dim] = static_cast<T>(values[dim]);
+    }
+  } else {
+    pipeann::load_bin<T>(query_bin, query, query_num, query_dim);
+  }
 
   bool calc_recall_flag = false;
   if (file_exists(truthset_bin)) {
@@ -198,12 +286,6 @@ int search_disk_index(int argc, char **argv) {
       return -1;
     }
     calc_recall_flag = true;
-  }
-
-  pipeann::SpmatLabel query_labels(query_label_file);
-  if (query_labels.labels_.size() != query_num) {
-    LOG(ERROR) << "Mismatch in number of queries and query labels";
-    return -1;
   }
 
   std::shared_ptr<AlignedFileReader> reader(new LinuxAlignedFileReader());
@@ -233,11 +315,30 @@ int search_disk_index(int argc, char **argv) {
 
   omp_set_num_threads(num_threads);
 
-  const size_t max_filter_size = query_labels.label_size();
   std::vector<std::vector<char>> filter_buffers(query_num);
-  for (size_t query_idx = 0; query_idx < query_num; ++query_idx) {
-    filter_buffers[query_idx].resize(max_filter_size, 0);
-    query_labels.write(query_idx, filter_buffers[query_idx].data());
+  if (!structured_output_options.query_label_csv.empty()) {
+    if (query_num != 1) {
+      LOG(ERROR) << "--query-label-csv supports exactly one query";
+      return -1;
+    }
+    const std::vector<uint32_t> labels = parse_uint32_csv(structured_output_options.query_label_csv);
+    filter_buffers[0].resize(sizeof(uint32_t) + labels.size() * sizeof(uint32_t), 0);
+    const uint32_t label_count = static_cast<uint32_t>(labels.size());
+    memcpy(filter_buffers[0].data(), &label_count, sizeof(uint32_t));
+    if (!labels.empty()) {
+      memcpy(filter_buffers[0].data() + sizeof(uint32_t), labels.data(), labels.size() * sizeof(uint32_t));
+    }
+  } else {
+    pipeann::SpmatLabel query_labels(query_label_file);
+    if (query_labels.labels_.size() != query_num) {
+      LOG(ERROR) << "Mismatch in number of queries and query labels";
+      return -1;
+    }
+    const size_t max_filter_size = query_labels.label_size();
+    for (size_t query_idx = 0; query_idx < query_num; ++query_idx) {
+      filter_buffers[query_idx].resize(max_filter_size, 0);
+      query_labels.write(query_idx, filter_buffers[query_idx].data());
+    }
   }
 
   std::vector<std::vector<uint32_t>> query_result_tags(Lvec.size());
@@ -411,6 +512,7 @@ int search_disk_index(int argc, char **argv) {
                                          static_cast<uint32_t>(gt_dim), query_result_tags[test_id].data(),
                                          static_cast<uint32_t>(recall_at), static_cast<uint32_t>(recall_at));
     }
+    const uint64_t process_max_rss_kb = current_hwm_kb();
 
     if (output) {
       std::cout << std::setw(6) << L << std::setw(12) << force_route << std::setw(12) << qps << std::setw(14)
@@ -449,6 +551,8 @@ int search_disk_index(int argc, char **argv) {
         "\"graph_count\":" + std::to_string(graph_count) + ","
         "\"empty_count\":" + std::to_string(empty_count) + ","
         "\"recall_at\":" + std::to_string(recall_at) + ","
+        "\"process_max_rss_kb\":" + std::to_string(process_max_rss_kb) + ","
+        "\"max_rss_kb\":" + std::to_string(process_max_rss_kb) + ","
         "\"recall\":" + (calc_recall_flag ? std::to_string(recall) : std::string("null")) + "}");
 
     delete[] hybrid_stats;
@@ -498,12 +602,13 @@ int main(int argc, char **argv) {
               << " <K>"
               << " <similarity (cosine/l2/mips)>"
               << " <nbr_type (pq/rabitq)>"
-              << " <selector_type (intersect/subset)>"
+              << " <selector_type (intersect/subset/range)>"
               << " <query_label.spmat>"
               << " <force_route (auto/validate-auto/prefilter/graph)>"
               << " <relaxed_monotonicity_lmax (currently must be 0)>"
               << " <mem_L (0 means no mem index)>"
-              << " <L1> [L2] ... [--jsonl-output output.jsonl]" << std::endl;
+              << " <L1> [L2] ... [--jsonl-output output.jsonl]"
+              << " [--query-vector-csv csv] [--query-label-csv csv] [--single-query-static-rss]" << std::endl;
     return -1;
   }
 

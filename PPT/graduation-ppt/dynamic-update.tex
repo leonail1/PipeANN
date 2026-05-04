@@ -4,6 +4,7 @@
 
 \usepackage{amssymb}
 \usepackage{makecell}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit}
 \pgfplotsset{compat=1.18}
 
 \title{PipeANN 动态更新实验汇报}
@@ -21,29 +22,149 @@
 
 \maketitle
 
-\begin{frame}[c]{需求 1：召回率对比}
+\begin{frame}[t]{混合搜索框架}
     \centering
     \scriptsize
-    固定 $L=100$。左图比较直接构建、10k/250k/500k seed 增量插入的阶段召回；右图比较原始、删除、重插后的高选择性 graph-search 召回。
-    \vfill
+    核心目标：同一个索引同时支持低选择性过滤查询和高选择性近似搜索，并为每个查询选择更合适的执行路径。
+    \vspace{0.15em}
+
+    \begin{columns}[c,onlytextwidth]
+        \column{0.64\textwidth}
+        \centering
+        \begin{tikzpicture}[
+            scale=0.80,
+            transform shape,
+            font=\scriptsize,
+            node distance=0.44cm and 0.48cm,
+            box/.style={draw, rounded corners=2pt, align=center, text width=2.35cm, minimum height=0.62cm, fill=blue!5},
+            decision/.style={draw, diamond, aspect=1.85, align=center, text width=1.88cm, inner sep=1pt, fill=orange!9},
+            route/.style={draw, rounded corners=2pt, align=center, text width=2.75cm, minimum height=0.78cm, fill=green!7},
+            data/.style={draw, rounded corners=2pt, align=center, text width=2.42cm, minimum height=0.58cm, fill=gray!8},
+            outbox/.style={draw, rounded corners=2pt, align=center, text width=2.30cm, minimum height=0.60cm, fill=purple!6},
+            arrow/.style={-{Stealth[length=2mm]}, line width=0.45pt}
+        ]
+            \node[box] (query) {Query + filter};
+            \node[box, below=of query] (selectivity) {选择性估计\\$s=|filter|/N$};
+            \node[decision, below=of selectivity] (judge) {$s \leq \tau_m$?};
+            \node[route, below left=0.62cm and 0.30cm of judge] (prefilter) {Prefilter\\先用 label bitmap\\得到候选集合};
+            \node[route, below right=0.62cm and 0.30cm of judge] (graph) {Graph search\\在 SSD graph 上搜索\\边走边做过滤};
+            \node[data, below=0.44cm of prefilter] (pq) {PQ code\\候选距离估计/重排};
+            \node[data, below=0.44cm of graph] (disk) {Disk index\\邻居扩展 + I/O};
+            \node[outbox, below=1.72cm of judge] (topk) {Top-$k$ results};
+
+            \draw[arrow] (query) -- (selectivity);
+            \draw[arrow] (selectivity) -- (judge);
+            \draw[arrow] (judge) -| node[pos=0.24, above left] {低选择性} (prefilter);
+            \draw[arrow] (judge) -| node[pos=0.24, above right] {高选择性} (graph);
+            \draw[arrow] (prefilter) -- (pq);
+            \draw[arrow] (graph) -- (disk);
+            \draw[arrow] (pq) |- (topk);
+            \draw[arrow] (disk) |- (topk);
+        \end{tikzpicture}
+
+        \column{0.34\textwidth}
+        \begin{minipage}{0.98\linewidth}
+            \tiny
+            \raggedright
+            \textbf{框架做的事情}
+            \vspace{0.15em}
+            \begin{itemize}
+                \item 查询入口统一，先解析过滤条件并估计选择性。
+                \item \texttt{prefilter} 适合小候选集合：先过滤，再用 PQ/距离计算重排。
+                \item \texttt{graph search} 适合高选择性：避免扫描大候选集合，利用图结构快速逼近近邻。
+                \item route 由 $\tau_m$ 控制；L 单独校准，保证 recall 下限。
+            \end{itemize}
+        \end{minipage}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[t]{$\tau_m$ 标定与重新标定}
+    \centering
+    \scriptsize
+    $\tau_m$ 是 prefilter 和 graph search 的切换边界；它不是固定常数，而是随索引状态重新校准。
+    \vspace{0.15em}
+
+    \begin{columns}[c,onlytextwidth]
+        \column{0.54\textwidth}
+        \centering
+        \begin{tikzpicture}[
+            scale=0.74,
+            transform shape,
+            font=\scriptsize,
+            node distance=0.30cm,
+            init/.style={draw, rounded corners=2pt, align=center, text width=3.95cm, minimum height=0.64cm, fill=blue!6},
+            triggerbox/.style={draw, rounded corners=2pt, align=center, text width=3.95cm, minimum height=0.64cm, fill=orange!8},
+            stepbox/.style={draw, rounded corners=2pt, align=center, text width=3.95cm, minimum height=0.64cm, fill=purple!5},
+            publishbox/.style={draw, rounded corners=2pt, align=center, text width=3.95cm, minimum height=0.64cm, fill=green!7},
+            arrow/.style={-{Stealth[length=2mm]}, line width=0.45pt}
+        ]
+            \node[init] (build) {索引刚构建完成\\记录当前 live count $N_0$};
+            \node[stepbox, below=of build] (sample) {生成选择性 bucket\\如 0.1\%, 1\%, 5\%, 25\%, 100\%};
+            \node[stepbox, below=of sample] (sweep) {在每个 bucket 上测\\prefilter / graph 的 recall、latency、QPS};
+            \node[stepbox, below=of sweep] (choose) {只保留满足 recall 目标的 route\\选择更快路径并确定 $\tau_m$};
+            \node[publishbox, below=of choose] (publish) {发布 route table\\查询按最新 $\tau_m$ 路由};
+            \node[triggerbox, below=of publish] (drift) {运行期监控 $N$\\当 $|N-N_0|/N_0 > 10\%$ 触发重标定};
+
+            \draw[arrow] (build) -- (sample);
+            \draw[arrow] (sample) -- (sweep);
+            \draw[arrow] (sweep) -- (choose);
+            \draw[arrow] (choose) -- (publish);
+            \draw[arrow] (publish) -- (drift);
+            \draw[arrow, dashed] (drift.west) -- ++(-0.55,0) |- (sample.west);
+        \end{tikzpicture}
+
+        \column{0.42\textwidth}
+        \begin{minipage}{0.98\linewidth}
+            \tiny
+            \raggedright
+            \textbf{两类标定时机}
+            \vspace{0.15em}
+            \begin{itemize}
+                \item \textbf{初始标定：} 索引 build 完成后立即执行，得到第一版 $\tau_m$ 和 route table。
+                \item \textbf{漂移重标定：} 插入或删除导致 live vector 数量相对上次标定点漂移超过阈值，例如 10\%，重新抽样并重跑校准。
+                \item \textbf{更新口径：} 标定只决定 route 边界；L 仍按 recall 目标选择。
+                \item \textbf{发布方式：} 新表原子替换旧表，后续查询使用新 $\tau_m$。
+            \end{itemize}
+        \end{minipage}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[c]{需求 1：召回率对比}
+    \centering
+    \begin{columns}[T,onlytextwidth]
+        \column{0.49\textwidth}
+        \scriptsize
+        \textbf{左图：直接构建 vs 增量插入。} 分别直接构建 250k、500k、750k、1M 索引，并与从不同初始规模索引插入到相同规模后的索引比较；两类索引在同一个 $L$ 下执行搜索，用于衡量直接构建和增量插入得到的图质量差距。实验中 recall 差距在 0.5\% 以内，基本没有影响。
+
+        \column{0.49\textwidth}
+        \scriptsize
+        \textbf{右图：删除 / 重插入后的图质量。} 先构建 1M 索引，删除 250k 向量得到 750k 索引，再插入 250k 向量回到 1M，对三个索引状态分别运行搜索测试。结果显示选择性超过 50\% 后 recall 差异缩小到 1\% 以内。
+    \end{columns}
+    \vspace{0.4em}
+
+    \scriptsize
+    \textcolor{red}{结论：删除和插入操作对图质量影响较小。}
+    \vspace{0.2em}
 
     \begin{columns}[c,onlytextwidth]
         \column{0.50\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{../../experiments/r116_suite/exp2_stage_recall_build_vs_insert/seed_sweep_recall.png}
+        \includegraphics[width=0.98\linewidth,height=0.52\textheight,keepaspectratio]{../../experiments/r116_suite/exp2_stage_recall_build_vs_insert/seed_sweep_recall.png}
 
         \column{0.50\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/fixed_graph_recall_high_selectivity.png}
+        \includegraphics[width=0.98\linewidth,height=0.52\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/fixed_graph_recall_high_selectivity.png}
     \end{columns}
 \end{frame}
 
 \begin{frame}[c]{需求 2：插入期间前台查询}
     \centering
-    \begin{minipage}{0.93\textwidth}
+    \begin{minipage}{0.97\textwidth}
         \centering
         \small
-        BIGANN/SIFT 前 2M；无插入为 1M initial，插入曲线为从 1M initial 后台插入到 2M。每个选择性重新从干净 1M initial 开始，route/L 校准到 recall@10 $\geq$ 98。圆点表示 $L=10$/prefilter，三角表示 $L>10$/graph。
+        在初始 1M 索引上插入向量的同时执行前台搜索，测量搜索延迟与 QPS，结果如下图。
+
+        \textcolor{red}{结论：在插入线程数小于 4 时，向量插入并不会对前台搜索性能产生显著影响。}
     \end{minipage}
     \vfill
 
@@ -52,31 +173,16 @@
 
 \begin{frame}[c]{需求 3：选择性查询延迟/QPS}
     \centering
-    \scriptsize
-    PQ32 + route/L 校准后，30 个选择性点 recall@10 均不低于 98；高选择性 graph 点中，删除/重插后仍有少量平均延迟接近或略超 10ms。
+    \begin{minipage}{0.94\textwidth}
+        \centering
+        \scriptsize
+        在直接构建的 1M 索引上，对 intersect 等值过滤和 range 范围过滤分别校准 route/L，测量单线程 latency 与 QPS；本轮全量结果中所有点均满足 recall@10 $\geq$ 98。
+
+        \textcolor{red}{结论：启用 io\_uring 后，intersect 与 range 全部选择性下单线程延迟均低于 10ms。}
+    \end{minipage}
     \vfill
 
-    \begin{columns}[c,onlytextwidth]
-        \column{0.49\textwidth}
-        \centering
-        \includegraphics[width=0.96\linewidth,height=0.30\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/selectivity_1m_initial.png}
-
-        \column{0.49\textwidth}
-        \centering
-        \includegraphics[width=0.96\linewidth,height=0.30\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/selectivity_750k_after_delete.png}
-    \end{columns}
-
-    \vspace{0.3em}
-    \begin{columns}[c,onlytextwidth]
-        \column{0.49\textwidth}
-        \centering
-        \includegraphics[width=0.96\linewidth,height=0.30\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/selectivity_1m_after_reinsert.png}
-
-        \column{0.49\textwidth}
-        \centering
-        \footnotesize
-        三个状态分别对应：原始 1M、删除到 750k、重插回 1M。图中延迟/QPS 均是在满足 recall@10 $\geq$ 98 后测得。
-    \end{columns}
+    \includegraphics[width=0.94\linewidth,height=0.66\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_intersect_range_selectivity/intersect_range_latency_qps.png}
 \end{frame}
 
 \begin{frame}[c]{需求 4：单查询 RSS}
@@ -84,26 +190,26 @@
     \begin{columns}[c,onlytextwidth]
         \column{0.66\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.54\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/rss_by_selectivity.png}
+        \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_intersect_range_selectivity/rss_by_selectivity.png}
 
         \column{0.32\textwidth}
         \centering
         \begin{minipage}{0.96\linewidth}
             \scriptsize
             \raggedright
-            \textbf{结论：满足 30MB 限制。}
+            \textbf{口径}
 
             \vspace{0.25em}
-            口径：干净单查询进程总内存；query vector 和过滤 label 通过命令行传入，不加载 query file、groundtruth 或 query spmat。
+            干净单查询进程总内存；query vector 和过滤 label 通过命令行传入，不加载 query file、groundtruth 或 query spmat。
 
             \vspace{0.25em}
-            30 个 RSS 点峰值为 \textbf{22.26 MiB}。
+            \textbf{实测结果}
 
             \vspace{0.25em}
-            范围：1M initial 为 12.52--17.75 MiB；750k delete 为 15.22--20.60 MiB；1M reinsert 为 16.80--22.26 MiB。
+            20 个点范围为 \textbf{12.39--18.15 MiB}；intersect 峰值 17.17 MiB，range 峰值 18.15 MiB。
 
             \vspace{0.25em}
-            重插 1M 更高，主要因为非 identity tags 会加载 dense tag table；初始 1M 走 equal mapping。
+            \textcolor{red}{结论：PQ code 改为 mmap 后，单查询进程 RSS 已低于 30MB 目标。}
         \end{minipage}
     \end{columns}
 \end{frame}

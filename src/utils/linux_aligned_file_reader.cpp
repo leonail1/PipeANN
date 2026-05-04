@@ -116,17 +116,18 @@ LinuxAlignedFileReader::~LinuxAlignedFileReader() {
 
 namespace ioctx {
   static thread_local io_uring *ring = nullptr;
+  static thread_local bool io_uring_unavailable = false;
 };
 
 void *LinuxAlignedFileReader::get_ctx(int flag) {
-  if (unlikely(ioctx::ring == nullptr)) {
+  if (unlikely(ioctx::ring == nullptr && !ioctx::io_uring_unavailable)) {
     register_thread(flag);
   }
   return ioctx::ring;
 }
 
 void LinuxAlignedFileReader::register_thread(int flag) {
-  if (ioctx::ring == nullptr) {
+  if (ioctx::ring == nullptr && !ioctx::io_uring_unavailable) {
     ioctx::ring = new io_uring();
     int ret = io_uring_queue_init(MAX_EVENTS, ioctx::ring, flag);
     if (ret < 0 && flag != 0) {
@@ -137,13 +138,17 @@ void LinuxAlignedFileReader::register_thread(int flag) {
     if (ret < 0) {
       delete ioctx::ring;
       ioctx::ring = nullptr;
-      LOG(ERROR) << "io_uring_queue_init failed: " << strerror(-ret);
-      crash();
+      ioctx::io_uring_unavailable = true;
+      LOG(WARNING) << "io_uring_queue_init failed: " << strerror(-ret)
+                   << "; falling back to blocking pread/pwrite";
     }
   }
 }
 
 void LinuxAlignedFileReader::deregister_thread() {
+  if (ioctx::ring == nullptr) {
+    return;
+  }
   io_uring_queue_exit(ioctx::ring);
   delete ioctx::ring;
   ioctx::ring = nullptr;
@@ -257,6 +262,9 @@ void LinuxAlignedFileReader::send_io(std::vector<IORequest> &reqs, void *ctx, bo
 }
 
 int LinuxAlignedFileReader::poll(void *ctx) {
+  if (ctx == nullptr) {
+    return 0;
+  }
   io_uring *ring = (io_uring *) ctx;
   io_uring_cqe *cqe = nullptr;
   int ret = io_uring_peek_cqe(ring, &cqe);
@@ -275,6 +283,9 @@ int LinuxAlignedFileReader::poll(void *ctx) {
 }
 
 void LinuxAlignedFileReader::poll_all(void *ctx) {
+  if (ctx == nullptr) {
+    return;
+  }
   io_uring *ring = (io_uring *) ctx;
   static __thread io_uring_cqe *cqes[MAX_EVENTS];
   int ret = io_uring_peek_batch_cqe(ring, cqes, MAX_EVENTS);
@@ -294,6 +305,9 @@ void LinuxAlignedFileReader::poll_all(void *ctx) {
 }
 
 void LinuxAlignedFileReader::poll_wait(void *ctx) {
+  if (ctx == nullptr) {
+    return;
+  }
   io_uring *ring = (io_uring *) ctx;
   io_uring_cqe *cqe = nullptr;
   int ret = 0;

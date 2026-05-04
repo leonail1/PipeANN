@@ -85,7 +85,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--only-exp4",
         action="store_true",
-        help="Run only exp4_delete_reinsert_selectivity, then plot and clean.",
+        help="Run only exp4_intersect_range_selectivity, then plot and clean.",
     )
     parser.add_argument(
         "--only-exp5",
@@ -344,6 +344,21 @@ def ensure_query_label_files(label_dir: Path, query_count: int) -> dict[str, Pat
     return query_labels
 
 
+def ensure_range_query_label_files(label_dir: Path, query_count: int) -> dict[str, Path]:
+    ncols = len(BUCKETS)
+    query_labels: dict[str, Path] = {}
+    for label_id, (bucket, _) in enumerate(BUCKETS):
+        path = label_dir / f"query_{query_count}_range_{bucket}.spmat"
+        if not path.exists():
+            if label_id == 0:
+                row = [0]
+            else:
+                row = [0, label_id]
+            write_spmat(path, query_count, ncols, (row for _ in range(query_count)))
+        query_labels[bucket] = path
+    return query_labels
+
+
 def stage_name(npoints: int) -> str:
     return f"{npoints // 1000}k" if npoints < 1_000_000 else f"{npoints // 1_000_000}m"
 
@@ -486,7 +501,8 @@ def build_index_with_pq_bytes(repo: Path, args: argparse.Namespace, base_bin: Pa
 
 
 def compute_truth(repo: Path, args: argparse.Namespace, base_bin: Path, query_bin: Path, out: Path,
-                  base_labels: Path | None = None, query_labels: Path | None = None) -> None:
+                  base_labels: Path | None = None, query_labels: Path | None = None,
+                  selector_type: str = "intersect") -> None:
     if out.exists():
         query_count, _ = read_bin_header(query_bin)
         try:
@@ -506,7 +522,7 @@ def compute_truth(repo: Path, args: argparse.Namespace, base_bin: Path, query_bi
         command = [
             str(repo / "build/tests/utils/compute_groundtruth"),
             "float", args.metric, str(base_bin), str(query_bin), str(args.k), str(out), "null",
-            "spmat", "intersect", str(base_labels), str(query_labels),
+            "spmat", selector_type, str(base_labels), str(query_labels),
         ]
     command, env = gt_command_and_env(args, command)
     run(command, repo, env=env)
@@ -571,9 +587,11 @@ def driver(repo: Path, args: argparse.Namespace, *, mode: str, source: Path, des
     return rows[-1]
 
 
-def static_hybrid_search(repo: Path, args: argparse.Namespace, *, prefix: Path, jsonl: Path, query_bin: Path,
-                         truthset: Path, query_label_file: Path, route: str, threads: int,
-                         search_l: int) -> dict:
+def static_hybrid_search(repo: Path, args: argparse.Namespace, *, prefix: Path, jsonl: Path, query_bin: Path | None,
+                         truthset: Path | None, query_label_file: Path | None, route: str, threads: int,
+                         search_l: int, selector_type: str = "intersect",
+                         query_vector_csv: str | None = None, query_label_csv: str | None = None,
+                         single_query_static_rss: bool = False) -> dict:
     before = len(load_jsonl(jsonl))
     command = [
         str(repo / "build/tests/search_disk_index_hybrid"),
@@ -581,13 +599,13 @@ def static_hybrid_search(repo: Path, args: argparse.Namespace, *, prefix: Path, 
         str(prefix),
         str(threads),
         str(args.beamwidth),
-        str(query_bin),
-        str(truthset),
+        str(query_bin) if query_bin is not None else "null",
+        str(truthset) if truthset is not None else "null",
         str(args.k),
         args.metric,
         args.nbr_type,
-        "intersect",
-        str(query_label_file),
+        selector_type,
+        str(query_label_file) if query_label_file is not None else "null",
         route,
         "0",
         "0",
@@ -595,7 +613,16 @@ def static_hybrid_search(repo: Path, args: argparse.Namespace, *, prefix: Path, 
         "--jsonl-output",
         str(jsonl),
     ]
-    run(command, repo)
+    if query_vector_csv is not None:
+        command += ["--query-vector-csv", query_vector_csv]
+    if query_label_csv is not None:
+        command += ["--query-label-csv", query_label_csv]
+    if single_query_static_rss:
+        command += ["--single-query-static-rss"]
+    env = None
+    if single_query_static_rss:
+        env = {"PIPEANN_PQ_MMAP": "1", "PIPEANN_PQ_MMAP_DROP_CACHE": "1"}
+    run(command, repo, env=env)
     rows = load_jsonl(jsonl)
     if len(rows) <= before:
         raise RuntimeError(f"static hybrid search did not append to {jsonl}")
@@ -929,11 +956,13 @@ def run_exp3(repo: Path, args: argparse.Namespace, assets: dict, total_n: int, s
 
 
 def calibrate_l(repo: Path, args: argparse.Namespace, prefix: Path, truth: Path, query_bin: Path, query_label: Path,
-                out_jsonl: Path, query_count: int, route: str = "auto") -> tuple[int, dict]:
+                out_jsonl: Path, query_count: int, route: str = "auto",
+                selector_type: str = "intersect") -> tuple[int, dict]:
     best_row: dict | None = None
     for l_value in EXP4_L_CANDIDATES:
         row = driver(repo, args, mode="measure-dynamic-search", source=prefix, dest=None, jsonl=out_jsonl,
-                     query_bin=query_bin, truthset=truth, query_label_file=query_label, selector_type="intersect",
+                     query_bin=query_bin, truthset=truth, query_label_file=query_label,
+                     selector_type=selector_type,
                      search_threads=32, search_l=l_value, query_limit=query_count, route=route)
         best_row = row
         if row["recall@10"] >= 98.0:
@@ -943,12 +972,13 @@ def calibrate_l(repo: Path, args: argparse.Namespace, prefix: Path, truth: Path,
 
 def calibrate_route_and_l(repo: Path, args: argparse.Namespace, prefix: Path, truth: Path, query_bin: Path,
                           query_label: Path, out_jsonl: Path, query_count: int,
-                          selectivity: float) -> list[tuple[str, int, dict]]:
+                          selectivity: float, selector_type: str = "intersect") -> list[tuple[str, int, dict]]:
     passing: list[tuple[str, int, dict]] = []
     best_by_recall: tuple[float, str, int, dict] | None = None
 
     prefilter_l, prefilter_row = calibrate_l(repo, args, prefix, truth, query_bin, query_label,
-                                             out_jsonl, query_count, route="prefilter")
+                                             out_jsonl, query_count, route="prefilter",
+                                             selector_type=selector_type)
     prefilter_recall = float(prefilter_row.get("recall@10", 0.0))
     prefilter_candidates = float(prefilter_row.get("mean_candidate_count", 0.0))
     prefilter_points = float(prefilter_row.get("points", 0.0))
@@ -963,7 +993,8 @@ def calibrate_route_and_l(repo: Path, args: argparse.Namespace, prefix: Path, tr
         for l_value in EXP4_L_CANDIDATES:
             try:
                 row = driver(repo, args, mode="measure-dynamic-search", source=prefix, dest=None, jsonl=out_jsonl,
-                             query_bin=query_bin, truthset=truth, query_label_file=query_label, selector_type="intersect",
+                             query_bin=query_bin, truthset=truth, query_label_file=query_label,
+                             selector_type=selector_type,
                              search_threads=32, search_l=l_value, query_limit=query_count, route=route)
             except subprocess.CalledProcessError as error:
                 append_jsonl(out_jsonl.parent / "calibration_route_l_errors.jsonl", {
@@ -990,80 +1021,113 @@ def calibrate_route_and_l(repo: Path, args: argparse.Namespace, prefix: Path, tr
 
 
 def run_exp4(repo: Path, args: argparse.Namespace, assets: dict, total_n: int, mid_n: int, query_count: int) -> list[dict]:
-    out = args.out_dir / "exp4_delete_reinsert_selectivity"
+    del mid_n
+    out = args.out_dir / "exp4_intersect_range_selectivity"
     resume_existing = args.resume_after_exp3 and out.exists() and not args.rerun_exp4
     if out.exists() and not resume_existing:
         clear_experiment_dir(out)
     out.mkdir(parents=True, exist_ok=True)
+
     exp4_query_bin = args.out_dir / "data" / f"sift_query_{query_count}.bin"
     copy_prefix_bin(args.query_bin, exp4_query_bin, query_count, assets["dim"])
     exp4_single_query_csv = read_first_query_csv(args.query_bin, assets["dim"])
-    exp4_query_labels = ensure_query_label_files(args.out_dir / "labels", query_count)
-    exp4_single_query_label_csv = {
-        bucket: read_first_spmat_labels_csv(label_file)
-        for bucket, label_file in exp4_query_labels.items()
+    query_labels_by_selector = {
+        "intersect": ensure_query_label_files(args.out_dir / "labels", query_count),
+        "range": ensure_range_query_label_files(args.out_dir / "labels", query_count),
+    }
+    single_query_label_csv = {
+        selector: {
+            bucket: read_first_spmat_labels_csv(label_file)
+            for bucket, label_file in label_files.items()
+        }
+        for selector, label_files in query_labels_by_selector.items()
     }
 
-    initial = out / "tmp" / "initial_1m"
-    deleted = out / "tmp" / "after_delete_750k"
-    reinserted = out / "tmp" / "after_reinsert_1m"
-    if not prefix_exists(initial):
-        build_index_with_pq_bytes(repo, args, assets["base_bins"][total_n], initial,
+    prefix = out / "tmp" / "direct_1m"
+    if not prefix_exists(prefix):
+        build_index_with_pq_bytes(repo, args, assets["base_bins"][total_n], prefix,
                                   assets["label_files"][total_n], 32, args.exp4_pq_bytes)
-    if not prefix_exists(deleted):
-        driver(repo, args, mode="delete-batch", source=initial, dest=deleted, jsonl=out / "update_driver.jsonl",
-               delete_start=mid_n, delete_count=total_n - mid_n, insert_threads=32, merge_threads=32)
-    if not prefix_exists(reinserted):
-        driver(repo, args, mode="reinsert-batch", source=deleted, dest=reinserted, jsonl=out / "update_driver.jsonl",
-               data_bin=assets["base_bins"][total_n], base_label_file=assets["label_files"][total_n],
-               insert_start=mid_n, insert_count=total_n - mid_n, insert_threads=32, merge_threads=32)
 
-    states = [("1m_initial", total_n, initial), ("750k_after_delete", mid_n, deleted), ("1m_after_reinsert", total_n, reinserted)]
-    deleted_label_file = write_selectivity_label_file(
-        args.out_dir / "labels" / f"base_{stage_name(mid_n)}_from_{stage_name(total_n)}_semantics.spmat",
-        mid_n,
-        total_n,
-    )
-    state_label_files = {
-        "1m_initial": assets["label_files"][total_n],
-        "750k_after_delete": deleted_label_file,
-        "1m_after_reinsert": assets["label_files"][total_n],
-    }
     rows: list[dict] = load_jsonl(out / "results.jsonl") if resume_existing else []
-    completed = {(str(row.get("state")), str(row.get("bucket"))) for row in rows}
-    for state, npoints, prefix in states:
+    completed = {(str(row.get("selector_type")), str(row.get("bucket"))) for row in rows}
+    for selector_type, query_labels in query_labels_by_selector.items():
         for bucket, selectivity in BUCKETS:
-            if (state, bucket) in completed:
+            if (selector_type, bucket) in completed:
                 continue
-            truth = out / "truth" / f"gt_{state}_{bucket}.bin"
-            compute_truth(repo, args, assets["base_bins"][npoints], exp4_query_bin, truth,
-                          state_label_files[state], exp4_query_labels[bucket])
-            calibrated_candidates = calibrate_route_and_l(
-                repo, args, prefix, truth, exp4_query_bin, exp4_query_labels[bucket],
-                out / "calibration_route_l.jsonl", query_count, selectivity,
-            )
+            truth = out / "truth" / f"gt_1m_{selector_type}_{bucket}.bin"
+            compute_truth(repo, args, assets["base_bins"][total_n], exp4_query_bin, truth,
+                          assets["label_files"][total_n], query_labels[bucket],
+                          selector_type=selector_type)
             measured_candidates = []
-            for selected_route, chosen_l, calibration_row in calibrated_candidates:
-                measured = driver(repo, args, mode="measure-dynamic-search", source=prefix, dest=None,
-                                  jsonl=out / "measure_driver.jsonl", query_bin=exp4_query_bin, truthset=truth,
-                                  query_label_file=exp4_query_labels[bucket], selector_type="intersect",
-                                  search_threads=1, search_l=chosen_l, query_limit=query_count, route=selected_route)
+            # Low-selectivity filters should use prefilter directly. Sweeping graph there is
+            # both slow and uninformative because graph must find enough filtered hits from a
+            # tiny live candidate set.
+            route_candidates = ["prefilter", "graph"] if selectivity >= 0.25 else ["prefilter"]
+            for selected_route in route_candidates:
+                try:
+                    chosen_l, calibration_row = calibrate_baseline_l(
+                        repo, args, prefix, truth, exp4_query_bin, query_labels[bucket],
+                        selected_route, out / "calibration_route_l.jsonl",
+                        selector_type=selector_type,
+                    )
+                except subprocess.CalledProcessError as error:
+                    append_jsonl(out / "calibration_route_l_errors.jsonl", {
+                        "selector_type": selector_type,
+                        "bucket": bucket,
+                        "route": selected_route,
+                        "returncode": error.returncode,
+                        "source": str(prefix),
+                        "truthset": str(truth),
+                        "query_label_file": str(query_labels[bucket]),
+                    })
+                    continue
+                if chosen_l is None:
+                    append_jsonl(out / "skipped.jsonl", {
+                        "status": "skipped_latency_cutoff",
+                        "selector_type": selector_type,
+                        "bucket": bucket,
+                        "route": selected_route,
+                        "last_L": calibration_row.get("chosen_L"),
+                        "last_recall@10": calibration_row.get("recall@10"),
+                        "last_avg_latency_us": calibration_row.get("avg_latency_us"),
+                    })
+                    continue
+                measured = static_hybrid_search(
+                    repo, args, prefix=prefix, jsonl=out / "measure_driver.jsonl",
+                    query_bin=exp4_query_bin, truthset=truth, query_label_file=query_labels[bucket],
+                    route=selected_route, threads=1, search_l=chosen_l,
+                    selector_type=selector_type,
+                )
                 status = "ok" if float(measured.get("recall@10", 0.0)) >= 98.0 else "failed_recall"
-                measured.update({"status": status, "state": state, "bucket": bucket, "chosen_L": chosen_l,
-                                 "points": npoints, "selected_route": selected_route, "target_recall@10": 98.0,
-                                 "exp4_pq_bytes": args.exp4_pq_bytes,
-                                 "calibration_recall@10": calibration_row.get("recall@10"),
-                                 "calibration_avg_latency_us": calibration_row.get("avg_latency_us")})
+                measured.update({
+                    "status": status,
+                    "state": "1m_direct",
+                    "bucket": bucket,
+                    "selector_type": selector_type,
+                    "filter_type": selector_type,
+                    "chosen_L": chosen_l,
+                    "points": total_n,
+                    "selected_route": selected_route,
+                    "target_recall@10": 98.0,
+                    "exp4_pq_bytes": args.exp4_pq_bytes,
+                    "calibration_recall@10": calibration_row.get("recall@10"),
+                    "calibration_avg_latency_us": calibration_row.get("avg_latency_us"),
+                })
                 append_jsonl(out / "route_selection_candidates.jsonl", measured)
                 measured_candidates.append(measured)
+            if not measured_candidates:
+                continue
             passing_measured = [row for row in measured_candidates if float(row.get("recall@10", 0.0)) >= 98.0]
             measured = min(passing_measured or measured_candidates,
                            key=lambda row: float(row.get("avg_latency_us", float("inf"))))
-            rss_row = driver(repo, args, mode="measure-dynamic-search", source=prefix, dest=None,
-                             jsonl=out / "rss_single_query_driver.jsonl", query_vector_csv=exp4_single_query_csv,
-                             query_label_csv=exp4_single_query_label_csv[bucket],
-                             selector_type="intersect", search_threads=1, search_l=int(measured["chosen_L"]),
-                             query_limit=1, route=str(measured["selected_route"]), single_query_static_rss=True)
+            rss_row = static_hybrid_search(
+                repo, args, prefix=prefix, jsonl=out / "rss_single_query_driver.jsonl",
+                query_bin=None, truthset=None, query_label_file=None,
+                route=str(measured["selected_route"]), threads=1, search_l=int(measured["chosen_L"]),
+                selector_type=selector_type, query_vector_csv=exp4_single_query_csv,
+                query_label_csv=single_query_label_csv[selector_type][bucket],
+                single_query_static_rss=True,
+            )
             measured["search_max_rss_kb"] = measured.get("max_rss_kb")
             measured["process_max_rss_kb"] = rss_row.get("process_max_rss_kb", rss_row.get("max_rss_kb"))
             measured["rss_before_query_kb"] = rss_row.get("rss_before_query_kb")
@@ -1076,43 +1140,11 @@ def run_exp4(repo: Path, args: argparse.Namespace, assets: dict, total_n: int, m
             measured["rss_single_query_avg_latency_us"] = rss_row.get("avg_latency_us")
             measured["rss_single_query_recall@10"] = rss_row.get("recall@10")
             rows.append(measured)
-            completed.add((state, bucket))
+            completed.add((selector_type, bucket))
             append_jsonl(out / "results.jsonl", measured)
+
     write_csv(out / "table.csv", rows)
-    fixed_rows: list[dict] = []
-    fixed_results = out / "fixed_graph_recall_results.jsonl"
-    fixed_driver_log = out / "fixed_graph_recall_driver.jsonl"
-    fixed_table = out / "fixed_graph_recall_table.csv"
-    for stale in [fixed_results, fixed_driver_log, fixed_table]:
-        if stale.exists():
-            stale.unlink()
-    for state, npoints, prefix in states:
-        for bucket, selectivity in BUCKETS:
-            if selectivity < 0.25:
-                continue
-            truth = out / "truth" / f"gt_{state}_{bucket}.bin"
-            if not truth.exists():
-                compute_truth(repo, args, assets["base_bins"][npoints], exp4_query_bin, truth,
-                              state_label_files[state], exp4_query_labels[bucket])
-            row = driver(repo, args, mode="measure-dynamic-search", source=prefix, dest=None,
-                         jsonl=fixed_driver_log, query_bin=exp4_query_bin, truthset=truth,
-                         query_label_file=exp4_query_labels[bucket], selector_type="intersect",
-                         search_threads=1, search_l=args.exp4_fixed_graph_l, query_limit=query_count,
-                         route="graph")
-            row.update({
-                "status": "ok",
-                "state": state,
-                "bucket": bucket,
-                "fixed_L": args.exp4_fixed_graph_l,
-                "selected_route": "graph",
-                "points": npoints,
-                "exp4_pq_bytes": args.exp4_pq_bytes,
-            })
-            fixed_rows.append(row)
-            append_jsonl(fixed_results, row)
-    write_csv(fixed_table, fixed_rows)
-    for prefix in [initial, deleted, reinserted]:
-        clean_prefix(prefix)
+    clean_prefix(prefix)
     return rows
 
 
@@ -1137,12 +1169,13 @@ def run_exp5(repo: Path, args: argparse.Namespace, assets: dict, stages: list[in
 
 
 def calibrate_baseline_l(repo: Path, args: argparse.Namespace, prefix: Path, truth: Path, query_bin: Path,
-                         query_label: Path, route: str, out_jsonl: Path) -> tuple[int | None, dict]:
+                         query_label: Path, route: str, out_jsonl: Path,
+                         selector_type: str = "intersect") -> tuple[int | None, dict]:
     best_row: dict = {}
     for l_value in EXP4_L_CANDIDATES:
         row = static_hybrid_search(repo, args, prefix=prefix, jsonl=out_jsonl, query_bin=query_bin,
                                    truthset=truth, query_label_file=query_label, route=route,
-                                   threads=1, search_l=l_value)
+                                   threads=1, search_l=l_value, selector_type=selector_type)
         best_row = row
         recall = float(row.get("recall@10", 0.0))
         avg_latency_us = float(row.get("avg_latency_us", 0.0))
@@ -1303,7 +1336,7 @@ def main() -> int:
         return 0
 
     if args.only_exp4:
-        summary["experiments"]["exp4_delete_reinsert_selectivity"] = run_exp4(
+        summary["experiments"]["exp4_intersect_range_selectivity"] = run_exp4(
             repo, args, assets, total_n, mid_n, min(query_count, 1000),
         )
         finish_run(repo, args, summary)
@@ -1355,7 +1388,7 @@ def main() -> int:
     else:
         summary["experiments"]["exp3_search_during_insert"] = run_exp3(repo, args, assets, total_n, start_n, query_count,
                                                                          exp3_insert_threads, exp3_query_threads)
-    summary["experiments"]["exp4_delete_reinsert_selectivity"] = run_exp4(repo, args, assets, total_n, mid_n, min(query_count, 1000))
+    summary["experiments"]["exp4_intersect_range_selectivity"] = run_exp4(repo, args, assets, total_n, mid_n, min(query_count, 1000))
     if args.stop_after_exp4:
         existing_exp5 = load_jsonl(args.out_dir / "exp5_index_bloat_by_size/results.jsonl")
         if existing_exp5:

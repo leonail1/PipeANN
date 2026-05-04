@@ -11,7 +11,7 @@
 1. `exp1_insert_vs_build_threads`
 2. `exp2_stage_recall_build_vs_insert`
 3. `exp3_search_during_insert`
-4. `exp4_delete_reinsert_selectivity`
+4. `exp4_intersect_range_selectivity`
 5. `exp5_index_bloat_by_size`
 6. `exp_baseline`
 
@@ -33,7 +33,8 @@
 
 `exp3` 使用 `data/bigann/sift_base_2m_float.bin` 和
 `data/bigann/sift_query_10000_float.bin` 做 1M 到 2M 插入期间前台查询实验。
-其余实验使用 SIFT1M。
+`exp4` 使用直接构建的 SIFT1M 1M 索引，对 intersect/range 两类过滤查询分别测
+latency、QPS 和单查询进程 RSS。其余实验使用 SIFT1M。
 
 每个 suite 的 `start.sh` 都会完成实验运行、绘图和结果表生成。实验目录只应保留
 `json/jsonl/csv/png/md/sh` 等小文件；索引、truthset、临时 workload 等大文件应在运行后清理。
