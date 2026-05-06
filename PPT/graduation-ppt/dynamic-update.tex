@@ -7,12 +7,37 @@
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit}
 \pgfplotsset{compat=1.18}
 
-\title{PipeANN 动态更新实验汇报}
+\title{OpenHarmony 向标联合查询中期汇报}
 \author{林正刚}
-\teacher{沈志荣教授}
 \pubdate{}
 
 \setbeamerfont{frametitle}{size=\large,series=\bfseries}
+
+\makeatletter
+\renewcommand{\maketitle}{
+    \ifthenelse{\isundefined{\xmu@nav}}{\setbeamertemplate{navigation symbols}{}}{}
+    \begin{frame}[plain]
+        \begin{center}
+            \vskip 12pt
+            \includegraphics[height=25pt]{xmu-logo-text.jpg}
+            \vskip -8pt
+            {\zihao{-5}\bf\songti 中\, 期\, 汇\, 报}
+            \vskip 24pt
+            \begin{beamercolorbox}[wd=\paperwidth,center]{palette secondary}
+                \vskip 0pt
+                \zihao{2}\xmu@title
+                \vskip 16pt
+            \end{beamercolorbox}
+            \vskip 12pt
+            \begin{tabular}{r@{\hskip 1.5ex}l}
+                汇报人： & \xmu@author \\
+            \end{tabular}
+            \vskip 12pt
+            \color{gray}\zihao{-5}\xmu@pubdate
+        \end{center}
+    \end{frame}
+}
+\makeatother
 
 \newcommand{\ok}{\textcolor{green!45!black}{通过}}
 \newcommand{\warn}{\textcolor{orange!85!black}{部分通过}}
@@ -22,108 +47,190 @@
 
 \maketitle
 
+\begin{frame}[c]{需求实现情况总览}
+    \centering
+    \tiny
+    \renewcommand{\arraystretch}{1.14}
+    \begin{tabular}{p{0.43\textwidth}p{0.13\textwidth}p{0.33\textwidth}}
+        \toprule
+        \textbf{需求点} & \textbf{状态} & \textbf{备注} \\
+        \midrule
+        动态增量混合索引 & 部分完成 & 当前索引不能从 0 数据量插入。 \\
+        查询 10@10 召回率稳定 $>$98\% & 完成 &  \\
+        标量等值与范围查询 & 完成 &  \\
+        联合向量近似查询时延 $<$10ms & 完成 &  \\
+        内存限制 30M 左右 & 完成 &  \\
+        索引膨胀率不能高于原始向量 1 倍 & 部分完成 & 目前 R=116 情况下索引膨胀率略超；也可以使用 R=75，但插入删除会对图质量有比较大的影响。 \\
+        \bottomrule
+    \end{tabular}
+\end{frame}
+
 \begin{frame}[t]{混合搜索框架}
     \centering
     \scriptsize
-    核心目标：同一个索引同时支持低选择性过滤查询和高选择性近似搜索，并为每个查询选择更合适的执行路径。
-    \vspace{0.15em}
+    根据过滤选择性阈值 $\tau_m$，在同一个磁盘图索引上选择 prefilter 或 inline-processing ANNS。
+    \vspace{0.65em}
 
-    \begin{columns}[c,onlytextwidth]
-        \column{0.64\textwidth}
+    \begin{columns}[T,onlytextwidth]
+        \column{0.42\textwidth}
         \centering
+        \resizebox{\linewidth}{!}{%
         \begin{tikzpicture}[
-            scale=0.80,
+            scale=0.92,
             transform shape,
             font=\scriptsize,
-            node distance=0.44cm and 0.48cm,
-            box/.style={draw, rounded corners=2pt, align=center, text width=2.35cm, minimum height=0.62cm, fill=blue!5},
-            decision/.style={draw, diamond, aspect=1.85, align=center, text width=1.88cm, inner sep=1pt, fill=orange!9},
-            route/.style={draw, rounded corners=2pt, align=center, text width=2.75cm, minimum height=0.78cm, fill=green!7},
-            data/.style={draw, rounded corners=2pt, align=center, text width=2.42cm, minimum height=0.58cm, fill=gray!8},
-            outbox/.style={draw, rounded corners=2pt, align=center, text width=2.30cm, minimum height=0.60cm, fill=purple!6},
-            arrow/.style={-{Stealth[length=2mm]}, line width=0.45pt}
+            node distance=0.34cm,
+            box/.style={draw, rounded corners=3pt, align=center, text width=3.35cm, minimum height=0.68cm, fill=blue!6, line width=0.6pt},
+            gate/.style={draw, diamond, aspect=1.75, align=center, text width=2.05cm, inner sep=1pt, fill=orange!10, line width=0.6pt},
+            low/.style={draw, rounded corners=3pt, align=center, text width=3.65cm, minimum height=0.72cm, fill=green!8, line width=0.6pt},
+            high/.style={draw, rounded corners=3pt, align=center, text width=3.65cm, minimum height=0.88cm, fill=purple!7, line width=0.6pt},
+            resultbox/.style={draw, rounded corners=3pt, align=center, text width=2.25cm, minimum height=0.62cm, fill=gray!8, line width=0.6pt},
+            arrow/.style={-{Stealth[length=2mm]}, line width=0.5pt}
         ]
             \node[box] (query) {Query + filter};
-            \node[box, below=of query] (selectivity) {选择性估计\\$s=|filter|/N$};
-            \node[decision, below=of selectivity] (judge) {$s \leq \tau_m$?};
-            \node[route, below left=0.62cm and 0.30cm of judge] (prefilter) {Prefilter\\先用 label bitmap\\得到候选集合};
-            \node[route, below right=0.62cm and 0.30cm of judge] (graph) {Graph search\\在 SSD graph 上搜索\\边走边做过滤};
-            \node[data, below=0.44cm of prefilter] (pq) {PQ code\\候选距离估计/重排};
-            \node[data, below=0.44cm of graph] (disk) {Disk index\\邻居扩展 + I/O};
-            \node[outbox, below=1.72cm of judge] (topk) {Top-$k$ results};
+            \node[box, below=of query] (estimate) {估计选择性 $s$};
+            \node[gate, below=0.50cm of estimate] (judge) {$s \leq \tau_m$?};
+            \node[low, below left=0.58cm and 0.08cm of judge] (prefilter) {1. Prefilter\\筛出符合条件的向量};
+            \node[low, below=0.32cm of prefilter] (pq) {2. PQ 近似距离计算};
+            \node[low, below=0.32cm of pq] (rerank) {3. 最小 PQ 距离短表\\SSD 全精度重排序};
+            \node[high, below right=0.58cm and 0.08cm of judge] (inline) {1. Inline-filter\\+ graph search};
+            \node[resultbox, below=0.60cm of rerank] (topk) {Top-$k$};
 
-            \draw[arrow] (query) -- (selectivity);
-            \draw[arrow] (selectivity) -- (judge);
-            \draw[arrow] (judge) -| node[pos=0.24, above left] {低选择性} (prefilter);
-            \draw[arrow] (judge) -| node[pos=0.24, above right] {高选择性} (graph);
+            \draw[arrow] (query) -- (estimate);
+            \draw[arrow] (estimate) -- (judge);
+            \draw[arrow] (judge) -| node[pos=0.25, above left] {$s \leq \tau_m$} (prefilter);
+            \draw[arrow] (judge) -| node[pos=0.25, above right] {$s > \tau_m$} (inline);
             \draw[arrow] (prefilter) -- (pq);
-            \draw[arrow] (graph) -- (disk);
-            \draw[arrow] (pq) |- (topk);
-            \draw[arrow] (disk) |- (topk);
+            \draw[arrow] (pq) -- (rerank);
+            \draw[arrow] (rerank) -- (topk);
+            \draw[arrow] (inline) |- (topk);
         \end{tikzpicture}
+        }
 
-        \column{0.34\textwidth}
-        \begin{minipage}{0.98\linewidth}
-            \tiny
-            \raggedright
-            \textbf{框架做的事情}
-            \vspace{0.15em}
-            \begin{itemize}
-                \item 查询入口统一，先解析过滤条件并估计选择性。
-                \item \texttt{prefilter} 适合小候选集合：先过滤，再用 PQ/距离计算重排。
-                \item \texttt{graph search} 适合高选择性：避免扫描大候选集合，利用图结构快速逼近近邻。
-                \item route 由 $\tau_m$ 控制；L 单独校准，保证 recall 下限。
-            \end{itemize}
-        \end{minipage}
+        \column{0.56\textwidth}
+        \centering
+        \resizebox{\linewidth}{!}{%
+        \begin{tikzpicture}[
+            scale=0.88,
+            transform shape,
+            font=\scriptsize,
+            panel/.style={draw, rounded corners=3pt, align=center, fill=gray!4, minimum width=3.15cm, minimum height=1.95cm, line width=0.55pt},
+            item/.style={draw, rounded corners=2pt, minimum width=0.35cm, minimum height=0.30cm, align=center, fill=gray!8},
+            hit/.style={draw=red!80!black, rounded corners=2pt, minimum width=0.35cm, minimum height=0.30cm, align=center, fill=red!12, line width=0.75pt},
+            pass/.style={circle, draw=green!45!black, minimum size=0.48cm, inner sep=0pt, fill=green!14, line width=0.8pt},
+            fail/.style={circle, draw=red!75!black, minimum size=0.48cm, inner sep=0pt, fill=red!12, line width=0.8pt},
+            vnode/.style={circle, draw, minimum size=0.46cm, inner sep=0pt, fill=gray!8},
+            arrow/.style={-{Stealth[length=1.7mm]}, line width=0.42pt}
+        ]
+            \node[font=\bfseries\scriptsize] at (4.95,3.92) {支持的过滤方式};
+
+            \node[panel] at (1.55,2.72) {};
+            \node[font=\bfseries\tiny] at (1.55,3.40) {intersect};
+            \node[anchor=east, font=\tiny] at (0.50,2.96) {$q_F$};
+            \node[item] at (0.83,2.96) {1};
+            \node[hit] at (1.23,2.96) {\textcolor{red!85!black}{3}};
+            \node[item] at (1.63,2.96) {5};
+            \node[anchor=east, font=\tiny] at (0.50,2.54) {$n_F$};
+            \node[item] at (0.83,2.54) {2};
+            \node[hit] at (1.23,2.54) {\textcolor{red!85!black}{3}};
+            \node[item] at (1.63,2.54) {6};
+            \node[font=\fontsize{4.4}{5}\selectfont, red!75!black] at (2.52,2.76) {$q_F \cap n_F=\{3\}$};
+            \node[font=\tiny, align=center] at (1.55,1.94) {交集非空即匹配};
+
+            \node[panel] at (4.95,2.72) {};
+            \node[font=\bfseries\tiny] at (4.95,3.40) {subset};
+            \node[anchor=east, font=\tiny] at (3.82,2.96) {$q_F$};
+            \node[hit] at (4.16,2.96) {\textcolor{red!85!black}{1}};
+            \node[hit] at (4.56,2.96) {\textcolor{red!85!black}{3}};
+            \node[anchor=east, font=\tiny] at (3.82,2.54) {$n_F$};
+            \node[hit] at (4.16,2.54) {\textcolor{red!85!black}{1}};
+            \node[item] at (4.56,2.54) {2};
+            \node[hit] at (4.96,2.54) {\textcolor{red!85!black}{3}};
+            \node[font=\tiny, green!40!black] at (5.92,2.76) {$q_F \subset n_F$};
+            \node[font=\tiny, align=center] at (4.95,1.94) {查询标签全部被包含};
+
+            \node[panel] at (8.35,2.72) {};
+            \node[font=\bfseries\tiny] at (8.35,3.40) {range};
+            \draw[line width=0.65pt] (7.25,2.70) -- (9.20,2.70);
+            \draw[line width=0.65pt, red!75!black] (7.75,2.70) -- (8.65,2.70);
+            \draw[line width=0.65pt, red!75!black] (7.75,2.56) -- (7.75,2.84);
+            \draw[line width=0.65pt, red!75!black] (8.65,2.56) -- (8.65,2.84);
+            \node[font=\tiny, red!75!black] at (7.75,3.02) {3};
+            \node[font=\tiny, red!75!black] at (8.65,3.02) {6};
+            \node[hit, circle, minimum width=0.28cm, minimum height=0.28cm] at (8.26,2.70) {};
+            \node[item, circle, minimum width=0.28cm, minimum height=0.28cm] at (8.92,2.70) {};
+            \node[font=\tiny, red!75!black] at (8.26,2.31) {5};
+            \node[font=\tiny, gray!70!black] at (8.92,2.31) {8};
+            \node[font=\tiny, align=center] at (8.35,1.94) {向量属性落入查询区间};
+
+            \node[font=\bfseries\scriptsize] at (4.95,0.48) {Inline-processing ANNS};
+            \node[pass] (a) at (1.35,-0.58) {A};
+            \node[fail] (b) at (2.55,-0.01) {B};
+            \node[vnode] (c) at (3.75,-0.58) {C};
+            \node[pass] (d) at (4.95,-0.01) {D};
+            \node[vnode] (e) at (6.15,-0.58) {E};
+            \node[fail] (f) at (7.35,-0.01) {F};
+            \draw[arrow] (a) -- (b);
+            \draw[arrow] (a) -- (c);
+            \draw[arrow] (b) -- (d);
+            \draw[arrow] (c) -- (d);
+            \draw[arrow] (d) -- (e);
+            \draw[arrow] (e) -- (f);
+            \node[font=\tiny, green!35!black, align=center, text width=8.80cm] at (4.95,-1.12) {绿色节点：满足过滤条件，可以加入结果集};
+            \node[font=\tiny, red!70!black, align=center, text width=8.80cm] at (4.95,-1.48) {红色节点：不满足过滤条件，不加入结果集，但仍用于保持图的可导航性};
+        \end{tikzpicture}
+        }
     \end{columns}
 \end{frame}
 
-\begin{frame}[t]{$\tau_m$ 标定与重新标定}
+\begin{frame}[c]{$\tau_m$ 标定与重新标定}
     \centering
     \scriptsize
     $\tau_m$ 是 prefilter 和 graph search 的切换边界；它不是固定常数，而是随索引状态重新校准。
-    \vspace{0.15em}
+    \vspace{0.55em}
 
     \begin{columns}[c,onlytextwidth]
-        \column{0.54\textwidth}
+        \column{0.56\textwidth}
         \centering
+        \resizebox{0.98\linewidth}{!}{%
         \begin{tikzpicture}[
-            scale=0.74,
+            scale=1.0,
             transform shape,
             font=\scriptsize,
-            node distance=0.30cm,
-            init/.style={draw, rounded corners=2pt, align=center, text width=3.95cm, minimum height=0.64cm, fill=blue!6},
-            triggerbox/.style={draw, rounded corners=2pt, align=center, text width=3.95cm, minimum height=0.64cm, fill=orange!8},
-            stepbox/.style={draw, rounded corners=2pt, align=center, text width=3.95cm, minimum height=0.64cm, fill=purple!5},
-            publishbox/.style={draw, rounded corners=2pt, align=center, text width=3.95cm, minimum height=0.64cm, fill=green!7},
-            arrow/.style={-{Stealth[length=2mm]}, line width=0.45pt}
+            axis/.style={-{Stealth[length=2mm]}, line width=0.55pt},
+            curve/.style={line width=0.95pt},
+            markline/.style={dashed, line width=0.55pt}
         ]
-            \node[init] (build) {索引刚构建完成\\记录当前 live count $N_0$};
-            \node[stepbox, below=of build] (sample) {生成选择性 bucket\\如 0.1\%, 1\%, 5\%, 25\%, 100\%};
-            \node[stepbox, below=of sample] (sweep) {在每个 bucket 上测\\prefilter / graph 的 recall、latency、QPS};
-            \node[stepbox, below=of sweep] (choose) {只保留满足 recall 目标的 route\\选择更快路径并确定 $\tau_m$};
-            \node[publishbox, below=of choose] (publish) {发布 route table\\查询按最新 $\tau_m$ 路由};
-            \node[triggerbox, below=of publish] (drift) {运行期监控 $N$\\当 $|N-N_0|/N_0 > 10\%$ 触发重标定};
-
-            \draw[arrow] (build) -- (sample);
-            \draw[arrow] (sample) -- (sweep);
-            \draw[arrow] (sweep) -- (choose);
-            \draw[arrow] (choose) -- (publish);
-            \draw[arrow] (publish) -- (drift);
-            \draw[arrow, dashed] (drift.west) -- ++(-0.55,0) |- (sample.west);
+            \fill[green!8] (0.62,0.48) rectangle (3.10,3.55);
+            \fill[purple!7] (3.10,0.48) rectangle (5.85,3.55);
+            \draw[axis] (0.62,0.48) -- (6.02,0.48) node[below] {过滤选择性 $s$};
+            \draw[axis] (0.62,0.48) -- (0.62,3.78) node[left] {Latency};
+            \draw[curve, green!45!black]
+                plot[smooth] coordinates {(0.75,0.75) (1.50,0.92) (2.25,1.28) (3.10,1.82) (4.25,2.70) (5.70,3.45)};
+            \draw[curve, purple!70!black]
+                plot[smooth] coordinates {(0.75,3.20) (1.55,2.72) (2.40,2.20) (3.10,1.82) (4.05,1.36) (5.70,1.05)};
+            \draw[markline] (3.10,0.48) -- (3.10,1.82);
+            \node[circle, fill=red!75!black, inner sep=1.5pt] at (3.10,1.82) {};
+            \node[font=\bfseries\scriptsize, red!75!black] at (3.10,2.12) {$\tau_m$};
+            \node[font=\tiny, green!45!black] at (5.08,2.72) {Prefilter};
+            \node[font=\tiny, purple!70!black] at (4.95,1.44) {Graph search};
+            \node[font=\tiny, green!45!black] at (1.75,0.82) {$s \leq \tau_m$};
+            \node[font=\tiny, purple!70!black] at (4.70,0.82) {$s > \tau_m$};
         \end{tikzpicture}
+        }
 
-        \column{0.42\textwidth}
+        \column{0.40\textwidth}
         \begin{minipage}{0.98\linewidth}
             \tiny
             \raggedright
-            \textbf{两类标定时机}
+            \textbf{标定方式}
             \vspace{0.15em}
             \begin{itemize}
-                \item \textbf{初始标定：} 索引 build 完成后立即执行，得到第一版 $\tau_m$ 和 route table。
-                \item \textbf{漂移重标定：} 插入或删除导致 live vector 数量相对上次标定点漂移超过阈值，例如 10\%，重新抽样并重跑校准。
-                \item \textbf{更新口径：} 标定只决定 route 边界；L 仍按 recall 目标选择。
-                \item \textbf{发布方式：} 新表原子替换旧表，后续查询使用新 $\tau_m$。
+                \item 对每个选择性 bucket 校准 $L$，只保留满足 recall 目标的点。
+                \item 在这些点上比较 prefilter 与 graph search 的延迟曲线。
+                \item prefilter 随选择性增大而变慢；graph search 反之。
+                \item 两条曲线交点即 $\tau_m$：左侧走 prefilter，右侧走 graph。
+                \item live count 漂移超过阈值时后台重标定；完成前使用旧 $\tau_m$，完成后原子切换到新 $\tau_m$。
             \end{itemize}
         \end{minipage}
     \end{columns}
@@ -200,7 +307,7 @@
             \textbf{口径}
 
             \vspace{0.25em}
-            干净单查询进程总内存；query vector 和过滤 label 通过命令行传入，不加载 query file、groundtruth 或 query spmat。
+            只加载必要文件到内存，完成单个查询的搜索流程并返回结果；不加载 query file、groundtruth 等其他文件。
 
             \vspace{0.25em}
             \textbf{实测结果}
@@ -209,7 +316,7 @@
             20 个点范围为 \textbf{12.39--18.15 MiB}；intersect 峰值 17.17 MiB，range 峰值 18.15 MiB。
 
             \vspace{0.25em}
-            \textcolor{red}{结论：PQ code 改为 mmap 后，单查询进程 RSS 已低于 30MB 目标。}
+            \textcolor{red}{结论：满足 30MB 内存要求。}
         \end{minipage}
     \end{columns}
 \end{frame}
@@ -218,7 +325,7 @@
     \centering
     \begin{minipage}{0.92\textwidth}
         \small
-        原始向量空间按 \texttt{npoints * 128 * 4} 计算；额外索引空间均满足 extra/raw $\leq 1.0$。
+        原始向量空间按 \texttt{npoints * 128 * 4} 计算；1M 索引膨胀率约为 2.06x，额外索引空间满足 extra/raw $\leq 1.0$。
         \vspace{0.5em}
 
         \scriptsize
