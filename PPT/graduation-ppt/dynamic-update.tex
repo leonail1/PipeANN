@@ -55,7 +55,7 @@
         \toprule
         \textbf{需求点} & \textbf{状态} & \textbf{备注} \\
         \midrule
-        动态增量混合索引 & 完成 & 10k 以内走内存 flat exact KNN，超过阈值后落盘为磁盘图。 \\
+        动态增量混合索引 & 完成 & 10k 以内走纯内存精确近邻搜索，超过阈值后落盘为磁盘图。 \\
         查询 10@10 召回率稳定 $>$98\% & 完成 &  \\
         标量等值与范围查询 & 完成 &  \\
         联合向量近似查询时延 $<$10ms & 完成 &  \\
@@ -63,44 +63,6 @@
         索引膨胀率不能高于原始向量 1 倍 & 部分完成 & 目前 R=116 情况下索引膨胀率略超；也可以使用 R=75，但插入删除会对图质量有比较大的影响。 \\
         \bottomrule
     \end{tabular}
-\end{frame}
-
-\begin{frame}[c]{需求 0：从 0 插入与小规模搜索}
-    \centering
-    \begin{columns}[c,onlytextwidth]
-        \column{0.66\textwidth}
-        \centering
-        \includegraphics[width=0.98\linewidth,height=0.62\textheight,keepaspectratio]{../../experiments/flat_small_search/rss_latency_qps.png}
-
-        \column{0.32\textwidth}
-        \centering
-        \begin{minipage}{0.98\linewidth}
-            \tiny
-            \raggedright
-            \textbf{实现路径}
-
-            \vspace{0.12em}
-            空索引启动时进入内存 flat 模式；0--10k 向量直接插入内存数组并执行 exact KNN，不训练 PQ、不生成磁盘图。
-
-            \vspace{0.12em}
-            live count 超过 10k 后，再一次性 materialize 为磁盘图索引。
-
-            \vspace{0.24em}
-            \textbf{实验结果}
-
-            \vspace{0.12em}
-            SIFT1M 前 10k 向量实验中，10k 以内全部保持 flat mode。
-
-            \vspace{0.12em}
-            单查询 peak RSS 最高约 \textbf{32.3 MiB}，接近 30MB 要求。
-
-            \vspace{0.12em}
-            平均搜索延迟最高约 \textbf{0.20 ms}，显著低于 10ms 延迟要求；10k 附近 QPS 约 \textbf{5k}。
-
-            \vspace{0.24em}
-            \textcolor{red}{结论：已支持从 0 数据量开始插入，小规模阶段基本满足内存和延迟要求。}
-        \end{minipage}
-    \end{columns}
 \end{frame}
 
 \begin{frame}[t]{混合搜索框架}
@@ -224,7 +186,7 @@
 \begin{frame}[c]{$\tau_m$ 标定与重新标定}
     \centering
     \scriptsize
-    $\tau_m$ 是 prefilter 和 graph search 的切换边界；它不是固定常数，而是随索引状态重新校准。
+    $\tau_m$ 用来判断过滤后候选集是否足够小：小就先过滤再算距离，大就直接在图上边搜边过滤。
     \vspace{0.55em}
 
     \begin{columns}[c,onlytextwidth]
@@ -242,7 +204,7 @@
             \fill[green!8] (0.62,0.48) rectangle (3.10,3.55);
             \fill[purple!7] (3.10,0.48) rectangle (5.85,3.55);
             \draw[axis] (0.62,0.48) -- (6.02,0.48) node[below] {过滤选择性 $s$};
-            \draw[axis] (0.62,0.48) -- (0.62,3.78) node[left] {Latency};
+            \draw[axis] (0.62,0.48) -- (0.62,3.78) node[left] {查询延迟};
             \draw[curve, green!45!black]
                 plot[smooth] coordinates {(0.75,0.75) (1.50,0.92) (2.25,1.28) (3.10,1.82) (4.25,2.70) (5.70,3.45)};
             \draw[curve, purple!70!black]
@@ -250,8 +212,8 @@
             \draw[markline] (3.10,0.48) -- (3.10,1.82);
             \node[circle, fill=red!75!black, inner sep=1.5pt] at (3.10,1.82) {};
             \node[font=\bfseries\scriptsize, red!75!black] at (3.10,2.12) {$\tau_m$};
-            \node[font=\tiny, green!45!black] at (5.08,2.72) {Prefilter};
-            \node[font=\tiny, purple!70!black] at (4.95,1.44) {Graph search};
+            \node[font=\tiny, green!45!black] at (5.08,2.72) {先过滤};
+            \node[font=\tiny, purple!70!black] at (4.95,1.44) {图搜索};
             \node[font=\tiny, green!45!black] at (1.75,0.82) {$s \leq \tau_m$};
             \node[font=\tiny, purple!70!black] at (4.70,0.82) {$s > \tau_m$};
         \end{tikzpicture}
@@ -264,14 +226,30 @@
             \textbf{标定方式}
             \vspace{0.15em}
             \begin{itemize}
-                \item 对每个选择性 bucket 校准 $L$，只保留满足 recall 目标的点。
-                \item 在这些点上比较 prefilter 与 graph search 的延迟曲线。
-                \item prefilter 随选择性增大而变慢；graph search 反之。
-                \item 两条曲线交点即 $\tau_m$：左侧走 prefilter，右侧走 graph。
-                \item live count 漂移超过阈值时后台重标定；完成前使用旧 $\tau_m$，完成后原子切换到新 $\tau_m$。
+                \item 选择一系列过滤选择性点，例如 1\%、5\%、10\%、25\%、50\%、100\%。
+                \item 对以上所有选择性，运行轻量级查询，分别测出两条路径上满足目标召回率的最小延迟。
+                \item 两条延迟曲线的交点即为 $\tau_m$ 的值。
+                \item 若插入/删除向量使索引规模变化达到一定值，则在前台查询负载较低时重新运行上述流程，更新 $\tau_m$。
             \end{itemize}
         \end{minipage}
     \end{columns}
+\end{frame}
+
+\begin{frame}[c]{需求 0：从 0 插入与阈值前搜索}
+    \centering
+    \begin{minipage}{0.94\textwidth}
+        \scriptsize
+        从 0 数据量向索引中插入向量时，进入纯内存模式；0--10k 向量直接插入内存数组，并执行精确近邻搜索。该阶段不训练 PQ、不生成磁盘图；索引中向量数超过 10k 后，再一次性落盘为磁盘图索引。
+
+        \vspace{0.2em}
+        SIFT1M 前 10k 向量实验中，10k 以内全部保持纯内存模式；单查询峰值 RSS 最高约 \textbf{32.3 MiB}，接近 30MB 要求；平均搜索延迟最高约 \textbf{0.20 ms}，显著低于 10ms 延迟要求，10k 附近 QPS 约 \textbf{5k}。
+
+        \vspace{0.2em}
+        \textcolor{red}{结论：已支持从 0 数据量开始插入；落盘前延迟满足要求，内存占用与 30MB 目标基本一致。}
+    \end{minipage}
+    \vfill
+
+    \includegraphics[width=0.98\linewidth,height=0.56\textheight,keepaspectratio]{../../experiments/flat_small_search/rss_latency_qps.png}
 \end{frame}
 
 \begin{frame}[c]{需求 1：召回率对比}
@@ -279,7 +257,7 @@
     \begin{columns}[T,onlytextwidth]
         \column{0.49\textwidth}
         \scriptsize
-        \textbf{左图：直接构建 vs 增量插入。} 分别直接构建 250k、500k、750k、1M 索引，并与从不同初始规模索引插入到相同规模后的索引比较；两类索引在同一个 $L$ 下执行搜索，用于衡量直接构建和增量插入得到的图质量差距。实验中 recall 差距在 0.5\% 以内，基本没有影响。
+        \textbf{左图：直接构建 vs 增量插入。} 分别直接构建 250k、500k、750k、1M 索引，并与从不同初始规模索引插入到相同规模后的索引比较；两类索引在同一个 $L$ 下执行搜索，用于衡量直接构建和增量插入得到的图质量差距。实验中召回率差距在 0.5\% 以内，基本没有影响。
 
         \column{0.49\textwidth}
         \scriptsize
@@ -321,9 +299,9 @@
     \begin{minipage}{0.94\textwidth}
         \centering
         \scriptsize
-        在直接构建的 1M 索引上，对 intersect 等值过滤和 range 范围过滤分别校准 route/L，测量单线程 latency 与 QPS；本轮全量结果中所有点均满足 recall@10 $\geq$ 98。
+        在直接构建的 1M 索引上，对等值查询和范围查询分别校准查询路径与 $L$，测量单线程延迟与 QPS；本轮全量结果中所有点均满足 recall@10 $\geq$ 98。
 
-        \textcolor{red}{结论：启用 io\_uring 后，intersect 与 range 全部选择性下单线程延迟均低于 10ms。}
+        \textcolor{red}{结论：等值查询与范围查询在全部选择性下，单线程延迟均低于 10ms。}
     \end{minipage}
     \vfill
 
@@ -342,7 +320,7 @@
         \begin{minipage}{0.96\linewidth}
             \scriptsize
             \raggedright
-            \textbf{口径}
+            \textbf{测量方法}
 
             \vspace{0.25em}
             只加载必要文件到内存，完成单个查询的搜索流程并返回结果；不加载 query file、groundtruth 等其他文件。
@@ -351,7 +329,7 @@
             \textbf{实测结果}
 
             \vspace{0.25em}
-            20 个点范围为 \textbf{12.39--18.15 MiB}；intersect 峰值 17.17 MiB，range 峰值 18.15 MiB。
+            20 个点范围为 \textbf{12.39--18.15 MiB}；等值查询峰值 17.17 MiB，范围查询峰值 18.15 MiB。
 
             \vspace{0.25em}
             \textcolor{red}{结论：满足 30MB 内存要求。}
@@ -363,16 +341,25 @@
     \centering
     \begin{minipage}{0.92\textwidth}
         \small
-        原始向量空间按 \texttt{npoints * 128 * 4} 计算；1M 索引膨胀率约为 2.06x，额外索引空间满足 extra/raw $\leq 1.0$。
+        R=116 下，额外索引文件主要来自磁盘图；1M 数据规模下额外空间约为原始向量的 2.06 倍。
         \vspace{0.5em}
 
+        \centering
         \scriptsize
-        \begin{itemize}
-            \item 250k：raw 122.07 MiB；其他文件合计 252.20 MiB，其中 disk.index 244.14 MiB，PQ compressed 7.63 MiB，PQ pivots 0.13 MiB，labels.densebit 0.30 MiB。
-            \item 500k：raw 244.14 MiB；其他文件合计 504.27 MiB，其中 disk.index 488.29 MiB，PQ compressed 15.26 MiB，PQ pivots 0.13 MiB，labels.densebit 0.60 MiB。
-            \item 750k：raw 366.21 MiB；其他文件合计 756.34 MiB，其中 disk.index 732.43 MiB，PQ compressed 22.89 MiB，PQ pivots 0.13 MiB，labels.densebit 0.89 MiB。
-            \item 1M：raw 488.28 MiB；其他文件合计 1008.41 MiB，其中 disk.index 976.57 MiB，PQ compressed 30.52 MiB，PQ pivots 0.13 MiB，labels.densebit 1.19 MiB。
-        \end{itemize}
+        \renewcommand{\arraystretch}{1.18}
+        \begin{tabular}{r r r r r r r r}
+            \toprule
+            \textbf{规模} & \textcolor{red}{\textbf{原始向量}} & \textbf{磁盘图} & \textbf{PQ 压缩向量} & \textbf{PQ 码本} & \textbf{标签位图} & \textcolor{red}{\textbf{额外合计}} & \textcolor{red}{\textbf{额外/原始}} \\
+            \midrule
+            250k & \textcolor{red}{122.07} & 244.14 & 7.63 & 0.13 & 0.30 & \textcolor{red}{252.20} & \textcolor{red}{2.07x} \\
+            500k & \textcolor{red}{244.14} & 488.29 & 15.26 & 0.13 & 0.60 & \textcolor{red}{504.27} & \textcolor{red}{2.07x} \\
+            750k & \textcolor{red}{366.21} & 732.43 & 22.89 & 0.13 & 0.89 & \textcolor{red}{756.34} & \textcolor{red}{2.07x} \\
+            1M & \textcolor{red}{488.28} & 976.57 & 30.52 & 0.13 & 1.19 & \textcolor{red}{1008.41} & \textcolor{red}{2.06x} \\
+            \bottomrule
+        \end{tabular}
+
+        \vspace{0.35em}
+        {\tiny 单位：MiB；额外/原始为额外合计与原始向量的比值。}
     \end{minipage}
 \end{frame}
 
