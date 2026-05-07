@@ -55,7 +55,7 @@
         \toprule
         \textbf{需求点} & \textbf{状态} & \textbf{备注} \\
         \midrule
-        动态增量混合索引 & 部分完成 & 当前索引不能从 0 数据量插入。 \\
+        动态增量混合索引 & 完成 & 10k 以内走内存 flat exact KNN，超过阈值后落盘为磁盘图。 \\
         查询 10@10 召回率稳定 $>$98\% & 完成 &  \\
         标量等值与范围查询 & 完成 &  \\
         联合向量近似查询时延 $<$10ms & 完成 &  \\
@@ -63,6 +63,44 @@
         索引膨胀率不能高于原始向量 1 倍 & 部分完成 & 目前 R=116 情况下索引膨胀率略超；也可以使用 R=75，但插入删除会对图质量有比较大的影响。 \\
         \bottomrule
     \end{tabular}
+\end{frame}
+
+\begin{frame}[c]{需求 0：从 0 插入与小规模搜索}
+    \centering
+    \begin{columns}[c,onlytextwidth]
+        \column{0.66\textwidth}
+        \centering
+        \includegraphics[width=0.98\linewidth,height=0.62\textheight,keepaspectratio]{../../experiments/flat_small_search/rss_latency_qps.png}
+
+        \column{0.32\textwidth}
+        \centering
+        \begin{minipage}{0.98\linewidth}
+            \tiny
+            \raggedright
+            \textbf{实现路径}
+
+            \vspace{0.12em}
+            空索引启动时进入内存 flat 模式；0--10k 向量直接插入内存数组并执行 exact KNN，不训练 PQ、不生成磁盘图。
+
+            \vspace{0.12em}
+            live count 超过 10k 后，再一次性 materialize 为磁盘图索引。
+
+            \vspace{0.24em}
+            \textbf{实验结果}
+
+            \vspace{0.12em}
+            SIFT1M 前 10k 向量实验中，10k 以内全部保持 flat mode。
+
+            \vspace{0.12em}
+            单查询 peak RSS 最高约 \textbf{32.3 MiB}，接近 30MB 要求。
+
+            \vspace{0.12em}
+            平均搜索延迟最高约 \textbf{0.20 ms}，显著低于 10ms 延迟要求；10k 附近 QPS 约 \textbf{5k}。
+
+            \vspace{0.24em}
+            \textcolor{red}{结论：已支持从 0 数据量开始插入，小规模阶段基本满足内存和延迟要求。}
+        \end{minipage}
+    \end{columns}
 \end{frame}
 
 \begin{frame}[t]{混合搜索框架}

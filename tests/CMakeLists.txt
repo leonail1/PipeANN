@@ -30,6 +30,15 @@ target_link_libraries(dynamic_prefilter_stage_driver ${PROJECT_NAME})
 add_executable(dynamic_update_suite_driver dynamic_update_suite_driver.cpp)
 target_link_libraries(dynamic_update_suite_driver ${PROJECT_NAME})
 
+add_executable(dynamic_flat_index dynamic_flat_index.cpp)
+target_link_libraries(dynamic_flat_index ${PROJECT_NAME})
+
+add_executable(dynamic_flat_sift1m_smoke dynamic_flat_sift1m_smoke.cpp)
+target_link_libraries(dynamic_flat_sift1m_smoke ${PROJECT_NAME})
+
+add_executable(dynamic_flat_small_search_bench dynamic_flat_small_search_bench.cpp)
+target_link_libraries(dynamic_flat_small_search_bench ${PROJECT_NAME})
+
 add_executable(overall_perf_mem overall_perf_mem.cpp)
 target_link_libraries(overall_perf_mem ${PROJECT_NAME})
 

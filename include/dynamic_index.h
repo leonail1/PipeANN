@@ -62,6 +62,10 @@ namespace pipeann {
                     const std::string disk_prefix_out, Distance<T> *dist, pipeann::Metric disk_metric,
                     int search_mode = BEAM_SEARCH, bool use_mem_index = false);
 
+    DynamicSSDIndex(IndexBuildParameters &parameters, const std::string disk_prefix_out, uint32_t data_dim,
+                    Distance<T> *dist, pipeann::Metric disk_metric, uint64_t flat_threshold = 10000,
+                    int search_mode = PIPE_SEARCH);
+
     ~DynamicSSDIndex();
 
     void checkpoint();
@@ -91,6 +95,14 @@ namespace pipeann {
       return live_point_count_.load();
     }
 
+    bool is_flat_mode() const {
+      return flat_mode_;
+    }
+
+    uint64_t flat_threshold() const {
+      return flat_threshold_;
+    }
+
     HybridRecalibrationState hybrid_recalibration_state() const {
       return hybrid_recalibration_state_.load();
     }
@@ -112,6 +124,9 @@ namespace pipeann {
     void apply_live_labels_locked(uint32_t id, const std::vector<uint32_t> &labels, bool add_labels);
     void rebuild_live_filter_state_locked();
     bool hybrid_recalibration_configured_locked() const;
+    size_t flat_exact_search_locked(const T *query, uint64_t k_search, const std::vector<uint32_t> *candidate_ids,
+                                    TagT *tags, float *distances, QueryStats *stats) const;
+    bool materialize_flat_to_disk_locked();
     void maybe_mark_hybrid_recalibration_pending();
     void update_hybrid_recalibration_metadata(uint64_t live_count, bool pending, bool running);
     void notify_hybrid_recalibration_worker();
@@ -149,6 +164,13 @@ namespace pipeann {
     int search_mode = BEAM_SEARCH;
 
    private:
+    bool flat_mode_ = false;
+    uint64_t flat_threshold_ = 0;
+    uint32_t flat_dim_ = 0;
+    std::vector<T> flat_data_;
+    std::vector<TagT> flat_tags_;
+    std::vector<uint8_t> flat_deleted_;
+
     std::atomic<uint64_t> live_point_count_{0};
     mutable std::shared_timed_mutex live_state_lock_;
     std::unordered_map<TagT, uint32_t> live_ids_by_tag_;

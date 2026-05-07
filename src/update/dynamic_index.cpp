@@ -4,6 +4,7 @@
 #include "dynamic_index.h"
 #include <csignal>
 #include <cstdint>
+#include <fstream>
 #include <map>
 #include <mutex>
 #include <numeric>
@@ -27,6 +28,7 @@
 
 #include "filter/label.h"
 #include "ssd_index.h"
+#include "utils/index_build_utils.h"
 
 #include "linux_aligned_file_reader.h"
 
@@ -390,6 +392,50 @@ namespace pipeann {
       }
       return pos;
     }
+
+    void write_spmat_labels(const std::string &path, uint64_t nrows, uint64_t nlabels,
+                            const std::vector<std::vector<uint32_t>> &labels_by_row) {
+      std::ofstream writer(path, std::ios::binary | std::ios::out | std::ios::trunc);
+      if (!writer.is_open()) {
+        LOG(ERROR) << "Failed to open flat labels spmat for write: " << path;
+        crash();
+      }
+
+      int64_t nnz = 0;
+      for (const auto &labels : labels_by_row) {
+        nnz += static_cast<int64_t>(labels.size());
+      }
+
+      const int64_t nrow_i64 = static_cast<int64_t>(nrows);
+      const int64_t ncol_i64 = static_cast<int64_t>(nlabels);
+      writer.write(reinterpret_cast<const char *>(&nrow_i64), sizeof(int64_t));
+      writer.write(reinterpret_cast<const char *>(&ncol_i64), sizeof(int64_t));
+      writer.write(reinterpret_cast<const char *>(&nnz), sizeof(int64_t));
+
+      std::vector<int64_t> indptr(static_cast<size_t>(nrows) + 1, 0);
+      std::vector<int32_t> indices;
+      std::vector<float> data;
+      indices.reserve(static_cast<size_t>(nnz));
+      data.reserve(static_cast<size_t>(nnz));
+      for (uint64_t row = 0; row < nrows; ++row) {
+        const auto &labels = labels_by_row[static_cast<size_t>(row)];
+        indptr[static_cast<size_t>(row) + 1] = indptr[static_cast<size_t>(row)] + static_cast<int64_t>(labels.size());
+        for (uint32_t label : labels) {
+          indices.push_back(static_cast<int32_t>(label));
+          data.push_back(1.0f);
+        }
+      }
+
+      writer.write(reinterpret_cast<const char *>(indptr.data()),
+                   static_cast<std::streamsize>(indptr.size() * sizeof(int64_t)));
+      if (!indices.empty()) {
+        writer.write(reinterpret_cast<const char *>(indices.data()),
+                     static_cast<std::streamsize>(indices.size() * sizeof(int32_t)));
+        writer.write(reinterpret_cast<const char *>(data.data()),
+                     static_cast<std::streamsize>(data.size() * sizeof(float)));
+      }
+      writer.close();
+    }
   }  // namespace
 
   template<typename T, typename TagT>
@@ -453,6 +499,36 @@ namespace pipeann {
   }
 
   template<typename T, typename TagT>
+  DynamicSSDIndex<T, TagT>::DynamicSSDIndex(IndexBuildParameters &parameters, const std::string disk_prefix_out,
+                                            uint32_t data_dim, Distance<T> *dist, pipeann::Metric dist_metric,
+                                            uint64_t flat_threshold, int search_mode) {
+    this->_dist_metric = dist_metric;
+    this->journal = new pipeann::Journal<TagT>(disk_prefix_out + "_journal");
+
+    _paras_disk = parameters;
+    _num_threads = parameters.num_threads == 0 ? 1 : parameters.num_threads;
+    _beamwidth = parameters.beam_width;
+    _disk_index_prefix_in = disk_prefix_out;
+    _disk_index_prefix_out = disk_prefix_out + "_merge";
+    _dist_comp = dist;
+
+    if (search_mode == BEAM_SEARCH || search_mode == PAGE_SEARCH || search_mode == PIPE_SEARCH) {
+      this->search_mode = search_mode;
+    } else {
+      LOG(ERROR) << "Invalid search mode: " << search_mode
+                 << ". Must be one of BEAM_SEARCH, PAGE_SEARCH, or PIPE_SEARCH.";
+      exit(-1);
+    }
+
+    reader.reset(new LinuxAlignedFileReader());
+    _disk_index = nullptr;
+    flat_mode_ = true;
+    flat_threshold_ = flat_threshold;
+    flat_dim_ = data_dim;
+    live_point_count_.store(0);
+  }
+
+  template<typename T, typename TagT>
   DynamicSSDIndex<T, TagT>::~DynamicSSDIndex() {
     stop_hybrid_recalibration_worker();
     delete journal;
@@ -480,6 +556,185 @@ namespace pipeann {
       ensure_hybrid_recalibration_worker_started();
     }
     notify_hybrid_recalibration_worker();
+  }
+
+  template<typename T, typename TagT>
+  size_t DynamicSSDIndex<T, TagT>::flat_exact_search_locked(const T *query, uint64_t k_search,
+                                                            const std::vector<uint32_t> *candidate_ids, TagT *tags,
+                                                            float *distances, QueryStats *stats) const {
+    clear_result_buffers(k_search, tags, distances);
+    if (k_search == 0 || live_point_count_.load() == 0) {
+      if (stats != nullptr) {
+        *stats = {};
+      }
+      return 0;
+    }
+    if (_dist_comp == nullptr) {
+      LOG(ERROR) << "Flat exact search requires a distance comparator";
+      crash();
+    }
+
+    std::vector<T> normalized_query(static_cast<size_t>(flat_dim_));
+    if (_dist_metric == pipeann::Metric::COSINE) {
+      pipeann::normalize_data(normalized_query.data(), query, flat_dim_);
+      query = normalized_query.data();
+    }
+
+    Timer query_timer;
+    std::vector<std::pair<float, uint32_t>> results;
+    const size_t reserve_size =
+        candidate_ids == nullptr ? static_cast<size_t>(live_point_count_.load()) : candidate_ids->size();
+    results.reserve(reserve_size);
+
+    auto consider_id = [&](uint32_t id) {
+      if (id >= flat_tags_.size() || id >= flat_deleted_.size() || flat_deleted_[id] != 0) {
+        return;
+      }
+      const TagT tag = flat_tags_[id];
+      auto live_iter = live_ids_by_tag_.find(tag);
+      if (live_iter == live_ids_by_tag_.end() || live_iter->second != id) {
+        return;
+      }
+      const T *point = flat_data_.data() + static_cast<size_t>(id) * flat_dim_;
+      const float dist = _dist_comp->compare(query, point, flat_dim_);
+      results.emplace_back(dist, id);
+    };
+
+    if (candidate_ids != nullptr) {
+      for (uint32_t id : *candidate_ids) {
+        consider_id(id);
+      }
+    } else {
+      for (uint32_t id = 0; id < flat_tags_.size(); ++id) {
+        consider_id(id);
+      }
+    }
+
+    const size_t result_count = std::min(static_cast<size_t>(k_search), results.size());
+    if (result_count > 0) {
+      std::partial_sort(results.begin(), results.begin() + result_count, results.end());
+    }
+    for (size_t idx = 0; idx < result_count; ++idx) {
+      const uint32_t id = results[idx].second;
+      tags[idx] = flat_tags_[id];
+      if (distances != nullptr) {
+        distances[idx] = results[idx].first;
+      }
+    }
+
+    if (stats != nullptr) {
+      *stats = {};
+      stats->total_us = static_cast<double>(query_timer.elapsed());
+      stats->n_cmps = static_cast<double>(results.size());
+      stats->n_ios = 0.0;
+      stats->n_hops = 0.0;
+    }
+    return result_count;
+  }
+
+  template<typename T, typename TagT>
+  bool DynamicSSDIndex<T, TagT>::materialize_flat_to_disk_locked() {
+    if (!flat_mode_) {
+      return true;
+    }
+    const uint64_t live_count = live_point_count_.load();
+    if (live_count == 0) {
+      return false;
+    }
+
+    std::vector<std::pair<uint32_t, TagT>> live_entries;
+    live_entries.reserve(static_cast<size_t>(live_count));
+    for (uint32_t id = 0; id < flat_tags_.size(); ++id) {
+      if (id >= flat_deleted_.size() || flat_deleted_[id] != 0) {
+        continue;
+      }
+      const TagT tag = flat_tags_[id];
+      auto live_iter = live_ids_by_tag_.find(tag);
+      if (live_iter != live_ids_by_tag_.end() && live_iter->second == id) {
+        live_entries.emplace_back(id, tag);
+      }
+    }
+    if (live_entries.empty()) {
+      return false;
+    }
+
+    const std::string data_path = _disk_index_prefix_in + "_flat_build_data.bin";
+    const std::string tag_path = _disk_index_prefix_in + "_flat_build_tags.bin";
+    const std::string label_path = _disk_index_prefix_in + "_flat_build_labels.spmat";
+
+    std::vector<T> build_data(live_entries.size() * static_cast<size_t>(flat_dim_));
+    std::vector<TagT> build_tags(live_entries.size());
+    std::vector<std::vector<uint32_t>> labels_by_row(live_entries.size());
+    bool has_labels = false;
+    uint64_t label_universe = 0;
+
+    for (size_t row = 0; row < live_entries.size(); ++row) {
+      const uint32_t old_id = live_entries[row].first;
+      const TagT tag = live_entries[row].second;
+      std::memcpy(build_data.data() + row * flat_dim_, flat_data_.data() + static_cast<size_t>(old_id) * flat_dim_,
+                  static_cast<size_t>(flat_dim_) * sizeof(T));
+      build_tags[row] = tag;
+      auto label_iter = live_labels_by_tag_.find(tag);
+      if (label_iter != live_labels_by_tag_.end()) {
+        labels_by_row[row] = label_iter->second;
+        if (!labels_by_row[row].empty()) {
+          has_labels = true;
+          label_universe = std::max<uint64_t>(label_universe, static_cast<uint64_t>(labels_by_row[row].back()) + 1ULL);
+        }
+      }
+    }
+
+    pipeann::save_bin<T>(data_path, build_data.data(), build_tags.size(), flat_dim_);
+    pipeann::save_bin<TagT>(tag_path, build_tags.data(), build_tags.size(), 1);
+
+    std::unique_ptr<pipeann::SpmatLabel> label;
+    const char *label_source_file = nullptr;
+    if (has_labels) {
+      write_spmat_labels(label_path, build_tags.size(), label_universe, labels_by_row);
+      label = std::make_unique<pipeann::SpmatLabel>(label_path);
+      label_source_file = label_path.c_str();
+    }
+
+    AbstractNeighbor<T> *nbr_handler = new PQNeighbor<T>(this->_dist_metric);
+    const uint32_t R = _paras_disk.R == 0 ? 64 : _paras_disk.R;
+    const uint32_t L = _paras_disk.L == 0 ? R + 32 : _paras_disk.L;
+    const uint32_t build_threads = _num_threads == 0 ? 1 : _num_threads;
+    const uint32_t pq_bytes = std::min<uint32_t>(32, std::max<uint32_t>(1, flat_dim_));
+    const bool build_ok = pipeann::build_disk_index<T, TagT>(
+        data_path.c_str(), _disk_index_prefix_in.c_str(), R, L, 1, build_threads, pq_bytes, _dist_metric,
+        tag_path.c_str(), nbr_handler, label.get(), label_source_file);
+    if (!build_ok) {
+      delete nbr_handler;
+      return false;
+    }
+
+    delete _disk_index;
+    _disk_index = new pipeann::SSDIndex<T, TagT>(this->_dist_metric, reader, nbr_handler, true, &_paras_disk);
+    if (_disk_index->load(_disk_index_prefix_in.c_str(), _num_threads, search_mode == PAGE_SEARCH) != 0) {
+      LOG(ERROR) << "Failed to load disk index after flat materialization";
+      exit(-1);
+    }
+
+    initialize_live_state_from_disk(_disk_index_prefix_in);
+
+    flat_data_.clear();
+    flat_tags_.clear();
+    flat_deleted_.clear();
+    flat_mode_ = false;
+    {
+      std::unique_lock<std::shared_timed_mutex> delete_guard(delete_lock);
+      deletion_sets[0].clear();
+      deletion_sets[1].clear();
+      deleted_tags[0].clear();
+      deleted_tags[1].clear();
+    }
+
+    std::remove(data_path.c_str());
+    std::remove(tag_path.c_str());
+    if (has_labels) {
+      std::remove(label_path.c_str());
+    }
+    return true;
   }
 
   template<typename T, typename TagT>
@@ -569,6 +824,9 @@ namespace pipeann {
     // TODO(gh): checkpoint the index.
     journal->checkpoint();
     std::shared_lock<std::shared_timed_mutex> lock(_merge_lock);
+    if (flat_mode_) {
+      return;
+    }
     if (!persist_live_hybrid_state(_disk_index_prefix_in)) {
       LOG(INFO) << "Skip hybrid sidecar checkpoint because live IDs are not compact for " << _disk_index_prefix_in;
     }
@@ -576,6 +834,52 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   int DynamicSSDIndex<T, TagT>::insert(const T *point, const TagT &tag) {
+    if (flat_mode_) {
+      std::unique_lock<std::shared_timed_mutex> lock(_merge_lock);
+      journal->append(pipeann::TxType::kInsert, tag);
+
+      auto existing = live_ids_by_tag_.find(tag);
+      uint32_t target_id = 0;
+      if (existing != live_ids_by_tag_.end()) {
+        target_id = existing->second;
+      } else {
+        target_id = static_cast<uint32_t>(flat_tags_.size());
+        flat_tags_.push_back(tag);
+        flat_deleted_.push_back(0);
+        flat_data_.resize(static_cast<size_t>(target_id + 1) * flat_dim_);
+      }
+
+      T *dst = flat_data_.data() + static_cast<size_t>(target_id) * flat_dim_;
+      if (_dist_metric == pipeann::Metric::COSINE) {
+        pipeann::normalize_data(dst, point, flat_dim_);
+      } else {
+        std::memcpy(dst, point, static_cast<size_t>(flat_dim_) * sizeof(T));
+      }
+
+      {
+        std::unique_lock<std::shared_timed_mutex> live_lock(live_state_lock_);
+        live_ids_by_tag_[tag] = target_id;
+        flat_deleted_[target_id] = 0;
+        ensure_live_filter_capacity_locked(target_id);
+        live_present_bitset_[static_cast<size_t>(target_id >> 6U)] |= (1ULL << (target_id & 63U));
+        live_labels_by_id_.erase(target_id);
+        auto label_iter = live_labels_by_tag_.find(tag);
+        if (label_iter != live_labels_by_tag_.end()) {
+          live_labels_by_id_[target_id] = label_iter->second;
+          apply_live_labels_locked(target_id, label_iter->second, true);
+        }
+        live_point_count_.store(live_ids_by_tag_.size());
+      }
+
+      deletion_sets[0].erase(tag);
+      deletion_sets[1].erase(tag);
+
+      if (flat_threshold_ != 0 && live_point_count_.load() > flat_threshold_) {
+        materialize_flat_to_disk_locked();
+      }
+      return static_cast<int>(target_id);
+    }
+
     std::shared_lock<std::shared_timed_mutex> lock(_merge_lock);  // prevent merge during insert
     journal->append(pipeann::TxType::kInsert, tag);
     auto *deletion_set = &deletion_sets[active_delete_set];
@@ -984,6 +1288,55 @@ namespace pipeann {
     size_t n = 0;
     const bool use_hybrid_filter = filter_kind != HybridFilterKind::kUnsupported && filter_data != nullptr;
 
+    if (flat_mode_) {
+      std::shared_lock<std::shared_timed_mutex> flat_lock(_merge_lock);
+      if (flat_mode_) {
+        if (use_hybrid_filter) {
+          Timer route_timer;
+          HybridQueryScratch scratch;
+          const std::vector<uint32_t> query_labels = decode_label_filter_data(filter_data);
+          uint64_t candidate_count = 0;
+          std::vector<uint32_t> candidate_ids;
+          {
+            std::shared_lock<std::shared_timed_mutex> live_lock(live_state_lock_);
+            candidate_count = compute_live_candidate_bitset(filter_kind, query_labels, live_label_bitsets_,
+                                                            live_present_bitset_, live_densebit_words_per_label_,
+                                                            &scratch);
+            materialize_candidate_ids(&scratch, &candidate_ids);
+          }
+          const uint64_t route_overhead_us = route_timer.elapsed();
+          if (hybrid_stats != nullptr) {
+            hybrid_stats->candidate_count = candidate_count;
+            hybrid_stats->threshold = flat_threshold_;
+            hybrid_stats->threshold_version = 0;
+            hybrid_stats->route_overhead_us = route_overhead_us;
+          }
+          if (candidate_count == 0) {
+            clear_result_buffers(K, tags, distances);
+            if (stats != nullptr) {
+              stats->total_us = static_cast<double>(route_overhead_us);
+            }
+            if (hybrid_stats != nullptr) {
+              hybrid_stats->decision = HybridRouteDecision::kPrefilterFastReturn;
+            }
+            return;
+          }
+          n = flat_exact_search_locked(query, K, &candidate_ids, tags, distances, stats);
+          if (stats != nullptr) {
+            stats->total_us += static_cast<double>(route_overhead_us);
+          }
+          if (hybrid_stats != nullptr) {
+            hybrid_stats->decision = HybridRouteDecision::kPrefilter;
+            hybrid_stats->route_overhead_us = route_overhead_us;
+          }
+        } else {
+          n = flat_exact_search_locked(query, K, nullptr, tags, distances, stats);
+          (void) n;
+        }
+        return;
+      }
+    }
+
     if (use_hybrid_filter) {
       Timer route_timer;
       HybridQueryScratch scratch;
@@ -1072,6 +1425,39 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   void DynamicSSDIndex<T, TagT>::lazy_delete(const TagT &tag) {
+    if (flat_mode_) {
+      std::unique_lock<std::shared_timed_mutex> merge_guard(_merge_lock);
+      if (flat_mode_) {
+        std::unique_lock<std::shared_timed_mutex> lock(delete_lock);
+        journal->append(pipeann::TxType::kDelete, tag);
+        if (deletion_sets[active_delete_set].find(tag) == deletion_sets[active_delete_set].end()) {
+          deletion_sets[active_delete_set].insert(tag);
+          deleted_tags[active_delete_set].push_back(tag);
+          std::unique_lock<std::shared_timed_mutex> live_lock(live_state_lock_);
+          auto id_iter = live_ids_by_tag_.find(tag);
+          if (id_iter != live_ids_by_tag_.end()) {
+            const uint32_t id = id_iter->second;
+            if (id < flat_deleted_.size()) {
+              flat_deleted_[id] = 1;
+            }
+            auto label_iter = live_labels_by_tag_.find(tag);
+            if (label_iter != live_labels_by_tag_.end()) {
+              apply_live_labels_locked(id, label_iter->second, false);
+              live_labels_by_tag_.erase(label_iter);
+            }
+            live_labels_by_id_.erase(id);
+            if (static_cast<size_t>(id >> 6U) < live_present_bitset_.size()) {
+              live_present_bitset_[static_cast<size_t>(id >> 6U)] &= ~(1ULL << (id & 63U));
+            }
+            live_ids_by_tag_.erase(id_iter);
+          }
+          live_point_count_.store(live_ids_by_tag_.size());
+        }
+        maybe_mark_hybrid_recalibration_pending();
+        return;
+      }
+    }
+
     std::unique_lock<std::shared_timed_mutex> lock(delete_lock);
     journal->append(pipeann::TxType::kDelete, tag);
 
@@ -1082,6 +1468,9 @@ namespace pipeann {
       auto id_iter = live_ids_by_tag_.find(tag);
       if (id_iter != live_ids_by_tag_.end()) {
         const uint32_t id = id_iter->second;
+        if (flat_mode_ && id < flat_deleted_.size()) {
+          flat_deleted_[id] = 1;
+        }
         auto label_iter = live_labels_by_tag_.find(tag);
         if (label_iter != live_labels_by_tag_.end()) {
           apply_live_labels_locked(id, label_iter->second, false);
@@ -1115,6 +1504,10 @@ namespace pipeann {
     } high_priority_task_guard(this, &foreground_counters_);
 
     std::unique_lock<std::shared_timed_mutex> lock(_merge_lock);  // only one merge at a time
+    if (flat_mode_) {
+      journal->checkpoint();
+      return;
+    }
     // _disk_index_in -> _disk_index_out
     // Before merge, only the active deletion set contains deletes.
     {
