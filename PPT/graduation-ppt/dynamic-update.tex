@@ -90,6 +90,7 @@
             low/.style={draw, rounded corners=3pt, align=center, text width=3.65cm, minimum height=0.72cm, fill=green!8, line width=0.6pt},
             high/.style={draw, rounded corners=3pt, align=center, text width=3.65cm, minimum height=0.88cm, fill=purple!7, line width=0.6pt},
             resultbox/.style={draw, rounded corners=3pt, align=center, text width=2.25cm, minimum height=0.62cm, fill=gray!8, line width=0.6pt},
+            routelabel/.style={draw, rounded corners=2pt, fill=white, inner xsep=2.5pt, inner ysep=1.2pt, line width=0.45pt, font=\bfseries\tiny},
             arrow/.style={-{Stealth[length=2mm]}, line width=0.5pt}
         ]
             \node[box] (query) {Query + filter};
@@ -105,6 +106,8 @@
             \draw[arrow] (estimate) -- (judge);
             \draw[arrow] (judge) -| node[pos=0.25, above left] {$s \leq \tau_m$} (prefilter);
             \draw[arrow] (judge) -| node[pos=0.25, above right] {$s > \tau_m$} (inline);
+            \node[routelabel, draw=green!45!black, text=green!45!black, above=0.22cm of prefilter] {预过滤};
+            \node[routelabel, draw=purple!70!black, text=purple!70!black, above=0.22cm of inline] {图搜索};
             \draw[arrow] (prefilter) -- (pq);
             \draw[arrow] (pq) -- (rerank);
             \draw[arrow] (rerank) -- (topk);
@@ -217,7 +220,7 @@
             \draw[markline] (3.10,0.48) -- (3.10,1.82);
             \node[circle, fill=red!75!black, inner sep=1.5pt] at (3.10,1.82) {};
             \node[font=\bfseries\scriptsize, red!75!black] at (3.10,2.12) {$\tau_m$};
-            \node[font=\tiny, green!45!black] at (5.08,2.72) {先过滤};
+            \node[font=\tiny, green!45!black] at (5.08,2.72) {预过滤};
             \node[font=\tiny, purple!70!black] at (4.95,1.44) {图搜索};
             \node[font=\tiny, green!45!black] at (1.75,0.82) {$s \leq \tau_m$};
             \node[font=\tiny, purple!70!black] at (4.70,0.82) {$s > \tau_m$};
