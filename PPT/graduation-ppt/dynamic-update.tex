@@ -228,6 +228,13 @@
         \begin{minipage}{0.98\linewidth}
             \tiny
             \raggedright
+            \textbf{曲线含义}
+            \vspace{0.15em}
+            \begin{itemize}
+                \item 先过滤：选择性越高，符合条件的向量越多，需要计算 PQ 距离的候选越多，延迟上升。
+                \item 图搜索：选择性越高，图上遇到的有效（符合过滤条件）的点越多，更容易凑齐 TopK，搜索范围缩小。
+            \end{itemize}
+            \vspace{0.15em}
             \textbf{标定方式}
             \vspace{0.15em}
             \begin{itemize}
