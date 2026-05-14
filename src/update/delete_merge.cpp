@@ -320,6 +320,7 @@ namespace pipeann {
   void SSDIndex<T, TagT>::reload(const char *index_prefix, uint32_t num_threads) {
     std::string iprefix = std::string(index_prefix);
     std::string disk_index_file = iprefix + "_disk.index";
+    close_rerank_vector_fd();
     this->disk_index_file = disk_index_file;
     this->max_nthreads = num_threads;
 

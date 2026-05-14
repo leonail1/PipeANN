@@ -11,6 +11,9 @@
 #include "utils.h"
 
 #include <filesystem>
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/syscall.h>
 #include "utils/tsl/robin_set.h"
@@ -58,6 +61,7 @@ namespace pipeann {
   SSDIndex<T, TagT>::~SSDIndex() {
     LOG(INFO) << "Lock table size: " << this->idx_lock_table.size();
     LOG(INFO) << "Page cache size: " << pipeann::cache.size();
+    close_rerank_vector_fd();
 
     if (load_flag) {
       this->destroy_buffers();
@@ -174,6 +178,7 @@ namespace pipeann {
   template<typename T, typename TagT>
   int SSDIndex<T, TagT>::load(const char *index_prefix, uint32_t num_threads, bool use_page_search) {
     std::string disk_index_file = std::string(index_prefix) + "_disk.index";
+    close_rerank_vector_fd();
     this->disk_index_file = disk_index_file;
 
     SSDIndexMetadata<T> meta;
@@ -495,7 +500,39 @@ namespace pipeann {
   }
 
   template<typename T, typename TagT>
-  int SSDIndex<T, TagT>::get_vector_by_id(const uint32_t &id, T *vector_coords) {
+  int SSDIndex<T, TagT>::get_rerank_vector_fd() {
+    int fd = rerank_vector_fd_;
+    if (fd >= 0) {
+      return fd;
+    }
+
+    std::lock_guard<std::mutex> guard(rerank_vector_fd_mu_);
+    fd = rerank_vector_fd_;
+    if (fd >= 0) {
+      return fd;
+    }
+
+    fd = ::open(disk_index_file.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+      LOG(ERROR) << "Failed to open disk index for prefilter rerank: " << disk_index_file
+                 << ", errno=" << errno << " (" << std::strerror(errno) << ")";
+      return -1;
+    }
+    rerank_vector_fd_ = fd;
+    return fd;
+  }
+
+  template<typename T, typename TagT>
+  void SSDIndex<T, TagT>::close_rerank_vector_fd() {
+    std::lock_guard<std::mutex> guard(rerank_vector_fd_mu_);
+    if (rerank_vector_fd_ >= 0) {
+      ::close(rerank_vector_fd_);
+      rerank_vector_fd_ = -1;
+    }
+  }
+
+  template<typename T, typename TagT>
+  int SSDIndex<T, TagT>::get_vector_by_id(const uint32_t &id, T *vector_coords, char *sector_buf) {
     if (!enable_tags) {
       LOG(INFO) << "Tags are disabled, cannot retrieve vector";
       return -1;
@@ -504,11 +541,38 @@ namespace pipeann {
     auto loc = id2loc(pos);
 
     size_t num_sectors = loc_sector_no(loc);
-    std::ifstream disk_reader(disk_index_file.c_str(), std::ios::binary);
-    std::unique_ptr<char[]> sector_buf = std::make_unique<char[]>(size_per_io);
-    disk_reader.seekg(SECTOR_LEN * num_sectors, std::ios::beg);
-    disk_reader.read(sector_buf.get(), size_per_io);
-    DiskNode<T> node = node_from_page(sector_buf.get(), loc);
+    std::unique_ptr<char[]> local_sector_buf;
+    if (sector_buf == nullptr) {
+      local_sector_buf = std::make_unique<char[]>(size_per_io);
+      sector_buf = local_sector_buf.get();
+    }
+
+    const int fd = get_rerank_vector_fd();
+    if (fd < 0) {
+      return -1;
+    }
+
+    const uint64_t offset = SECTOR_LEN * num_sectors;
+    uint64_t bytes_read = 0;
+    while (bytes_read < size_per_io) {
+      const ssize_t ret = ::pread(fd, sector_buf + bytes_read, size_per_io - bytes_read,
+                                  static_cast<off_t>(offset + bytes_read));
+      if (ret < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        LOG(ERROR) << "Failed to read vector from " << disk_index_file << " at offset " << offset
+                   << ", errno=" << errno << " (" << std::strerror(errno) << ")";
+        return -1;
+      }
+      if (ret == 0) {
+        LOG(ERROR) << "Short read while reading vector from " << disk_index_file << " at offset " << offset;
+        return -1;
+      }
+      bytes_read += static_cast<uint64_t>(ret);
+    }
+
+    DiskNode<T> node = node_from_page(sector_buf, loc);
     memcpy((void *) vector_coords, (void *) node.coords, meta_.data_dim * sizeof(T));
     return 0;
   }

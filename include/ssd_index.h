@@ -2,6 +2,7 @@
 #include <immintrin.h>
 #include <cassert>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <set>
 #include <omp.h>
@@ -220,6 +221,8 @@ namespace pipeann {
     // File reader and index file path.
     std::shared_ptr<AlignedFileReader> &reader;
     std::string disk_index_file;
+    int rerank_vector_fd_ = -1;
+    std::mutex rerank_vector_fd_mu_;
 
     // Neighbor handler.
     AbstractNeighbor<T> *nbr_handler;
@@ -308,7 +311,9 @@ namespace pipeann {
     // Background I/O thread function.
     void bg_io_thread();
 
-    int get_vector_by_id(const uint32_t &id, T *vector);
+    int get_vector_by_id(const uint32_t &id, T *vector, char *sector_buf = nullptr);
+    int get_rerank_vector_fd();
+    void close_rerank_vector_fd();
 
     // ID, loc, page mapping.
     TagT id2tag(uint32_t id);

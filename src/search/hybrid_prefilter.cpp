@@ -79,9 +79,10 @@ namespace pipeann {
     std::vector<std::pair<float, uint32_t>> exact_results;
     exact_results.reserve(shortlist.size());
     T *vector_buf = query_buf->coord_scratch;
+    char *sector_buf = query_buf->sector_scratch;
     for (const auto &candidate : shortlist) {
       const uint32_t point_id = candidate.second;
-      if (get_vector_by_id(point_id, vector_buf) != 0) {
+      if (get_vector_by_id(point_id, vector_buf, sector_buf) != 0) {
         continue;
       }
       const float exact_dist = dist_cmp->compare(query_buf->aligned_query_T, vector_buf,
