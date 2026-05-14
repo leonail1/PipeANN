@@ -11,6 +11,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
@@ -99,6 +100,18 @@ DENSEBIT_VERSION_MIXED = 2
 DENSEBIT_ENCODING_EMPTY = 0
 DENSEBIT_ENCODING_BITMAP = 1
 DENSEBIT_ENCODING_POSTING = 2
+HYBRID_META_MAGIC = 0x4859425249444D54
+HYBRID_META_VERSION = 1
+HYBRID_META_HEADER = struct.Struct("<QII" + "Q" * 30)
+HYBRID_META_BUCKET = struct.Struct("<QQQQQ")
+HYBRID_METADATA_VALID_FLAG = 1 << 0
+HYBRID_CALIBRATION_VALID_FLAG = 1 << 1
+HYBRID_ALLOW_PREFILTER_FLAG = 1 << 2
+HYBRID_SELECTOR_MASK = {
+    "intersect": 1,
+    "subset": 2,
+    "range": 4,
+}
 
 
 def configure_stdio() -> None:
@@ -162,6 +175,25 @@ class SyntheticSelectivitySpec:
         if self.selectivity >= 0.01:
             return f"{self.selectivity:.1%}"
         return f"{self.selectivity:.1e}"
+
+
+@dataclass
+class TauCalibrationPoint:
+    name: str
+    source: str
+    labels: list[int]
+    candidate_count: int
+    npoints: int
+    target_selectivity: float | None
+    index_prefix: Path
+    nlabels: int
+    seed: int | None = None
+    synthetic_point_ids: np.ndarray | None = None
+    records: dict[str, dict[str, Any]] | None = None
+
+    @property
+    def selectivity(self) -> float:
+        return 0.0 if self.npoints <= 0 else float(self.candidate_count / self.npoints)
 
 
 @dataclass
@@ -1139,6 +1171,115 @@ def write_mixed_densebit_sidecar(matrix: SpmatMatrix, sidecar_path: Path, expect
     return sidecar_path
 
 
+def write_mixed_densebit_sidecar_from_point_sets(
+    sidecar_path: Path,
+    npoints: int,
+    point_sets: Sequence[np.ndarray],
+) -> Path:
+    ensure_parent(sidecar_path)
+    nlabels = len(point_sets)
+    words_per_label = (npoints + 63) // 64
+    posting_threshold = posting_threshold_for_words(words_per_label)
+    entries = np.zeros(nlabels, dtype=DENSEBIT_V2_ENTRY_DTYPE)
+    label_storage_offsets = np.zeros(nlabels, dtype=np.uint64)
+    total_payload_bytes = 0
+    bitmap_payload_words = 0
+    posting_payload_ids = 0
+    dense_label_count = 0
+    sparse_label_count = 0
+    word_bytes = np.dtype(np.uint64).itemsize
+    posting_id_bytes = np.dtype(np.uint32).itemsize
+    normalized_sets: list[np.ndarray] = []
+
+    for label_id, raw_ids in enumerate(point_sets):
+        ids = np.asarray(raw_ids, dtype=np.uint32)
+        if ids.size:
+            ids = np.unique(ids)
+            if int(ids[-1]) >= npoints:
+                raise ValueError(f"synthetic point id exceeds npoints for label {label_id}")
+        normalized_sets.append(ids)
+        candidate_count = int(ids.size)
+        entries["candidate_count"][label_id] = candidate_count
+        if candidate_count == 0:
+            entries["encoding"][label_id] = DENSEBIT_ENCODING_EMPTY
+            continue
+        if candidate_count < posting_threshold:
+            entries["encoding"][label_id] = DENSEBIT_ENCODING_POSTING
+            entries["payload_offset"][label_id] = align_up(total_payload_bytes, posting_id_bytes)
+            entries["payload_size"][label_id] = candidate_count * posting_id_bytes
+            label_storage_offsets[label_id] = posting_payload_ids
+            posting_payload_ids += candidate_count
+            sparse_label_count += 1
+        else:
+            entries["encoding"][label_id] = DENSEBIT_ENCODING_BITMAP
+            entries["payload_offset"][label_id] = align_up(total_payload_bytes, word_bytes)
+            entries["payload_size"][label_id] = words_per_label * word_bytes
+            label_storage_offsets[label_id] = bitmap_payload_words
+            bitmap_payload_words += words_per_label
+            dense_label_count += 1
+        total_payload_bytes = int(entries["payload_offset"][label_id] + entries["payload_size"][label_id])
+
+    bitmap_payload = np.zeros(bitmap_payload_words, dtype=np.uint64)
+    posting_payload = np.zeros(posting_payload_ids, dtype=np.uint32)
+    nnz = 0
+    for label_id, ids in enumerate(normalized_sets):
+        nnz += int(ids.size)
+        if ids.size == 0:
+            continue
+        storage_offset = int(label_storage_offsets[label_id])
+        if int(entries["encoding"][label_id]) == DENSEBIT_ENCODING_POSTING:
+            posting_payload[storage_offset : storage_offset + ids.size] = ids
+            continue
+        words = bitmap_payload[storage_offset : storage_offset + words_per_label]
+        word_indices = ids.astype(np.uint64) // np.uint64(64)
+        bit_indices = ids.astype(np.uint64) % np.uint64(64)
+        np.bitwise_or.at(words, word_indices, np.left_shift(np.uint64(1), bit_indices))
+
+    header_size = DENSEBIT_HEADER_V2.size
+    label_entry_offset = header_size
+    directory_bytes = label_entry_offset + entries.size * DENSEBIT_V2_ENTRY.size
+    payload_offset = align_up(directory_bytes, word_bytes)
+    header = DENSEBIT_HEADER_V2.pack(
+        DENSEBIT_MAGIC,
+        DENSEBIT_VERSION_MIXED,
+        int(npoints),
+        int(nlabels),
+        int(words_per_label),
+        int(nnz),
+        int(label_entry_offset),
+        int(payload_offset),
+        int(posting_threshold),
+        int(dense_label_count),
+        int(sparse_label_count),
+        0,
+    )
+    tmp_path = sidecar_path.with_suffix(sidecar_path.suffix + ".tmp")
+    with tmp_path.open("wb") as writer:
+        writer.write(header)
+        entries.tofile(writer)
+        if payload_offset > directory_bytes:
+            writer.write(b"\x00" * (payload_offset - directory_bytes))
+        written_payload_bytes = 0
+        for label_id in range(nlabels):
+            entry_offset = int(entries["payload_offset"][label_id])
+            entry_size = int(entries["payload_size"][label_id])
+            if entry_offset > written_payload_bytes:
+                writer.write(b"\x00" * (entry_offset - written_payload_bytes))
+                written_payload_bytes = entry_offset
+            if entry_size == 0:
+                continue
+            storage_offset = int(label_storage_offsets[label_id])
+            encoding = int(entries["encoding"][label_id])
+            if encoding == DENSEBIT_ENCODING_POSTING:
+                count = int(entries["candidate_count"][label_id])
+                posting_payload[storage_offset : storage_offset + count].tofile(writer)
+            elif encoding == DENSEBIT_ENCODING_BITMAP:
+                bitmap_payload[storage_offset : storage_offset + words_per_label].tofile(writer)
+            written_payload_bytes = entry_offset + entry_size
+    tmp_path.replace(sidecar_path)
+    return sidecar_path
+
+
 def write_densebit_sidecar_from_spmat(
     label_path: Path,
     sidecar_path: Path,
@@ -1222,6 +1363,833 @@ def run_auto_tau_calibration(
     }
 
 
+def require_tau_fit_dependencies() -> tuple[Any, Any, Any]:
+    try:
+        from scipy.interpolate import PchipInterpolator, interp1d
+        from scipy.optimize import brentq
+        from sklearn.isotonic import IsotonicRegression
+    except Exception as exc:
+        raise RuntimeError(
+            "calibrate-tau requires scipy and scikit-learn. Install them with: "
+            "python3 -m pip install --user scipy scikit-learn"
+        ) from exc
+    return IsotonicRegression, PchipInterpolator, brentq
+
+
+def candidate_count_for_selectivity(selectivity: float, npoints: int) -> int:
+    if npoints <= 0:
+        return 0
+    return max(1, min(npoints, int(round(float(selectivity) * npoints))))
+
+
+def synthetic_candidate_ids(npoints: int, candidate_count: int, seed: int) -> np.ndarray:
+    candidate_count = max(1, min(int(candidate_count), int(npoints)))
+    if candidate_count == npoints:
+        return np.arange(npoints, dtype=np.uint32)
+    rng = np.random.default_rng(seed)
+    ids = rng.choice(npoints, size=candidate_count, replace=False)
+    ids.sort()
+    return ids.astype(np.uint32, copy=False)
+
+
+def make_synthetic_ensemble_points(
+    counts: Sequence[int],
+    *,
+    source: str,
+    npoints: int,
+    seed: int,
+    temp_prefix: Path,
+    ensemble_size: int,
+) -> tuple[list[TauCalibrationPoint], list[np.ndarray]]:
+    points: list[TauCalibrationPoint] = []
+    point_sets: list[np.ndarray] = []
+    for raw_count in counts:
+        count = max(1, min(int(raw_count), npoints))
+        for replica in range(max(1, ensemble_size)):
+            point_seed = seed + count * 1315423911 + replica * 104729
+            ids = synthetic_candidate_ids(npoints, count, point_seed)
+            label_id = len(point_sets)
+            point_sets.append(ids)
+            points.append(
+                TauCalibrationPoint(
+                    name=f"{source}_{count}_s{replica}",
+                    source=source,
+                    labels=[label_id],
+                    candidate_count=count,
+                    npoints=npoints,
+                    target_selectivity=count / npoints,
+                    index_prefix=temp_prefix,
+                    nlabels=0,
+                    seed=point_seed,
+                    synthetic_point_ids=ids,
+                )
+            )
+    for point in points:
+        point.nlabels = len(point_sets)
+    return points, point_sets
+
+
+def create_calibration_temp_prefix(source_prefix: Path, work_dir: Path, name: str) -> Path:
+    temp_prefix = work_dir / name / source_prefix.name
+    temp_prefix.parent.mkdir(parents=True, exist_ok=True)
+    clone_index_prefix_files(source_prefix, temp_prefix)
+    return temp_prefix
+
+
+def sample_query_bin(base_bin: Path, index_type: str, out_path: Path, query_count: int, seed: int) -> tuple[int, int]:
+    npoints, dim, rows = load_bin_matrix(base_bin, index_type)
+    count = min(int(query_count), npoints)
+    if count <= 0:
+        raise ValueError(f"base bin has no rows: {base_bin}")
+    rng = np.random.default_rng(seed)
+    row_ids = rng.choice(npoints, size=count, replace=False).tolist()
+    write_bin_subset(out_path, rows, row_ids)
+    return count, dim
+
+
+def run_tau_route(
+    *,
+    search_binary: Path,
+    point: TauCalibrationPoint,
+    query_bin: Path,
+    query_labels: Path,
+    index_type: str,
+    threads: int,
+    beamwidth: int,
+    k: int,
+    similarity: str,
+    nbr_type: str,
+    selector_type: str,
+    mem_l: int,
+    search_l: int,
+    route: str,
+    out_dir: Path,
+    timeout: int,
+) -> dict[str, Any]:
+    route_jsonl = out_dir / f"{point.name}.{route}.jsonl"
+    if route_jsonl.exists():
+        route_jsonl.unlink()
+    command = [
+        str(search_binary),
+        index_type,
+        str(point.index_prefix),
+        str(threads),
+        str(beamwidth),
+        str(query_bin),
+        "null",
+        str(k),
+        similarity,
+        nbr_type,
+        selector_type,
+        str(query_labels),
+        route,
+        "0",
+        str(mem_l),
+        str(search_l),
+        "--jsonl-output",
+        str(route_jsonl),
+    ]
+    run_command(command, timeout=timeout, log_path=out_dir / f"{point.name}.{route}.log")
+    record = extract_single_search_record(route_jsonl)
+    return {
+        "route": route,
+        "avg_latency_us": float(record.get("avg_latency_us", 0.0) or 0.0),
+        "p50_latency_us": float(record.get("p50_latency_us", 0.0) or 0.0),
+        "p95_latency_us": float(record.get("p95_latency_us", 0.0) or 0.0),
+        "p99_latency_us": float(record.get("p99_latency_us", 0.0) or 0.0),
+        "qps": float(record.get("qps", 0.0) or 0.0),
+        "mean_ios": float(record.get("mean_ios", 0.0) or 0.0),
+        "raw": record,
+    }
+
+
+def evaluate_tau_points(
+    *,
+    points: list[TauCalibrationPoint],
+    query_bin: Path,
+    nqueries: int,
+    search_binary: Path,
+    index_type: str,
+    threads: int,
+    beamwidth: int,
+    k: int,
+    similarity: str,
+    nbr_type: str,
+    selector_type: str,
+    mem_l: int,
+    search_l: int,
+    out_dir: Path,
+    timeout: int,
+    points_jsonl: Path,
+) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for point in points:
+        if point.records is not None:
+            continue
+        point_dir = out_dir / point.name
+        point_dir.mkdir(parents=True, exist_ok=True)
+        query_labels = point_dir / "queries.spmat"
+        write_constant_label_spmat(query_labels, nqueries, point.nlabels, point.labels)
+        graph = run_tau_route(
+            search_binary=search_binary,
+            point=point,
+            query_bin=query_bin,
+            query_labels=query_labels,
+            index_type=index_type,
+            threads=threads,
+            beamwidth=beamwidth,
+            k=k,
+            similarity=similarity,
+            nbr_type=nbr_type,
+            selector_type=selector_type,
+            mem_l=mem_l,
+            search_l=search_l,
+            route="graph",
+            out_dir=point_dir,
+            timeout=timeout,
+        )
+        prefilter = run_tau_route(
+            search_binary=search_binary,
+            point=point,
+            query_bin=query_bin,
+            query_labels=query_labels,
+            index_type=index_type,
+            threads=threads,
+            beamwidth=beamwidth,
+            k=k,
+            similarity=similarity,
+            nbr_type=nbr_type,
+            selector_type=selector_type,
+            mem_l=mem_l,
+            search_l=search_l,
+            route="prefilter",
+            out_dir=point_dir,
+            timeout=timeout,
+        )
+        point.records = {"graph": graph, "prefilter": prefilter}
+        write_jsonl(points_jsonl, tau_point_record(point))
+        print(
+            f"[tau] {point.name} source={point.source} candidates={point.candidate_count} "
+            f"prefilter_p50={prefilter['p50_latency_us']:.1f} graph_p50={graph['p50_latency_us']:.1f}"
+        )
+
+
+def tau_point_record(point: TauCalibrationPoint) -> dict[str, Any]:
+    graph = (point.records or {}).get("graph", {})
+    prefilter = (point.records or {}).get("prefilter", {})
+    return {
+        "format": "pipeann.hybrid.tau_calibration_point.v1",
+        "name": point.name,
+        "source": point.source,
+        "seed": point.seed,
+        "label_ids": [int(label) for label in point.labels],
+        "candidate_count": int(point.candidate_count),
+        "selectivity": point.selectivity,
+        "target_selectivity": point.target_selectivity,
+        "query_count": int((graph.get("raw") or {}).get("query_count", 0) or 0),
+        "graph": {key: value for key, value in graph.items() if key != "raw"},
+        "prefilter": {key: value for key, value in prefilter.items() if key != "raw"},
+        "prefilter_wins": bool(prefilter.get("p50_latency_us", math.inf) <= graph.get("p50_latency_us", 0.0)),
+    }
+
+
+def fit_tau_from_points(
+    points: Sequence[TauCalibrationPoint],
+    *,
+    npoints: int,
+    margin: float,
+    max_model_spread: float,
+) -> dict[str, Any]:
+    IsotonicRegression, PchipInterpolator, brentq = require_tau_fit_dependencies()
+    rows = [tau_point_record(point) for point in points if point.records is not None and point.candidate_count > 0]
+    if len(rows) < 2:
+        raise RuntimeError("tau fitting requires at least two measured calibration points")
+
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(int(row["candidate_count"]), []).append(row)
+
+    def aggregate_rows(row_groups: dict[int, list[dict[str, Any]]]) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[int, int]]:
+        counts = np.asarray(sorted(row_groups), dtype=np.float64)
+        pref_values = np.asarray(
+            [
+                float(np.percentile([item["prefilter"]["p50_latency_us"] for item in row_groups[int(count)]], 75))
+                for count in counts
+            ],
+            dtype=np.float64,
+        )
+        graph_values = np.asarray(
+            [
+                float(np.percentile([item["graph"]["p50_latency_us"] for item in row_groups[int(count)]], 50))
+                for count in counts
+            ],
+            dtype=np.float64,
+        )
+        ensemble_counts = {int(count): len(row_groups[int(count)]) for count in counts}
+        return counts, pref_values, graph_values, ensemble_counts
+
+    candidate_counts, pref, graph, ensemble_counts = aggregate_rows(grouped)
+    if not np.any(pref <= margin * graph):
+        raise RuntimeError("no prefilter-winning low anchor was measured; refusing to write tau_m=0")
+    if not np.any(graph <= pref):
+        return {
+            "tau_m": int(npoints),
+            "status": "prefilter_wins_all_calibrated_range",
+            "selected_fit_model": "all_prefilter",
+            "candidate_models": [],
+            "tau_m_by_model": {},
+            "model_disagreement": 0.0,
+            "bracket": [int(candidate_counts.min()), int(candidate_counts.max())],
+            "aggregation": {
+                "prefilter": "p75(p50_latency_us)",
+                "graph": "p50(p50_latency_us)",
+                "ensemble_counts": ensemble_counts,
+            },
+        }
+
+    transforms = {
+        "raw": lambda values: values.astype(np.float64),
+        "log1p": lambda values: np.log1p(values.astype(np.float64)),
+        "sqrt": lambda values: np.sqrt(values.astype(np.float64)),
+    }
+
+    def make_interpolator(x_values: np.ndarray, y_values: np.ndarray) -> Any:
+        order = np.argsort(x_values)
+        x_sorted = x_values[order]
+        y_sorted = y_values[order]
+        unique_x, inverse = np.unique(x_sorted, return_inverse=True)
+        unique_y = np.asarray([np.median(y_sorted[inverse == idx]) for idx in range(unique_x.size)], dtype=np.float64)
+        if unique_x.size == 1:
+            return lambda x: np.full_like(np.asarray(x, dtype=np.float64), unique_y[0], dtype=np.float64)
+        if unique_x.size >= 3:
+            interpolator = PchipInterpolator(unique_x, unique_y, extrapolate=False)
+        else:
+            from scipy.interpolate import interp1d
+
+            interpolator = interp1d(unique_x, unique_y, fill_value="extrapolate", assume_sorted=True)
+        return interpolator
+
+    def graph_cv_error(x_sorted: np.ndarray, graph_sorted: np.ndarray, model_name: str) -> float:
+        if x_sorted.size < 4:
+            return 0.0
+        errors = []
+        for held_out in range(x_sorted.size):
+            mask = np.ones(x_sorted.size, dtype=bool)
+            mask[held_out] = False
+            x_train = x_sorted[mask]
+            y_train = graph_sorted[mask]
+            if model_name == "isotonic_decreasing":
+                iso = IsotonicRegression(increasing=False, out_of_bounds="clip").fit(x_train, y_train)
+                fit = iso.predict(np.sort(x_train))
+                curve = make_interpolator(np.sort(x_train), fit)
+            else:
+                curve = make_interpolator(x_train, y_train)
+            predicted = float(np.asarray(curve(np.asarray([x_sorted[held_out]], dtype=np.float64)))[0])
+            if math.isfinite(predicted):
+                errors.append(abs(predicted - graph_sorted[held_out]) / max(graph_sorted[held_out], 1.0))
+        if not errors:
+            return 0.0
+        return float(np.mean(errors))
+
+    def pref_cv_error(x_sorted: np.ndarray, pref_sorted: np.ndarray) -> float:
+        if x_sorted.size < 4:
+            return 0.0
+        errors = []
+        for held_out in range(x_sorted.size):
+            mask = np.ones(x_sorted.size, dtype=bool)
+            mask[held_out] = False
+            x_train = x_sorted[mask]
+            y_train = pref_sorted[mask]
+            iso = IsotonicRegression(increasing=True, out_of_bounds="clip").fit(x_train, y_train)
+            fit = iso.predict(np.sort(x_train))
+            curve = make_interpolator(np.sort(x_train), fit)
+            predicted = float(np.asarray(curve(np.asarray([x_sorted[held_out]], dtype=np.float64)))[0])
+            if math.isfinite(predicted):
+                errors.append(abs(predicted - pref_sorted[held_out]) / max(pref_sorted[held_out], 1.0))
+        if not errors:
+            return 0.0
+        return float(np.mean(errors))
+
+    def evaluate_model(
+        scale_name: str,
+        x_values: np.ndarray,
+        pref_values: np.ndarray,
+        graph_values: np.ndarray,
+        counts: np.ndarray,
+        *,
+        include_cv: bool = True,
+    ) -> dict[str, Any]:
+        order = np.argsort(x_values)
+        x_sorted = x_values[order]
+        pref_sorted = pref_values[order]
+        graph_sorted = graph_values[order]
+        counts_sorted = counts[order]
+        pref_iso = IsotonicRegression(increasing=True, out_of_bounds="clip").fit(x_sorted, pref_sorted)
+        pref_fit = pref_iso.predict(x_sorted)
+        pref_curve = make_interpolator(x_sorted, pref_fit)
+
+        graph_iso = IsotonicRegression(increasing=False, out_of_bounds="clip").fit(x_sorted, graph_sorted)
+        graph_iso_fit = graph_iso.predict(x_sorted)
+        graph_iso_error = (
+            graph_cv_error(x_sorted, graph_sorted, "isotonic_decreasing")
+            if include_cv
+            else float(np.mean(np.abs(graph_iso_fit - graph_sorted) / np.maximum(graph_sorted, 1.0)))
+        )
+        graph_pchip_curve = make_interpolator(x_sorted, graph_sorted)
+        graph_pchip_fit = np.asarray(graph_pchip_curve(x_sorted), dtype=np.float64)
+        graph_pchip_error = (
+            graph_cv_error(x_sorted, graph_sorted, "pchip_unconstrained")
+            if include_cv
+            else float(np.mean(np.abs(graph_pchip_fit - graph_sorted) / np.maximum(graph_sorted, 1.0)))
+        )
+        if graph_iso_error <= graph_pchip_error:
+            graph_curve = make_interpolator(x_sorted, graph_iso_fit)
+            graph_model = "isotonic_decreasing"
+            graph_fit_error = graph_iso_error
+        else:
+            graph_curve = graph_pchip_curve
+            graph_model = "pchip_unconstrained"
+            graph_fit_error = graph_pchip_error
+
+        def diff(x: float) -> float:
+            return float(np.asarray(pref_curve(np.asarray([x])))[0] - margin * np.asarray(graph_curve(np.asarray([x])))[0])
+
+        grid = np.linspace(float(x_sorted.min()), float(x_sorted.max()), 512)
+        diff_values = np.asarray([diff(float(x)) for x in grid], dtype=np.float64)
+        finite_mask = np.isfinite(diff_values)
+        if not np.any(finite_mask):
+            tau = max(1, int(counts_sorted[0]))
+            pref_error = float(np.mean(np.abs(pref_fit - pref_sorted) / np.maximum(pref_sorted, 1.0)))
+            return {
+                "scale": scale_name,
+                "graph_model": graph_model,
+                "fit_error": pref_error + graph_fit_error,
+                "prefilter_fit_error": pref_error,
+                "graph_fit_error": graph_fit_error,
+                "tau_m": max(1, min(int(tau), int(npoints))),
+            }
+        grid = grid[finite_mask]
+        diff_values = diff_values[finite_mask]
+        tau = None
+        for idx in range(grid.size - 1):
+            if diff_values[idx] <= 0.0 and diff_values[idx + 1] >= 0.0:
+                try:
+                    root = brentq(diff, float(grid[idx]), float(grid[idx + 1]))
+                except ValueError:
+                    root = float(grid[idx])
+                tau = int(np.interp(root, x_sorted, counts_sorted))
+                break
+        if tau is None:
+            tau = int(npoints if diff_values[-1] <= 0.0 else max(1, counts_sorted[0]))
+        pref_error = (
+            pref_cv_error(x_sorted, pref_sorted)
+            if include_cv
+            else float(np.mean(np.abs(pref_fit - pref_sorted) / np.maximum(pref_sorted, 1.0)))
+        )
+        return {
+            "scale": scale_name,
+            "graph_model": graph_model,
+            "fit_error": pref_error + graph_fit_error,
+            "prefilter_fit_error": pref_error,
+            "graph_fit_error": graph_fit_error,
+            "tau_m": max(1, min(int(tau), int(npoints))),
+        }
+
+    def bootstrap_model(scale_name: str, transform: Any, rounds: int = 64) -> dict[str, Any]:
+        rng = np.random.default_rng(DEFAULT_TAU_CALIBRATION_SEED + 9187)
+        taus: list[int] = []
+        for _ in range(rounds):
+            boot_pref: list[float] = []
+            boot_graph: list[float] = []
+            for count in candidate_counts:
+                items = grouped[int(count)]
+                pref_samples = np.asarray([item["prefilter"]["p50_latency_us"] for item in items], dtype=np.float64)
+                graph_samples = np.asarray([item["graph"]["p50_latency_us"] for item in items], dtype=np.float64)
+                pref_draw = rng.choice(pref_samples, size=pref_samples.size, replace=True)
+                graph_draw = rng.choice(graph_samples, size=graph_samples.size, replace=True)
+                boot_pref.append(float(np.percentile(pref_draw, 75)))
+                boot_graph.append(float(np.percentile(graph_draw, 50)))
+            try:
+                model = evaluate_model(
+                    scale_name,
+                    transform(candidate_counts),
+                    np.asarray(boot_pref, dtype=np.float64),
+                    np.asarray(boot_graph, dtype=np.float64),
+                    candidate_counts,
+                    include_cv=False,
+                )
+            except Exception:
+                continue
+            taus.append(int(model["tau_m"]))
+        if not taus:
+            return {"bootstrap_tau_p10": None, "bootstrap_tau_p50": None, "bootstrap_tau_p90": None, "bootstrap_relative_iqr": math.inf}
+        tau_array = np.asarray(taus, dtype=np.float64)
+        p10, p50, p90 = np.percentile(tau_array, [10, 50, 90])
+        return {
+            "bootstrap_tau_p10": int(round(p10)),
+            "bootstrap_tau_p50": int(round(p50)),
+            "bootstrap_tau_p90": int(round(p90)),
+            "bootstrap_relative_iqr": float((p90 - p10) / max(1.0, p50)),
+        }
+
+    models = []
+    for name, transform in transforms.items():
+        model = evaluate_model(name, transform(candidate_counts), pref, graph, candidate_counts)
+        model.update(bootstrap_model(name, transform))
+        models.append(model)
+    models.sort(key=lambda item: (float(item["fit_error"]), float(item.get("bootstrap_relative_iqr", math.inf)), int(item["tau_m"])))
+    selected = models[0]
+    taus = [int(model["tau_m"]) for model in models]
+    disagreement = 0.0 if min(taus) <= 0 else (max(taus) - min(taus)) / max(1, min(taus))
+    status = "ok" if disagreement <= max_model_spread else "fit_low_confidence"
+    tau_m = int(selected["tau_m"] if status == "ok" else min(taus))
+    return {
+        "tau_m": max(1, min(tau_m, int(npoints))),
+        "status": status,
+        "selected_fit_model": f"{selected['scale']}:{selected['graph_model']}",
+        "candidate_models": models,
+        "tau_m_by_model": {f"{model['scale']}:{model['graph_model']}": int(model["tau_m"]) for model in models},
+        "model_disagreement": float(disagreement),
+        "bracket": [int(candidate_counts.min()), int(candidate_counts.max())],
+        "aggregation": {
+            "prefilter": "p75(p50_latency_us)",
+            "graph": "p50(p50_latency_us)",
+            "ensemble_counts": ensemble_counts,
+        },
+    }
+
+
+def read_existing_threshold_version(meta_path: Path) -> int:
+    if not meta_path.exists():
+        return 0
+    with meta_path.open("rb") as reader:
+        data = reader.read(HYBRID_META_HEADER.size)
+    if len(data) != HYBRID_META_HEADER.size:
+        return 0
+    values = HYBRID_META_HEADER.unpack(data)
+    if values[0] != HYBRID_META_MAGIC or values[1] != HYBRID_META_VERSION:
+        return 0
+    return int(values[8])
+
+
+def write_hybrid_metadata_from_python(
+    *,
+    meta_path: Path,
+    sidecar: DenseBitsetSidecar,
+    tau_m: int,
+    selector_type: str,
+    threshold_version: int,
+    points: Sequence[TauCalibrationPoint],
+    k: int,
+    mem_l: int,
+    beamwidth: int,
+    search_l: int,
+) -> None:
+    measured_points = [point for point in points if point.records is not None]
+    buckets = []
+    for point in sorted(measured_points, key=lambda item: item.candidate_count):
+        record = tau_point_record(point)
+        buckets.append(
+            HYBRID_META_BUCKET.pack(
+                int(point.candidate_count),
+                int(record.get("query_count", 0) or 0),
+                int(round(record["prefilter"]["p50_latency_us"])),
+                int(round(record["graph"]["p50_latency_us"])),
+                0,
+            )
+        )
+    header_values = [
+        HYBRID_META_MAGIC,
+        HYBRID_META_VERSION,
+        256,
+        HYBRID_METADATA_VALID_FLAG | HYBRID_CALIBRATION_VALID_FLAG | HYBRID_ALLOW_PREFILTER_FLAG,
+        HYBRID_SELECTOR_MASK[selector_type],
+        int(tau_m),
+        int(sidecar.npoints),
+        int(sidecar.npoints),
+        int(threshold_version),
+        int(time.time()),
+        int(sum((tau_point_record(point).get("query_count", 0) or 0) for point in measured_points)),
+        int(len(buckets)),
+        int(k),
+        int(mem_l),
+        int(beamwidth),
+        int(search_l),
+        int(sidecar.npoints),
+        int(sidecar.nlabels),
+        int(sidecar.words_per_label),
+        int(sidecar.nnz),
+        *([0] * 13),
+    ]
+    tmp_path = meta_path.with_suffix(meta_path.suffix + ".tmp")
+    with tmp_path.open("wb") as writer:
+        writer.write(HYBRID_META_HEADER.pack(*header_values))
+        for bucket in buckets:
+            writer.write(bucket)
+    tmp_path.replace(meta_path)
+
+
+def calibrate_tau(args: argparse.Namespace) -> Path:
+    require_tau_fit_dependencies()
+    index_prefix = resolve_path(args.index_prefix)
+    base_bin = require_file(resolve_path(args.base_bin), "base bin")
+    build_dir = resolve_path(args.build_dir)
+    search_binary = find_binary(build_dir, "search_disk_index_hybrid")
+    sidecar = DenseBitsetSidecar.load(require_file(Path(f"{index_prefix}_labels.densebit"), "densebit sidecar"))
+    out_json = resolve_path(args.output_json) if args.output_json else Path(f"{index_prefix}_tau_calibration.json")
+    points_jsonl = resolve_path(args.points_jsonl) if args.points_jsonl else Path(f"{index_prefix}_tau_calibration.points.jsonl")
+    work_dir = validate_output_path(resolve_path(args.work_dir), "tau calibration work dir") if args.work_dir else Path(f"{index_prefix}_tau_calibration_work")
+    if points_jsonl.exists():
+        points_jsonl.unlink()
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    query_bin = work_dir / "calibration_queries.bin"
+    nqueries, _ = sample_query_bin(base_bin, args.index_type, query_bin, args.queries_per_point, args.seed)
+    targets = args.target_selectivities
+    ensemble_size = max(1, int(args.synthetic_ensemble_size))
+    target_counts = sorted({candidate_count_for_selectivity(value, sidecar.npoints) for value in targets})
+    target_prefix = create_calibration_temp_prefix(index_prefix, work_dir, "synthetic_targets")
+    points, target_sets = make_synthetic_ensemble_points(
+        target_counts,
+        source="synthetic_target",
+        npoints=sidecar.npoints,
+        seed=args.seed,
+        temp_prefix=target_prefix,
+        ensemble_size=ensemble_size,
+    )
+    write_mixed_densebit_sidecar_from_point_sets(Path(f"{target_prefix}_labels.densebit"), sidecar.npoints, target_sets)
+
+    evaluate_tau_points(
+        points=points,
+        query_bin=query_bin,
+        nqueries=nqueries,
+        search_binary=search_binary,
+        index_type=args.index_type,
+        threads=args.threads,
+        beamwidth=args.beamwidth,
+        k=args.k,
+        similarity=args.similarity,
+        nbr_type=args.nbr_type,
+        selector_type=args.selector_type,
+        mem_l=args.mem_l,
+        search_l=args.search_l,
+        out_dir=work_dir / "points",
+        timeout=args.timeout,
+        points_jsonl=points_jsonl,
+    )
+
+    def has_prefilter_anchor() -> bool:
+        return any(
+            point.records is not None
+            and point.records["prefilter"]["p50_latency_us"] <= args.margin * point.records["graph"]["p50_latency_us"]
+            for point in points
+        )
+
+    if not has_prefilter_anchor():
+        low_counts = []
+        value = 1
+        max_low = max(1, min(target_counts))
+        while value <= max_low:
+            low_counts.append(value)
+            value *= 2
+        if max_low not in low_counts:
+            low_counts.append(max_low)
+        measured_counts = {point.candidate_count for point in points}
+        low_counts = [count for count in low_counts if count not in measured_counts]
+        for low_idx, low_count in enumerate(low_counts):
+            temp_prefix = create_calibration_temp_prefix(index_prefix, work_dir, f"synthetic_low_{low_idx}_{low_count}")
+            low_points, low_sets = make_synthetic_ensemble_points(
+                [low_count],
+                source="synthetic_low_anchor",
+                npoints=sidecar.npoints,
+                seed=args.seed + 17 + low_idx,
+                temp_prefix=temp_prefix,
+                ensemble_size=ensemble_size,
+            )
+            write_mixed_densebit_sidecar_from_point_sets(Path(f"{temp_prefix}_labels.densebit"), sidecar.npoints, low_sets)
+            evaluate_tau_points(
+                points=low_points,
+                query_bin=query_bin,
+                nqueries=nqueries,
+                search_binary=search_binary,
+                index_type=args.index_type,
+                threads=args.threads,
+                beamwidth=args.beamwidth,
+                k=args.k,
+                similarity=args.similarity,
+                nbr_type=args.nbr_type,
+                selector_type=args.selector_type,
+                mem_l=args.mem_l,
+                search_l=args.search_l,
+                out_dir=work_dir / "points",
+                timeout=args.timeout,
+                points_jsonl=points_jsonl,
+            )
+            points.extend(low_points)
+            if has_prefilter_anchor():
+                break
+    if not has_prefilter_anchor():
+        raise RuntimeError("low-selectivity synthetic sweep did not find a prefilter-winning anchor")
+
+    def has_graph_bracket() -> bool:
+        winning_counts = [
+            point.candidate_count for point in points
+            if point.records is not None
+            and point.records["prefilter"]["p50_latency_us"] <= args.margin * point.records["graph"]["p50_latency_us"]
+        ]
+        if not winning_counts:
+            return False
+        low_win = min(winning_counts)
+        return any(
+            point.records is not None
+            and point.candidate_count > low_win
+            and point.records["graph"]["p50_latency_us"] <= point.records["prefilter"]["p50_latency_us"]
+            for point in points
+        )
+
+    if not has_graph_bracket():
+        measured_counts = {point.candidate_count for point in points}
+        high_counts = [
+            candidate_count_for_selectivity(value, sidecar.npoints)
+            for value in (0.25, 0.50, 0.75, 1.0)
+            if candidate_count_for_selectivity(value, sidecar.npoints) not in measured_counts
+        ]
+        temp_prefix = create_calibration_temp_prefix(index_prefix, work_dir, "synthetic_high")
+        high_points, high_sets = make_synthetic_ensemble_points(
+            high_counts,
+            source="synthetic_high_bracket",
+            npoints=sidecar.npoints,
+            seed=args.seed + 29,
+            temp_prefix=temp_prefix,
+            ensemble_size=ensemble_size,
+        )
+        write_mixed_densebit_sidecar_from_point_sets(Path(f"{temp_prefix}_labels.densebit"), sidecar.npoints, high_sets)
+        if high_points:
+            evaluate_tau_points(
+                points=high_points,
+                query_bin=query_bin,
+                nqueries=nqueries,
+                search_binary=search_binary,
+                index_type=args.index_type,
+                threads=args.threads,
+                beamwidth=args.beamwidth,
+                k=args.k,
+                similarity=args.similarity,
+                nbr_type=args.nbr_type,
+                selector_type=args.selector_type,
+                mem_l=args.mem_l,
+                search_l=args.search_l,
+                out_dir=work_dir / "points",
+                timeout=args.timeout,
+                points_jsonl=points_jsonl,
+            )
+            points.extend(high_points)
+
+    fit = fit_tau_from_points(points, npoints=sidecar.npoints, margin=args.margin, max_model_spread=args.max_model_spread)
+    refinement_rounds = 0
+    while fit.get("status") == "fit_low_confidence" and refinement_rounds < args.max_refinement_rounds:
+        taus = [int(value) for value in fit["tau_m_by_model"].values()]
+        if not taus:
+            break
+        lo = max(1, min(taus))
+        hi = min(sidecar.npoints, max(taus))
+        if hi <= lo:
+            break
+        mid = int(round(math.sqrt(lo * hi)))
+        if any(point.candidate_count == mid for point in points):
+            break
+        temp_prefix = create_calibration_temp_prefix(index_prefix, work_dir, f"synthetic_refine_{refinement_rounds}")
+        refine_points, refine_sets = make_synthetic_ensemble_points(
+            [mid],
+            source="synthetic_refinement",
+            npoints=sidecar.npoints,
+            seed=args.seed + 101 + refinement_rounds,
+            temp_prefix=temp_prefix,
+            ensemble_size=ensemble_size,
+        )
+        write_mixed_densebit_sidecar_from_point_sets(Path(f"{temp_prefix}_labels.densebit"), sidecar.npoints, refine_sets)
+        evaluate_tau_points(
+            points=refine_points,
+            query_bin=query_bin,
+            nqueries=nqueries,
+            search_binary=search_binary,
+            index_type=args.index_type,
+            threads=args.threads,
+            beamwidth=args.beamwidth,
+            k=args.k,
+            similarity=args.similarity,
+            nbr_type=args.nbr_type,
+            selector_type=args.selector_type,
+            mem_l=args.mem_l,
+            search_l=args.search_l,
+            out_dir=work_dir / "points",
+            timeout=args.timeout,
+            points_jsonl=points_jsonl,
+        )
+        points.extend(refine_points)
+        refinement_rounds += 1
+        fit = fit_tau_from_points(points, npoints=sidecar.npoints, margin=args.margin, max_model_spread=args.max_model_spread)
+
+    meta_path = Path(f"{index_prefix}_hybrid.meta")
+    threshold_version = read_existing_threshold_version(meta_path) + 1
+    write_hybrid_metadata_from_python(
+        meta_path=meta_path,
+        sidecar=sidecar,
+        tau_m=int(fit["tau_m"]),
+        selector_type=args.selector_type,
+        threshold_version=threshold_version,
+        points=points,
+        k=args.k,
+        mem_l=args.mem_l,
+        beamwidth=args.beamwidth,
+        search_l=args.search_l,
+    )
+    measured_records = [tau_point_record(point) for point in points if point.records is not None]
+    payload = {
+        "format": "pipeann.hybrid.tau_calibration.v1",
+        "status": fit.get("status", "ok"),
+        "index_prefix": str(index_prefix),
+        "base_bin": str(base_bin),
+        "sidecar_path": str(sidecar.path),
+        "meta_path": str(meta_path),
+        "points_jsonl": str(points_jsonl),
+        "tau_m": int(fit["tau_m"]),
+        "threshold_version": int(threshold_version),
+        "margin": float(args.margin),
+        "selected_fit_model": fit.get("selected_fit_model"),
+        "candidate_models": fit.get("candidate_models", []),
+        "tau_m_by_model": fit.get("tau_m_by_model", {}),
+        "model_disagreement": fit.get("model_disagreement", 0.0),
+        "bracket": fit.get("bracket"),
+        "refinement_rounds": refinement_rounds,
+        "coverage_status": fit.get("status", "ok"),
+        "used_points": measured_records,
+        "config": {
+            "targets": [float(value) for value in targets],
+            "queries_per_point": int(nqueries),
+            "threads": int(args.threads),
+            "beamwidth": int(args.beamwidth),
+            "k": int(args.k),
+            "mem_l": int(args.mem_l),
+            "search_l": int(args.search_l),
+            "selector_type": args.selector_type,
+            "similarity": args.similarity,
+            "nbr_type": args.nbr_type,
+            "synthetic_ensemble_size": ensemble_size,
+            "calibration_sources": sorted({record["source"] for record in measured_records}),
+            "synthetic_only": True,
+        },
+    }
+    with out_json.open("w", encoding="utf-8") as writer:
+        json.dump(payload, writer, indent=2, sort_keys=True)
+        writer.write("\n")
+    if args.cleanup_work_dir:
+        shutil.rmtree(work_dir, ignore_errors=True)
+    print(f"[ok] wrote tau calibration to {out_json}")
+    print(f"[ok] wrote tau_m={int(fit['tau_m'])} metadata to {meta_path}")
+    return out_json
+
+
 def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
     source_prefix = resolve_path(args.source_prefix)
     dest_prefix = resolve_path(args.dest_prefix)
@@ -1252,26 +2220,39 @@ def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
     else:
         if not args.base_bin:
             raise ValueError("--base-bin is required unless --skip-tau-calibration is set")
-        calibration_log = summary_path.with_suffix(".tau_calibration.log")
-        calibration_summary = run_auto_tau_calibration(
-            index_prefix=dest_prefix,
-            base_bin=require_file(resolve_path(args.base_bin), "base bin"),
-            index_type=args.index_type,
-            selector_type=args.selector_type,
-            similarity=args.similarity,
-            nbr_type=args.nbr_type,
-            build_dir=resolve_path(args.build_dir),
-            threads=args.calibration_threads,
-            beamwidth=args.calibration_beamwidth,
-            k=args.calibration_k,
-            mem_l=args.calibration_mem_l,
-            search_l=args.calibration_l_search,
-            queries_per_bucket=args.calibration_queries_per_bucket,
-            seed=args.calibration_seed,
-            selectivities=args.calibration_selectivities,
-            log_path=calibration_log,
-            timeout=args.calibration_timeout,
+        calibration_json = summary_path.with_suffix(".tau_calibration.json")
+        calibration_points = summary_path.with_suffix(".tau_calibration.points.jsonl")
+        calibration_work = summary_path.parent / f"{summary_path.stem}.tau_calibration_work"
+        calibrate_tau(
+            argparse.Namespace(
+                index_prefix=str(dest_prefix),
+                base_bin=str(require_file(resolve_path(args.base_bin), "base bin")),
+                index_type=args.index_type,
+                selector_type=args.selector_type,
+                similarity=args.similarity,
+                nbr_type=args.nbr_type,
+                build_dir=str(resolve_path(args.build_dir)),
+                output_json=str(calibration_json),
+                points_jsonl=str(calibration_points),
+                work_dir=str(calibration_work),
+                threads=args.calibration_threads,
+                beamwidth=args.calibration_beamwidth,
+                k=args.calibration_k,
+                mem_l=args.calibration_mem_l,
+                search_l=args.calibration_l_search,
+                queries_per_point=args.calibration_queries_per_bucket,
+                seed=args.calibration_seed,
+                target_selectivities=args.calibration_selectivities,
+                timeout=args.calibration_timeout,
+                margin=args.calibration_margin,
+                synthetic_ensemble_size=args.calibration_synthetic_ensemble_size,
+                max_model_spread=args.calibration_max_model_spread,
+                max_refinement_rounds=args.calibration_max_refinement_rounds,
+                cleanup_work_dir=True,
+            )
         )
+        with calibration_json.open("r", encoding="utf-8") as reader:
+            calibration_summary = json.load(reader)
     summary = {
         "format": "pipeann.hybrid.label_runtime.v2",
         "source_prefix": str(source_prefix),
@@ -1291,7 +2272,7 @@ def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
 
     print(f"[ok] cloned index prefix from {source_prefix} to {dest_prefix}")
     print(f"[ok] wrote {sidecar_mode} densebit sidecar to {sidecar_path}")
-    if calibration_summary.get("status") == "ok":
+    if int(calibration_summary.get("tau_m", 0) or 0) > 0:
         print(f"[ok] auto-calibrated tau_m metadata at {meta_path}")
     else:
         print(f"[ok] removed stale hybrid metadata at {meta_path}")
@@ -1475,6 +2456,25 @@ def write_one_hot_spmat(path: Path, nrows: int, nlabels: int, label_id: int) -> 
         indptr.tofile(writer)
         indices.tofile(writer)
         data.tofile(writer)
+
+
+def write_constant_label_spmat(path: Path, nrows: int, nlabels: int, labels: Sequence[int]) -> None:
+    ensure_parent(path)
+    normalized = sorted(set(int(label) for label in labels))
+    if nrows < 0:
+        raise ValueError(f"nrows must be non-negative, got {nrows}")
+    if any(label < 0 or label >= nlabels for label in normalized):
+        raise ValueError(f"labels {normalized} out of range for {nlabels} labels")
+
+    row_nnz = len(normalized)
+    nnz = nrows * row_nnz
+    indptr = np.arange(nrows + 1, dtype=np.int64) * row_nnz
+    with path.open("wb") as writer:
+        writer.write(SPMAT_HEADER.pack(nrows, nlabels, nnz))
+        indptr.tofile(writer)
+        if nnz > 0:
+            np.tile(np.asarray(normalized, dtype=np.int32), nrows).tofile(writer)
+            np.ones(nnz, dtype=np.float32).tofile(writer)
 
 
 def write_spmat_from_membership_masks(
@@ -2998,7 +3998,7 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_parser.add_argument("--sidecar-mode", default="mixed", choices=["bitmap", "mixed"])
     runtime_parser.add_argument("--summary-json")
     runtime_parser.add_argument("--skip-tau-calibration", action="store_true")
-    runtime_parser.add_argument("--calibration-threads", type=int, default=16)
+    runtime_parser.add_argument("--calibration-threads", type=int, default=1)
     runtime_parser.add_argument("--calibration-beamwidth", type=int, default=4)
     runtime_parser.add_argument("--calibration-k", type=int, default=10)
     runtime_parser.add_argument("--calibration-mem-l", type=int, default=0)
@@ -3014,7 +4014,46 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_csv_floats,
         default=list(DEFAULT_TAU_CALIBRATION_SELECTIVITIES),
     )
+    runtime_parser.add_argument("--calibration-margin", type=float, default=0.95)
+    runtime_parser.add_argument("--calibration-synthetic-ensemble-size", type=int, default=5)
+    runtime_parser.add_argument("--calibration-max-model-spread", type=float, default=0.20)
+    runtime_parser.add_argument("--calibration-max-refinement-rounds", type=int, default=3)
     runtime_parser.add_argument("--calibration-timeout", type=int, default=3600)
+
+    tau_parser = subparsers.add_parser(
+        "calibrate-tau",
+        help="Calibrate hybrid auto-route tau_m using synthetic labels and Python fitting.",
+    )
+    tau_parser.add_argument("--index-prefix", required=True)
+    tau_parser.add_argument("--base-bin", required=True)
+    tau_parser.add_argument("--index-type", default="uint8", choices=["float", "int8", "uint8"])
+    tau_parser.add_argument("--selector-type", default="intersect", choices=["intersect", "subset", "range"])
+    tau_parser.add_argument("--similarity", default="l2")
+    tau_parser.add_argument("--nbr-type", default="pq")
+    tau_parser.add_argument("--build-dir", default=str(DEFAULT_BUILD_DIR))
+    tau_parser.add_argument("--output-json")
+    tau_parser.add_argument("--points-jsonl")
+    tau_parser.add_argument("--work-dir")
+    tau_parser.add_argument("--threads", type=int, default=1)
+    tau_parser.add_argument("--beamwidth", type=int, default=4)
+    tau_parser.add_argument("--k", type=int, default=10)
+    tau_parser.add_argument("--mem-l", type=int, default=0)
+    tau_parser.add_argument("--search-l", type=int, default=100)
+    tau_parser.add_argument("--queries-per-point", type=int, default=DEFAULT_TAU_CALIBRATION_QUERIES_PER_BUCKET)
+    tau_parser.add_argument("--seed", type=int, default=DEFAULT_TAU_CALIBRATION_SEED)
+    tau_parser.add_argument(
+        "--target-selectivities",
+        type=parse_csv_floats,
+        default=list(DEFAULT_TAU_CALIBRATION_SELECTIVITIES),
+    )
+    tau_parser.add_argument("--margin", type=float, default=0.95)
+    tau_parser.add_argument("--synthetic-ensemble-size", type=int, default=5)
+    tau_parser.add_argument("--max-model-spread", type=float, default=0.20)
+    tau_parser.add_argument("--max-refinement-rounds", type=int, default=3)
+    tau_parser.add_argument("--cleanup-work-dir", action="store_true")
+    tau_parser.add_argument("--keep-work-dir", dest="cleanup_work_dir", action="store_false")
+    tau_parser.set_defaults(cleanup_work_dir=True)
+    tau_parser.add_argument("--timeout", type=int, default=3600)
 
     sidecar_summary_parser = subparsers.add_parser(
         "summarize-densebit-sidecar",
@@ -3145,6 +4184,9 @@ def main() -> int:
         return 0
     if args.command == "prepare-index-prefix-for-labels":
         create_index_prefix_for_labels(args)
+        return 0
+    if args.command == "calibrate-tau":
+        calibrate_tau(args)
         return 0
     if args.command == "summarize-densebit-sidecar":
         summarize_densebit_sidecar(args)

@@ -11,7 +11,6 @@ target_link_libraries(build_memory_index ${PROJECT_NAME})
 
 add_executable(calibrate_hybrid_threshold calibrate_hybrid_threshold.cpp)
 target_link_libraries(calibrate_hybrid_threshold ${PROJECT_NAME})
-add_dependencies(build_disk_index calibrate_hybrid_threshold)
 
 add_executable(hybrid_metadata_roundtrip hybrid_metadata_roundtrip.cpp)
 target_link_libraries(hybrid_metadata_roundtrip ${PROJECT_NAME})
@@ -54,6 +53,7 @@ target_link_libraries(search_disk_index_filtered ${PROJECT_NAME})
 
 add_executable(search_disk_index_hybrid search_disk_index_hybrid.cpp)
 target_link_libraries(search_disk_index_hybrid ${PROJECT_NAME})
+add_dependencies(build_disk_index search_disk_index_hybrid)
 
 add_executable(pad_partition pad_partition.cpp)
 target_link_libraries(pad_partition ${PROJECT_NAME} )

@@ -27,18 +27,20 @@ std::string shell_quote(const std::string &value) {
   return quoted;
 }
 
-std::string sibling_binary(const std::string &argv0, const std::string &binary_name) {
-  const auto slash = argv0.find_last_of('/');
-  if (slash == std::string::npos) {
-    return binary_name;
+std::string repo_root_from_binary(const std::string &argv0) {
+  const std::string marker = "/build/";
+  const auto marker_pos = argv0.find(marker);
+  if (marker_pos != std::string::npos) {
+    return argv0.substr(0, marker_pos);
   }
-  return argv0.substr(0, slash + 1) + binary_name;
+  return ".";
 }
 
 bool write_sidecar_and_calibrate(const std::string &argv0, const std::string &index_type,
                                  const std::string &data_file, const std::string &index_prefix,
                                  const std::string &threads, const std::string &similarity,
                                  const std::string &nbr_type, pipeann::AbstractLabel *label) {
+  (void) threads;
   auto *spmat_label = dynamic_cast<pipeann::SpmatLabel *>(label);
   if (spmat_label == nullptr) {
     return true;
@@ -54,18 +56,25 @@ bool write_sidecar_and_calibrate(const std::string &argv0, const std::string &in
     return false;
   }
 
-  const std::string calibrate_binary = sibling_binary(argv0, "calibrate_hybrid_threshold");
+  const std::string repo_root = repo_root_from_binary(argv0);
+  const std::string script_path = repo_root + "/scripts/pipeann_hybrid_experiment.py";
+  const std::string build_dir = repo_root + "/build";
   std::ostringstream command;
-  command << shell_quote(calibrate_binary) << " "
-          << shell_quote(index_type) << " "
-          << shell_quote(index_prefix) << " "
-          << shell_quote(threads) << " "
-          << "4 --auto-selectivity "
-          << shell_quote(data_file) << " "
-          << "10 "
-          << shell_quote(similarity) << " "
-          << shell_quote(nbr_type) << " "
-          << "0 100 intersect";
+  command << "python3 "
+          << shell_quote(script_path) << " calibrate-tau"
+          << " --index-prefix " << shell_quote(index_prefix)
+          << " --base-bin " << shell_quote(data_file)
+          << " --index-type " << shell_quote(index_type)
+          << " --selector-type intersect"
+          << " --similarity " << shell_quote(similarity)
+          << " --nbr-type " << shell_quote(nbr_type)
+          << " --build-dir " << shell_quote(build_dir)
+          << " --threads 1"
+          << " --beamwidth 4"
+          << " --k 10"
+          << " --mem-l 0"
+          << " --search-l 100"
+          << " --cleanup-work-dir";
 
   LOG(INFO) << "Running post-build tau_m calibration: " << command.str();
   const int rc = std::system(command.str().c_str());

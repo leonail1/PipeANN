@@ -490,9 +490,17 @@ int search_disk_index(int argc, char **argv) {
     uint64_t prefilter_count = 0;
     uint64_t graph_count = 0;
     uint64_t empty_count = 0;
+    uint64_t min_threshold = std::numeric_limits<uint64_t>::max();
+    uint64_t max_threshold = 0;
+    uint64_t min_threshold_version = std::numeric_limits<uint64_t>::max();
+    uint64_t max_threshold_version = 0;
     for (size_t query_idx = 0; query_idx < query_num; ++query_idx) {
       sum_candidates += static_cast<double>(hybrid_stats[query_idx].candidate_count);
       sum_route_overhead_us += static_cast<double>(hybrid_stats[query_idx].route_overhead_us);
+      min_threshold = std::min(min_threshold, hybrid_stats[query_idx].threshold);
+      max_threshold = std::max(max_threshold, hybrid_stats[query_idx].threshold);
+      min_threshold_version = std::min(min_threshold_version, hybrid_stats[query_idx].threshold_version);
+      max_threshold_version = std::max(max_threshold_version, hybrid_stats[query_idx].threshold_version);
       switch (hybrid_stats[query_idx].decision) {
         case pipeann::HybridRouteDecision::kAutoGraphFallback:
           ++fallback_count;
@@ -508,6 +516,25 @@ int search_disk_index(int argc, char **argv) {
           break;
       }
     }
+    if (query_num == 0) {
+      min_threshold = 0;
+      min_threshold_version = 0;
+    }
+    std::string resolved_route = "mixed";
+    if (prefilter_count == query_num) {
+      resolved_route = "prefilter";
+    } else if (graph_count == query_num) {
+      resolved_route = "graph";
+    } else if (empty_count == query_num) {
+      resolved_route = "empty";
+    } else if (fallback_count == query_num) {
+      resolved_route = "fallback";
+    }
+    const std::string tau_m_json =
+        min_threshold == max_threshold ? std::to_string(max_threshold) : std::string("null");
+    const std::string threshold_version_json = min_threshold_version == max_threshold_version
+                                                   ? std::to_string(max_threshold_version)
+                                                   : std::string("null");
     const double mean_candidates = query_num == 0 ? 0.0 : (sum_candidates / static_cast<double>(query_num));
     const double mean_route_overhead =
         query_num == 0 ? 0.0 : (sum_route_overhead_us / static_cast<double>(query_num));
@@ -543,8 +570,15 @@ int search_disk_index(int argc, char **argv) {
         "\"beamwidth\":" + std::to_string(beamwidth) + ","
         "\"mem_L\":" + std::to_string(mem_L) + ","
         "\"route\":\"" + json_escape(force_route) + "\"," 
+        "\"resolved_route\":\"" + json_escape(resolved_route) + "\","
         "\"L\":" + std::to_string(L) + ","
         "\"hybrid_enabled\":" + std::string(index_ptr->hybrid_enabled() ? "true" : "false") + ","
+        "\"tau_m\":" + tau_m_json + ","
+        "\"threshold_version\":" + threshold_version_json + ","
+        "\"min_tau_m\":" + std::to_string(min_threshold) + ","
+        "\"max_tau_m\":" + std::to_string(max_threshold) + ","
+        "\"min_threshold_version\":" + std::to_string(min_threshold_version) + ","
+        "\"max_threshold_version\":" + std::to_string(max_threshold_version) + ","
         "\"qps\":" + std::to_string(qps) + ","
         "\"avg_latency_us\":" + std::to_string(mean_latency) + ","
         "\"p50_latency_us\":" + std::to_string(latency_50) + ","
