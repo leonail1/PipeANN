@@ -1,0 +1,26 @@
+{
+  "buckets": [
+    {
+      "label": "25%",
+      "lower": 0.25,
+      "midpoint": 0.25,
+      "name": "u25",
+      "probe_query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/fashion_mnist784/workloads/uniform_exact_selectivity/probe_queries.bin",
+      "probe_query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/fashion_mnist784/workloads/uniform_exact_selectivity/u25/probe_query.spmat",
+      "query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/fashion_mnist784/workloads/uniform_exact_selectivity/queries.bin",
+      "query_count": 1000,
+      "query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/fashion_mnist784/workloads/uniform_exact_selectivity/u25/queries.spmat",
+      "upper": 0.25
+    }
+  ],
+  "format": "pipeann.hybrid.selectivity_manifest.v1",
+  "index_prefix": "/mnt/bak3/lzg/PipeANN-github/data/fashion_mnist784/fashion_mnist784_qps4_pipeann",
+  "index_type": "float",
+  "npoints": 60000,
+  "queries_per_bucket": null,
+  "query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/fashion_mnist784/workloads/uniform_exact_selectivity/queries.bin",
+  "query_labels": null,
+  "scanned_queries": 9000,
+  "selector_type": "intersect",
+  "sidecar_path": "/mnt/bak3/lzg/PipeANN-github/data/fashion_mnist784/fashion_mnist784_qps4_pipeann_labels.densebit"
+}

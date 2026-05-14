@@ -1,0 +1,26 @@
+{
+  "buckets": [
+    {
+      "label": "t5e-03",
+      "lower": 0.0050002,
+      "midpoint": 0.0050002,
+      "name": "real_t5e-03_l902",
+      "probe_query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t5e-03_l902/probe_query.bin",
+      "probe_query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t5e-03_l902/probe_query.spmat",
+      "query_bin": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t5e-03_l902/queries.spmat",
+      "upper": 0.0050002
+    }
+  ],
+  "format": "pipeann.hybrid.selectivity_manifest.v1",
+  "index_prefix": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/yfcc10m_pipeann",
+  "index_type": "uint8",
+  "npoints": 10000000,
+  "queries_per_bucket": null,
+  "query_bin": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.public.100K.u8bin",
+  "query_labels": null,
+  "scanned_queries": 1000000,
+  "selector_type": "intersect",
+  "sidecar_path": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/yfcc10m_pipeann_labels.densebit"
+}

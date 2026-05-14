@@ -1,0 +1,12 @@
+{
+  "aggregated_csv": "/mnt/bak3/lzg/PipeANN-github/experiments/io_representative_20260514/yfcc10m/thread_sweep/aggregated_results.csv",
+  "aggregated_jsonl": "/mnt/bak3/lzg/PipeANN-github/experiments/io_representative_20260514/yfcc10m/thread_sweep/aggregated_results.jsonl",
+  "dataset": "yfcc10m",
+  "device": "nvme1c1n1",
+  "disk_metrics_reason": "remapped static counter nvme1n1 to active counter nvme1c1n1",
+  "disk_metrics_status": "ok",
+  "manifest": "/mnt/bak3/lzg/PipeANN-github/experiments/io_representative_20260514/manifests/yfcc10m_representative_manifest.json",
+  "requested_device": "nvme1n1",
+  "rows": 21,
+  "run_root": "/mnt/bak3/lzg/PipeANN-github/experiments/io_representative_20260514/yfcc10m/thread_sweep"
+}
