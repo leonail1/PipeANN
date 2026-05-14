@@ -7,6 +7,9 @@ import argparse
 import csv
 import json
 import os
+import re
+import signal
+import shutil
 import shlex
 import struct
 import subprocess
@@ -32,6 +35,29 @@ DEFAULT_SMALL_SELECTIVITIES = (0.001, 0.005, 0.01, 0.02, 0.05, 0.10, 0.25, 0.50,
 DEFAULT_YFCC_SELECTIVITIES = (0.004, 0.005, 0.01, 0.02, 0.05, 0.099, 0.192)
 DEFAULT_SAMPLE_INTERVAL_S = 0.5
 SECTOR_SIZE_BYTES = 512
+DISK_METRIC_FIELDS = (
+    "avg_read_mb_s",
+    "max_read_mb_s",
+    "avg_write_mb_s",
+    "max_write_mb_s",
+    "avg_read_iops",
+    "max_read_iops",
+    "avg_write_iops",
+    "max_write_iops",
+    "avg_disk_util_pct",
+    "max_disk_util_pct",
+    "avg_await_ms",
+    "max_await_ms",
+    "avg_read_await_ms",
+    "max_read_await_ms",
+    "avg_qd",
+    "max_qd",
+    "read_iops",
+    "read_mb_s",
+    "read_await_ms",
+    "await_ms",
+    "qdepth",
+)
 
 
 @dataclass(frozen=True)
@@ -42,6 +68,15 @@ class DatasetSpec:
     normalize_for_l2: bool
     index_type: str
     source_url: str | None = None
+
+
+@dataclass(frozen=True)
+class MonitorDeviceResolution:
+    requested_device: str | None
+    effective_device: str | None
+    disk_metrics_status: str
+    reason: str
+    sanity_read_bytes: int = 0
 
 
 SMALL_DATASETS: dict[str, DatasetSpec] = {
@@ -677,8 +712,122 @@ def infer_block_device(path: Path) -> str | None:
     return Path(best_mount[1]).name
 
 
+def disk_index_file_for_prefix(index_prefix: str | Path) -> Path:
+    return Path(str(index_prefix) + "_disk.index")
+
+
+def block_stat_path(device: str) -> Path:
+    return Path("/sys/class/block") / device / "stat"
+
+
+def block_size_path(device: str) -> Path:
+    return Path("/sys/class/block") / device / "size"
+
+
+def block_device_size(device: str) -> int | None:
+    try:
+        return int(block_size_path(device).read_text(encoding="utf-8").strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def is_whole_nvme_name(device: str) -> bool:
+    return re.fullmatch(r"nvme\d+(?:c\d+)?n\d+", device) is not None
+
+
+def candidate_counter_devices(requested_device: str) -> list[str]:
+    candidates: list[str] = []
+    requested_size = block_device_size(requested_device)
+    for path in sorted(Path("/sys/class/block").glob("nvme*")):
+        name = path.name
+        if not is_whole_nvme_name(name) or not block_stat_path(name).exists():
+            continue
+        if name == requested_device or requested_size is None or block_device_size(name) == requested_size:
+            candidates.append(name)
+    if requested_device not in candidates and block_stat_path(requested_device).exists():
+        candidates.insert(0, requested_device)
+    return candidates
+
+
+def read_block_stats_or_none(device: str) -> dict[str, int] | None:
+    try:
+        return read_block_stats(device)
+    except (FileNotFoundError, RuntimeError, ValueError):
+        return None
+
+
+def read_delta_score(before: dict[str, int] | None, after: dict[str, int] | None) -> tuple[int, int]:
+    if before is None or after is None:
+        return (0, 0)
+    read_ios = max(int(after["reads_completed"]) - int(before["reads_completed"]), 0)
+    read_sectors = max(int(after["sectors_read"]) - int(before["sectors_read"]), 0)
+    return (read_sectors, read_ios)
+
+
+def resolve_monitor_device(requested_device: str | None, index_prefix: str | Path) -> MonitorDeviceResolution:
+    if requested_device is None:
+        return MonitorDeviceResolution(None, None, "no_device", "could not infer a block device for the index prefix")
+    if not block_stat_path(requested_device).exists():
+        return MonitorDeviceResolution(requested_device, None, "invalid_device", f"missing {block_stat_path(requested_device)}")
+
+    disk_index_path = disk_index_file_for_prefix(index_prefix)
+    if not disk_index_path.exists():
+        return MonitorDeviceResolution(
+            requested_device,
+            None,
+            "unavailable_counter_static",
+            f"cannot run direct-read sanity check because {disk_index_path} is missing",
+        )
+
+    candidates = candidate_counter_devices(requested_device)
+    if not candidates:
+        return MonitorDeviceResolution(requested_device, None, "invalid_device", "no candidate block stat counters found")
+
+    before = {device: read_block_stats_or_none(device) for device in candidates}
+    count_4k = min(16_384, max(1, disk_index_path.stat().st_size // 4096))
+    command = [
+        "dd",
+        f"if={disk_index_path}",
+        "of=/dev/null",
+        "bs=4096",
+        f"count={count_4k}",
+        "iflag=direct",
+        "status=none",
+    ]
+    try:
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        return MonitorDeviceResolution(
+            requested_device,
+            None,
+            "unavailable_counter_static",
+            f"direct-read sanity check failed: {exc}",
+        )
+
+    after = {device: read_block_stats_or_none(device) for device in candidates}
+    scored = [(read_delta_score(before.get(device), after.get(device)), device) for device in candidates]
+    scored.sort(reverse=True)
+    (read_sectors, read_ios), effective_device = scored[0]
+    if read_sectors <= 0 and read_ios <= 0:
+        return MonitorDeviceResolution(
+            requested_device,
+            None,
+            "unavailable_counter_static",
+            "no candidate block counter changed during direct-read sanity check",
+            sanity_read_bytes=count_4k * 4096,
+        )
+    reason = "requested counter passed sanity check" if effective_device == requested_device else f"remapped static counter {requested_device} to active counter {effective_device}"
+    return MonitorDeviceResolution(
+        requested_device,
+        effective_device,
+        "ok",
+        reason,
+        sanity_read_bytes=count_4k * 4096,
+    )
+
+
 def read_block_stats(device: str) -> dict[str, int]:
-    stat_path = Path("/sys/class/block") / device / "stat"
+    stat_path = block_stat_path(device)
     fields = stat_path.read_text(encoding="utf-8").split()
     if len(fields) < 11:
         raise RuntimeError(f"unexpected stat payload for device {device}")
@@ -721,6 +870,15 @@ def summarize_monitor_samples(
             "max_disk_util_pct": None,
             "avg_await_ms": None,
             "max_await_ms": None,
+            "avg_read_await_ms": None,
+            "max_read_await_ms": None,
+            "avg_qd": None,
+            "max_qd": None,
+            "read_iops": None,
+            "read_mb_s": None,
+            "read_await_ms": None,
+            "await_ms": None,
+            "qdepth": None,
         }
 
     total_wall = 0.0
@@ -730,7 +888,9 @@ def summarize_monitor_samples(
     total_read_ios = 0.0
     total_write_ios = 0.0
     total_io_util_ms = 0.0
+    total_weighted_io_ms = 0.0
     total_io_wait_weight = 0.0
+    total_read_wait_ms = 0.0
     total_io_ops = 0.0
     max_cpu = 0.0
     max_read_mb_s = 0.0
@@ -739,6 +899,8 @@ def summarize_monitor_samples(
     max_write_iops = 0.0
     max_util = 0.0
     max_await = 0.0
+    max_read_await = 0.0
+    max_qd = 0.0
 
     for earlier, later in zip(samples, samples[1:]):
         dt = float(later["timestamp"] - earlier["timestamp"])
@@ -760,6 +922,7 @@ def summarize_monitor_samples(
         delta_reads = max(int(disk_b["reads_completed"]) - int(disk_a["reads_completed"]), 0)
         delta_writes = max(int(disk_b["writes_completed"]) - int(disk_a["writes_completed"]), 0)
         delta_io_ms = max(int(disk_b["io_ms"]) - int(disk_a["io_ms"]), 0)
+        delta_weighted_io_ms = max(int(disk_b["weighted_io_ms"]) - int(disk_a["weighted_io_ms"]), 0)
         delta_read_ms = max(int(disk_b["read_ms"]) - int(disk_a["read_ms"]), 0)
         delta_write_ms = max(int(disk_b["write_ms"]) - int(disk_a["write_ms"]), 0)
 
@@ -770,7 +933,9 @@ def summarize_monitor_samples(
         total_read_ios += delta_reads
         total_write_ios += delta_writes
         total_io_util_ms += delta_io_ms
+        total_weighted_io_ms += delta_weighted_io_ms
         total_io_wait_weight += delta_read_ms + delta_write_ms
+        total_read_wait_ms += delta_read_ms
         total_io_ops += delta_reads + delta_writes
 
         read_mb_s = read_mb / dt
@@ -778,13 +943,17 @@ def summarize_monitor_samples(
         read_iops = delta_reads / dt
         write_iops = delta_writes / dt
         util_pct = delta_io_ms / (dt * 10.0)
+        qd = delta_weighted_io_ms / (dt * 1000.0)
         await_ms = 0.0 if delta_reads + delta_writes == 0 else (delta_read_ms + delta_write_ms) / float(delta_reads + delta_writes)
+        read_await_ms = 0.0 if delta_reads == 0 else delta_read_ms / float(delta_reads)
         max_read_mb_s = max(max_read_mb_s, read_mb_s)
         max_write_mb_s = max(max_write_mb_s, write_mb_s)
         max_read_iops = max(max_read_iops, read_iops)
         max_write_iops = max(max_write_iops, write_iops)
         max_util = max(max_util, util_pct)
         max_await = max(max_await, await_ms)
+        max_read_await = max(max_read_await, read_await_ms)
+        max_qd = max(max_qd, qd)
 
     avg_cpu = None if total_wall == 0.0 else 100.0 * total_cpu_s / total_wall
     avg_read_mb_s = None if total_wall == 0.0 else total_read_mb / total_wall
@@ -793,35 +962,294 @@ def summarize_monitor_samples(
     avg_write_iops = None if total_wall == 0.0 else total_write_ios / total_wall
     avg_util = None if total_wall == 0.0 else total_io_util_ms / (total_wall * 10.0)
     avg_await = None if total_io_ops == 0.0 else total_io_wait_weight / total_io_ops
+    avg_read_await = None if total_read_ios == 0.0 else total_read_wait_ms / total_read_ios
+    avg_qd = None if total_wall == 0.0 else total_weighted_io_ms / (total_wall * 1000.0)
 
+    avg_read_iops_value = None if avg_read_iops is None else round(avg_read_iops, 6)
+    avg_read_mb_s_value = None if avg_read_mb_s is None else round(avg_read_mb_s, 6)
+    avg_await_value = None if avg_await is None else round(avg_await, 6)
+    avg_read_await_value = None if avg_read_await is None else round(avg_read_await, 6)
+    avg_qd_value = None if avg_qd is None else round(avg_qd, 6)
     return {
         "sample_count": len(samples),
         "device": samples[0].get("device"),
         "elapsed_s": round(total_wall, 6),
         "avg_cpu_pct": None if avg_cpu is None else round(avg_cpu, 6),
         "max_cpu_pct": None if total_wall == 0.0 else round(max_cpu, 6),
-        "avg_read_mb_s": None if avg_read_mb_s is None else round(avg_read_mb_s, 6),
+        "avg_read_mb_s": avg_read_mb_s_value,
         "max_read_mb_s": None if total_wall == 0.0 else round(max_read_mb_s, 6),
         "avg_write_mb_s": None if avg_write_mb_s is None else round(avg_write_mb_s, 6),
         "max_write_mb_s": None if total_wall == 0.0 else round(max_write_mb_s, 6),
-        "avg_read_iops": None if avg_read_iops is None else round(avg_read_iops, 6),
+        "avg_read_iops": avg_read_iops_value,
         "max_read_iops": None if total_wall == 0.0 else round(max_read_iops, 6),
         "avg_write_iops": None if avg_write_iops is None else round(avg_write_iops, 6),
         "max_write_iops": None if total_wall == 0.0 else round(max_write_iops, 6),
         "avg_disk_util_pct": None if avg_util is None else round(avg_util, 6),
         "max_disk_util_pct": None if total_wall == 0.0 else round(max_util, 6),
-        "avg_await_ms": None if avg_await is None else round(avg_await, 6),
+        "avg_await_ms": avg_await_value,
         "max_await_ms": None if total_wall == 0.0 else round(max_await, 6),
+        "avg_read_await_ms": avg_read_await_value,
+        "max_read_await_ms": None if total_wall == 0.0 else round(max_read_await, 6),
+        "avg_qd": avg_qd_value,
+        "max_qd": None if total_wall == 0.0 else round(max_qd, 6),
+        "read_iops": avg_read_iops_value,
+        "read_mb_s": avg_read_mb_s_value,
+        "read_await_ms": avg_read_await_value,
+        "await_ms": avg_await_value,
+        "qdepth": avg_qd_value,
+    }
+
+
+def invalidate_disk_metrics(summary: dict[str, Any], status: str, reason: str) -> dict[str, Any]:
+    updated = {**summary}
+    for field in DISK_METRIC_FIELDS:
+        updated[field] = None
+    updated["disk_metrics_status"] = status
+    updated["disk_metrics_reason"] = reason
+    return updated
+
+
+def add_disk_status(
+    summary: dict[str, Any],
+    resolution: MonitorDeviceResolution,
+    iostat_path: Path | None,
+    block_latency_path: Path | None,
+) -> dict[str, Any]:
+    if resolution.disk_metrics_status != "ok":
+        summary = invalidate_disk_metrics(summary, resolution.disk_metrics_status, resolution.reason)
+    else:
+        summary = {
+            **summary,
+            "disk_metrics_status": "ok",
+            "disk_metrics_reason": resolution.reason,
+        }
+    summary.update(
+        {
+            "requested_device": resolution.requested_device,
+            "effective_device": resolution.effective_device,
+            "disk_sanity_read_bytes": resolution.sanity_read_bytes,
+            "iostat_log": None if iostat_path is None else str(iostat_path),
+            "block_latency_log": None if block_latency_path is None else str(block_latency_path),
+            "block_latency_status": "unavailable_not_captured" if block_latency_path is not None else None,
+            "block_latency_p50_ms": None,
+            "block_latency_p95_ms": None,
+            "block_latency_p99_ms": None,
+            "block_latency_mean_ms": None,
+            "block_latency_count": None,
+            "block_latency_trace_dev": None,
+        }
+    )
+    return summary
+
+
+def start_iostat(device: str | None, sample_interval_s: float, iostat_path: Path | None) -> tuple[subprocess.Popen[Any] | None, Any | None]:
+    if device is None or iostat_path is None or shutil.which("iostat") is None:
+        return None, None
+    ensure_parent(iostat_path)
+    interval = max(1, int(round(sample_interval_s)))
+    handle = iostat_path.open("w", encoding="utf-8")
+    process = subprocess.Popen(
+        ["iostat", "-x", "-y", str(interval), device],
+        stdout=handle,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    return process, handle
+
+
+def stop_iostat(process: subprocess.Popen[Any] | None, handle: Any | None) -> None:
+    if process is not None and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+    if handle is not None:
+        handle.close()
+
+
+def sudo_noninteractive_available() -> bool:
+    if shutil.which("sudo") is None:
+        return False
+    return subprocess.run(["sudo", "-n", "true"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+
+
+def bpftrace_block_latency_script() -> str:
+    return "\n".join(
+        [
+            'tracepoint:block:block_rq_issue /args->rwbs == "R"/ {',
+            "  @start[args->dev, args->sector] = nsecs;",
+            "}",
+            "tracepoint:block:block_rq_complete /@start[args->dev, args->sector]/ {",
+            "  $lat_us = (nsecs - @start[args->dev, args->sector]) / 1000;",
+            "  @lat[args->dev] = lhist($lat_us, 0, 5000, 10);",
+            "  @count[args->dev] = count();",
+            "  @sum[args->dev] = sum($lat_us);",
+            "  delete(@start[args->dev, args->sector]);",
+            "}",
+            "",
+        ]
+    )
+
+
+def start_block_latency_trace(
+    resolution: MonitorDeviceResolution,
+    block_latency_path: Path | None,
+) -> tuple[subprocess.Popen[Any] | None, Any | None]:
+    if block_latency_path is None:
+        return None, None
+    ensure_parent(block_latency_path)
+    if resolution.disk_metrics_status != "ok":
+        block_latency_path.write_text(
+            f"BLOCK_LATENCY_STATUS unavailable_monitor_{resolution.disk_metrics_status}\n",
+            encoding="utf-8",
+        )
+        return None, None
+    if shutil.which("bpftrace") is None:
+        block_latency_path.write_text("BLOCK_LATENCY_STATUS unavailable_no_bpftrace\n", encoding="utf-8")
+        return None, None
+    if not sudo_noninteractive_available():
+        block_latency_path.write_text("BLOCK_LATENCY_STATUS unavailable_no_sudo\n", encoding="utf-8")
+        return None, None
+    script_path = block_latency_path.with_suffix(block_latency_path.suffix + ".bt")
+    script_path.write_text(bpftrace_block_latency_script(), encoding="utf-8")
+    handle = block_latency_path.open("w", encoding="utf-8")
+    process = subprocess.Popen(
+        ["sudo", "-n", "bpftrace", str(script_path)],
+        stdout=handle,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
+    time.sleep(0.8)
+    if process.poll() is not None:
+        handle.close()
+        return None, None
+    return process, handle
+
+
+def stop_block_latency_trace(process: subprocess.Popen[Any] | None, handle: Any | None) -> None:
+    if process is not None and process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGINT)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=5)
+    if handle is not None:
+        handle.close()
+
+
+def parse_block_latency_log(block_latency_path: Path | None) -> dict[str, Any]:
+    empty = {
+        "block_latency_status": None,
+        "block_latency_p50_ms": None,
+        "block_latency_p95_ms": None,
+        "block_latency_p99_ms": None,
+        "block_latency_mean_ms": None,
+        "block_latency_count": None,
+        "block_latency_trace_dev": None,
+    }
+    if block_latency_path is None:
+        return empty
+    if not block_latency_path.exists():
+        return {**empty, "block_latency_status": "unavailable_missing_log"}
+    text = block_latency_path.read_text(encoding="utf-8", errors="replace")
+    for line in text.splitlines():
+        if line.startswith("BLOCK_LATENCY_STATUS "):
+            return {**empty, "block_latency_status": line.split(None, 1)[1].strip()}
+
+    count_re = re.compile(r"@count\[(\d+)\]:\s+(\d+)")
+    sum_re = re.compile(r"@sum\[(\d+)\]:\s+(\d+)")
+    header_re = re.compile(r"@lat\[(\d+)\]:")
+    bucket_re = re.compile(r"\[\s*(\d+),\s*(\d+)\)\s+(\d+)\s+\|")
+    overflow_re = re.compile(r"\[\s*(\d+),\s*\.\.\.\)\s+(\d+)\s+\|")
+    counts: dict[str, int] = {}
+    sums: dict[str, int] = {}
+    buckets: dict[str, list[tuple[int, int, int]]] = {}
+    current_dev: str | None = None
+    for line in text.splitlines():
+        count_match = count_re.search(line)
+        if count_match:
+            counts[count_match.group(1)] = int(count_match.group(2))
+            current_dev = None
+            continue
+        sum_match = sum_re.search(line)
+        if sum_match:
+            sums[sum_match.group(1)] = int(sum_match.group(2))
+            current_dev = None
+            continue
+        header_match = header_re.search(line)
+        if header_match:
+            current_dev = header_match.group(1)
+            buckets.setdefault(current_dev, [])
+            continue
+        if current_dev is None:
+            continue
+        bucket_match = bucket_re.search(line)
+        if bucket_match:
+            lo = int(bucket_match.group(1))
+            hi = int(bucket_match.group(2))
+            count = int(bucket_match.group(3))
+            buckets[current_dev].append((lo, hi, count))
+            continue
+        overflow_match = overflow_re.search(line)
+        if overflow_match:
+            lo = int(overflow_match.group(1))
+            count = int(overflow_match.group(2))
+            buckets[current_dev].append((lo, lo, count))
+
+    if not counts and not buckets:
+        status = "unavailable_bpftrace_error" if "ERROR:" in text else "unavailable_no_events"
+        return {**empty, "block_latency_status": status}
+
+    def bucket_total(dev: str) -> int:
+        return counts.get(dev) or sum(item[2] for item in buckets.get(dev, []))
+
+    trace_dev = max(set(counts) | set(buckets), key=bucket_total)
+    total = bucket_total(trace_dev)
+    if total <= 0:
+        return {**empty, "block_latency_status": "unavailable_no_events", "block_latency_trace_dev": trace_dev}
+
+    def percentile_ms(pct: float) -> float | None:
+        seen = 0
+        target = max(1, int(np.ceil(total * pct)))
+        for lo, hi, count in sorted(buckets.get(trace_dev, [])):
+            seen += count
+            if seen >= target:
+                return round((hi if hi > lo else lo) / 1000.0, 6)
+        return None
+
+    mean_ms = None
+    if trace_dev in sums and counts.get(trace_dev):
+        mean_ms = round((sums[trace_dev] / counts[trace_dev]) / 1000.0, 6)
+    return {
+        "block_latency_status": "ok_bpftrace",
+        "block_latency_p50_ms": percentile_ms(0.50),
+        "block_latency_p95_ms": percentile_ms(0.95),
+        "block_latency_p99_ms": percentile_ms(0.99),
+        "block_latency_mean_ms": mean_ms,
+        "block_latency_count": total,
+        "block_latency_trace_dev": trace_dev,
     }
 
 
 def run_with_monitor(
     command: list[str],
     cwd: Path,
-    device: str | None,
+    resolution: MonitorDeviceResolution,
     sample_interval_s: float,
     stdout_path: Path,
     stderr_path: Path,
+    iostat_path: Path | None = None,
+    block_latency_path: Path | None = None,
 ) -> dict[str, Any]:
     log("+ " + shell_join(command))
     ensure_parent(stdout_path)
@@ -830,6 +1258,8 @@ def run_with_monitor(
     stdout_file = stdout_path.open("w", encoding="utf-8")
     stderr_file = stderr_path.open("w", encoding="utf-8")
     samples: list[dict[str, Any]] = []
+    iostat_process, iostat_handle = start_iostat(resolution.effective_device, sample_interval_s, iostat_path)
+    block_latency_process, block_latency_handle = start_block_latency_trace(resolution, block_latency_path)
     try:
         process = subprocess.Popen(
             command,
@@ -839,13 +1269,13 @@ def run_with_monitor(
             env={**os.environ, "PYTHONUNBUFFERED": "1"},
         )
         while True:
-            disk_sample = read_block_stats(device) if device is not None else None
+            disk_sample = read_block_stats(resolution.effective_device) if resolution.effective_device is not None else None
             samples.append(
                 {
                     "timestamp": time.monotonic(),
                     "cpu_ticks": sample_process_tree_cpu(process.pid),
                     "disk": disk_sample,
-                    "device": device,
+                    "device": resolution.effective_device,
                 }
             )
             if process.poll() is not None:
@@ -853,10 +1283,14 @@ def run_with_monitor(
             time.sleep(sample_interval_s)
         return_code = process.wait()
     finally:
+        stop_iostat(iostat_process, iostat_handle)
+        stop_block_latency_trace(block_latency_process, block_latency_handle)
         stdout_file.close()
         stderr_file.close()
 
     summary = summarize_monitor_samples(samples, clock_ticks)
+    summary = add_disk_status(summary, resolution, iostat_path, block_latency_path)
+    summary.update(parse_block_latency_log(block_latency_path))
     summary["returncode"] = return_code
     if return_code != 0:
         raise subprocess.CalledProcessError(return_code, command)
@@ -897,6 +1331,8 @@ def classify_selectivity(selectivity: float | None, low_threshold: float, high_t
 
 
 def infer_bottleneck(row: dict[str, Any], cpu_saturation_pct: float, disk_util_saturation_pct: float) -> str:
+    if row.get("disk_metrics_status") not in (None, "", "ok"):
+        return "inconclusive_monitor_invalid"
     cpu = row.get("avg_cpu_pct")
     disk_util = row.get("avg_disk_util_pct")
     read_mb_s = row.get("avg_read_mb_s")
@@ -1009,11 +1445,16 @@ def run_thread_sweep(args: argparse.Namespace) -> dict[str, Any]:
 
     bucket_filter = set(args.bucket or [])
     plan_entries, plan_defaults = load_bucket_plan(resolve_path(args.bucket_plan_json) if args.bucket_plan_json else None)
-    device = args.ssd_device or infer_block_device(Path(manifest["index_prefix"]))
-    if device is None:
+    requested_device = args.ssd_device or infer_block_device(Path(manifest["index_prefix"]))
+    if requested_device is None:
         log("[warn] could not infer block device; CPU monitoring will still run")
     else:
-        log(f"[info] monitor device={device}")
+        log(f"[info] requested monitor device={requested_device}")
+    resolution = resolve_monitor_device(requested_device, manifest["index_prefix"]) if not args.dry_run else MonitorDeviceResolution(requested_device, requested_device, "ok", "dry-run")
+    if resolution.disk_metrics_status == "ok":
+        log(f"[info] monitor device={resolution.effective_device} ({resolution.reason})")
+    else:
+        log(f"[warn] disk metrics unavailable: status={resolution.disk_metrics_status} reason={resolution.reason}")
 
     rows: list[dict[str, Any]] = []
     for bucket in manifest.get("buckets", []):
@@ -1034,6 +1475,8 @@ def run_thread_sweep(args: argparse.Namespace) -> dict[str, Any]:
             monitor_path = run_dir / "monitor.json"
             stdout_path = run_dir / "run.stdout.log"
             stderr_path = run_dir / "run.stderr.log"
+            iostat_path = run_dir / "iostat.log" if args.capture_iostat else None
+            block_latency_path = run_dir / "block_latency.log" if args.capture_block_latency else None
 
             if args.reuse_existing and result_path.exists() and monitor_path.exists():
                 log(f"reuse {run_dir}")
@@ -1097,10 +1540,12 @@ def run_thread_sweep(args: argparse.Namespace) -> dict[str, Any]:
             monitor_summary = run_with_monitor(
                 command,
                 REPO_ROOT,
-                device,
+                resolution,
                 args.sample_interval_s,
                 stdout_path,
                 stderr_path,
+                iostat_path=iostat_path,
+                block_latency_path=block_latency_path,
             )
             write_json(monitor_path, monitor_summary)
 
@@ -1131,7 +1576,10 @@ def run_thread_sweep(args: argparse.Namespace) -> dict[str, Any]:
         "dataset": args.dataset,
         "manifest": str(manifest_file),
         "run_root": str(run_root),
-        "device": device,
+        "requested_device": requested_device,
+        "device": resolution.effective_device,
+        "disk_metrics_status": resolution.disk_metrics_status,
+        "disk_metrics_reason": resolution.reason,
         "rows": len(rows),
         "aggregated_jsonl": str(aggregate_jsonl),
         "aggregated_csv": str(aggregate_csv),
@@ -1217,6 +1665,8 @@ def build_parser() -> argparse.ArgumentParser:
     sweep_parser.add_argument("--timeout", type=int, default=7200)
     sweep_parser.add_argument("--ssd-device")
     sweep_parser.add_argument("--sample-interval-s", type=float, default=DEFAULT_SAMPLE_INTERVAL_S)
+    sweep_parser.add_argument("--capture-iostat", action="store_true", help="Write per-run iostat -x logs next to monitor.json.")
+    sweep_parser.add_argument("--capture-block-latency", action="store_true", help="Write a per-run block latency status log; percentile capture is best-effort.")
     sweep_parser.add_argument("--reuse-existing", action="store_true")
     sweep_parser.add_argument("--dry-run", action="store_true")
 
