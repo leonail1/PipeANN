@@ -1,0 +1,9 @@
+avg_cpu_pct_mean,avg_disk_util_pct_mean,avg_read_mb_s_mean,dataset,evidence_counts,qps_max,qps_min,rows,selectivity_group
+387.00079999999997,0.0,0.0,fashion_mnist784,"{""cpu-bound-evidence"": 16}",1973.60791,388.907532,16,high
+478.22637191666666,0.0,0.0,fashion_mnist784,"{""cpu-bound-evidence"": 12}",5752.759277,1247.811279,12,low
+541.3015238125,0.0,0.0,gist960,"{""cpu-bound-evidence"": 16}",1490.062256,250.723541,16,high
+581.2687375833333,0.0,0.0,gist960,"{""cpu-bound-evidence"": 12}",6185.334961,720.684082,12,low
+660.0405475833333,0.0,0.0,glove100,"{""cpu-bound-evidence"": 12}",2364.980713,371.758148,12,high
+413.0817964166666,0.0,0.0,glove100,"{""cpu-bound-evidence"": 12}",3613.848389,691.278625,12,low
+749.18427625,0.0,0.0,yfcc10m,"{""cpu-bound-evidence"": 4}",1511.212646,270.539734,4,high
+372.2045686666667,0.0,0.0,yfcc10m,"{""cpu-bound-evidence"": 12}",2301.95752,267.465942,12,low

@@ -1,0 +1,9 @@
+{
+  "aggregated_csv": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/thread_sweep/aggregated_results.csv",
+  "aggregated_jsonl": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/thread_sweep/aggregated_results.jsonl",
+  "dataset": "yfcc10m",
+  "device": "nvme1n1",
+  "manifest": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/manifests/yfcc10m_real_target_manifest.json",
+  "rows": 28,
+  "run_root": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/thread_sweep"
+}

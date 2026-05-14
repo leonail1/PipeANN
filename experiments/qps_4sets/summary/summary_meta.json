@@ -1,0 +1,13 @@
+{
+  "bottleneck_summary_csv": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/summary/bottleneck_summary.csv",
+  "bottleneck_summary_json": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/summary/bottleneck_summary.json",
+  "datasets": [
+    "fashion_mnist784",
+    "gist960",
+    "glove100",
+    "yfcc10m"
+  ],
+  "formal_results_csv": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/summary/formal_results.csv",
+  "formal_results_jsonl": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/summary/formal_results.jsonl",
+  "rows": 136
+}

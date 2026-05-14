@@ -1,0 +1,90 @@
+[
+  {
+    "avg_cpu_pct_mean": 387.00079999999997,
+    "avg_disk_util_pct_mean": 0.0,
+    "avg_read_mb_s_mean": 0.0,
+    "dataset": "fashion_mnist784",
+    "evidence_counts": "{\"cpu-bound-evidence\": 16}",
+    "qps_max": 1973.60791,
+    "qps_min": 388.907532,
+    "rows": 16,
+    "selectivity_group": "high"
+  },
+  {
+    "avg_cpu_pct_mean": 478.22637191666666,
+    "avg_disk_util_pct_mean": 0.0,
+    "avg_read_mb_s_mean": 0.0,
+    "dataset": "fashion_mnist784",
+    "evidence_counts": "{\"cpu-bound-evidence\": 12}",
+    "qps_max": 5752.759277,
+    "qps_min": 1247.811279,
+    "rows": 12,
+    "selectivity_group": "low"
+  },
+  {
+    "avg_cpu_pct_mean": 541.3015238125,
+    "avg_disk_util_pct_mean": 0.0,
+    "avg_read_mb_s_mean": 0.0,
+    "dataset": "gist960",
+    "evidence_counts": "{\"cpu-bound-evidence\": 16}",
+    "qps_max": 1490.062256,
+    "qps_min": 250.723541,
+    "rows": 16,
+    "selectivity_group": "high"
+  },
+  {
+    "avg_cpu_pct_mean": 581.2687375833333,
+    "avg_disk_util_pct_mean": 0.0,
+    "avg_read_mb_s_mean": 0.0,
+    "dataset": "gist960",
+    "evidence_counts": "{\"cpu-bound-evidence\": 12}",
+    "qps_max": 6185.334961,
+    "qps_min": 720.684082,
+    "rows": 12,
+    "selectivity_group": "low"
+  },
+  {
+    "avg_cpu_pct_mean": 660.0405475833333,
+    "avg_disk_util_pct_mean": 0.0,
+    "avg_read_mb_s_mean": 0.0,
+    "dataset": "glove100",
+    "evidence_counts": "{\"cpu-bound-evidence\": 12}",
+    "qps_max": 2364.980713,
+    "qps_min": 371.758148,
+    "rows": 12,
+    "selectivity_group": "high"
+  },
+  {
+    "avg_cpu_pct_mean": 413.0817964166666,
+    "avg_disk_util_pct_mean": 0.0,
+    "avg_read_mb_s_mean": 0.0,
+    "dataset": "glove100",
+    "evidence_counts": "{\"cpu-bound-evidence\": 12}",
+    "qps_max": 3613.848389,
+    "qps_min": 691.278625,
+    "rows": 12,
+    "selectivity_group": "low"
+  },
+  {
+    "avg_cpu_pct_mean": 749.18427625,
+    "avg_disk_util_pct_mean": 0.0,
+    "avg_read_mb_s_mean": 0.0,
+    "dataset": "yfcc10m",
+    "evidence_counts": "{\"cpu-bound-evidence\": 4}",
+    "qps_max": 1511.212646,
+    "qps_min": 270.539734,
+    "rows": 4,
+    "selectivity_group": "high"
+  },
+  {
+    "avg_cpu_pct_mean": 372.2045686666667,
+    "avg_disk_util_pct_mean": 0.0,
+    "avg_read_mb_s_mean": 0.0,
+    "dataset": "yfcc10m",
+    "evidence_counts": "{\"cpu-bound-evidence\": 12}",
+    "qps_max": 2301.95752,
+    "qps_min": 267.465942,
+    "rows": 12,
+    "selectivity_group": "low"
+  }
+]
