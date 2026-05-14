@@ -834,6 +834,7 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   int DynamicSSDIndex<T, TagT>::insert(const T *point, const TagT &tag) {
+    std::shared_lock<std::shared_timed_mutex> recalibration_mutation_guard(hybrid_recalibration_mutation_lock_);
     if (flat_mode_) {
       std::unique_lock<std::shared_timed_mutex> lock(_merge_lock);
       journal->append(pipeann::TxType::kInsert, tag);
@@ -892,6 +893,7 @@ namespace pipeann {
       live_labels_by_id_.erase(static_cast<uint32_t>(target_id));
       live_point_count_.store(live_ids_by_tag_.size());
     }
+    maybe_mark_hybrid_recalibration_pending();
     return target_id;
   }
 
@@ -923,6 +925,9 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   void DynamicSSDIndex<T, TagT>::maybe_mark_hybrid_recalibration_pending() {
+    if (flat_mode_) {
+      return;
+    }
     if (hybrid_recalibration_state_.load() != HybridRecalibrationState::kIdle) {
       return;
     }
@@ -1058,6 +1063,11 @@ namespace pipeann {
         return false;
       }
       config = hybrid_recalibration_config_;
+    }
+
+    std::unique_lock<std::shared_timed_mutex> mutation_pause_lock(hybrid_recalibration_mutation_lock_);
+    if (!can_run_hybrid_recalibration_now()) {
+      return false;
     }
 
     std::unordered_map<uint32_t, std::vector<uint64_t>> label_bitsets_snapshot;
@@ -1217,6 +1227,7 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   int DynamicSSDIndex<T, TagT>::update_labels(const TagT &tag, const uint32_t *labels, uint32_t label_count) {
+    std::shared_lock<std::shared_timed_mutex> recalibration_mutation_guard(hybrid_recalibration_mutation_lock_);
     std::shared_lock<std::shared_timed_mutex> lock(_merge_lock);
 
     std::vector<uint32_t> normalized_labels;
@@ -1425,6 +1436,7 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   void DynamicSSDIndex<T, TagT>::lazy_delete(const TagT &tag) {
+    std::shared_lock<std::shared_timed_mutex> recalibration_mutation_guard(hybrid_recalibration_mutation_lock_);
     if (flat_mode_) {
       std::unique_lock<std::shared_timed_mutex> merge_guard(_merge_lock);
       if (flat_mode_) {
@@ -1489,6 +1501,7 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   void DynamicSSDIndex<T, TagT>::final_merge(const uint32_t &nthreads, const uint32_t &n_sampled_nbrs) {
+    std::shared_lock<std::shared_timed_mutex> recalibration_mutation_guard(hybrid_recalibration_mutation_lock_);
     foreground_counters_.active_high_priority_tasks.fetch_add(1);
     struct HighPriorityTaskGuard {
       DynamicSSDIndex<T, TagT> *owner = nullptr;

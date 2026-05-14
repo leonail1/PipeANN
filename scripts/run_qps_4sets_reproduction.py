@@ -482,6 +482,33 @@ def prepare_small_workload(
     run_hybrid(generate_args, stdout_path=generate_log, stderr_path=generate_log.with_suffix(".err.log"))
 
     summary_json = work_dir / "uniform_exact_selectivity_summary.json"
+    workload_summary = read_json(summary_json)
+    runtime_log = dataset_experiment_dir(experiment_root, spec.name) / "logs" / "prepare_label_runtime.log"
+    run_hybrid(
+        [
+            "prepare-index-prefix-for-labels",
+            "--source-prefix",
+            str(data_paths["index_prefix"]),
+            "--dest-prefix",
+            str(data_paths["index_prefix"]),
+            "--label-file",
+            str(workload_summary["base_labels"]),
+            "--base-bin",
+            str(data_paths["base_bin"]),
+            "--index-type",
+            spec.index_type,
+            "--selector-type",
+            "intersect",
+            "--similarity",
+            spec.similarity,
+            "--nbr-type",
+            "pq",
+            "--sidecar-mode",
+            "mixed",
+        ],
+        stdout_path=runtime_log,
+        stderr_path=runtime_log.with_suffix(".err.log"),
+    )
     manifest_args = [
         "build-manifest-from-summary",
         "--summary-json",
@@ -525,6 +552,7 @@ def prepare_yfcc_workloads(
     scan_log = paths["experiment_root"] / "logs" / "scan_single_label.log"
     generate_log = paths["experiment_root"] / "logs" / "generate_random_single_label.log"
     manifest_log = paths["experiment_root"] / "logs" / "build_manifest.log"
+    runtime_log = paths["experiment_root"] / "logs" / "prepare_label_runtime.log"
     paths["scan_dir"].mkdir(parents=True, exist_ok=True)
     paths["workload_dir"].mkdir(parents=True, exist_ok=True)
     paths["manifest_dir"].mkdir(parents=True, exist_ok=True)
@@ -568,6 +596,31 @@ def prepare_yfcc_workloads(
     run_hybrid(generate_args, stdout_path=generate_log, stderr_path=generate_log.with_suffix(".err.log"))
 
     workload_summary = paths["workload_dir"] / "random_single_label_workloads_summary.json"
+    run_hybrid(
+        [
+            "prepare-index-prefix-for-labels",
+            "--source-prefix",
+            str(paths["index_prefix"]),
+            "--dest-prefix",
+            str(paths["index_prefix"]),
+            "--label-file",
+            str(paths["base_labels"]),
+            "--base-bin",
+            str(paths["base_bin"]),
+            "--index-type",
+            YFCC_DATASET.index_type,
+            "--selector-type",
+            "intersect",
+            "--similarity",
+            YFCC_DATASET.similarity,
+            "--nbr-type",
+            "pq",
+            "--sidecar-mode",
+            "mixed",
+        ],
+        stdout_path=runtime_log,
+        stderr_path=runtime_log.with_suffix(".err.log"),
+    )
     full_manifest = paths["manifest_dir"] / "yfcc10m_real_full_manifest.json"
     run_hybrid(
         [

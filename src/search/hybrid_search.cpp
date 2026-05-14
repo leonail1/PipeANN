@@ -163,14 +163,8 @@ namespace pipeann {
 
     if (!choose_prefilter) {
       DenseBitsetSelector densebit_selector;
-      AbstractSelector *graph_selector = selector;
-      const void *graph_filter_data = filter_data;
-      if (meta_.label_size == 0) {
-        densebit_selector.bitset_words = &scratch.bitset_words;
-        densebit_selector.npoints = densebit_index_->header().npoints;
-        graph_selector = &densebit_selector;
-        graph_filter_data = nullptr;
-      }
+      densebit_selector.bitset_words = &scratch.bitset_words;
+      densebit_selector.npoints = densebit_index_->header().npoints;
       if (hybrid_stats != nullptr) {
         hybrid_stats->decision = calibrated_for_selector || force_graph_only
                                       ? HybridRouteDecision::kGraphOnly
@@ -178,7 +172,7 @@ namespace pipeann {
       }
       return finish_graph_path(calibrated_for_selector || force_graph_only ? HybridRouteDecision::kGraphOnly
                                                                            : HybridRouteDecision::kAutoGraphFallback,
-                               graph_selector, graph_filter_data);
+                               &densebit_selector, nullptr);
     }
 
     std::vector<uint32_t> candidate_ids;

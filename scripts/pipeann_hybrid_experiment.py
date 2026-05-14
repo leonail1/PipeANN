@@ -65,6 +65,9 @@ DEFAULT_UNIFORM_EXACT_PROBE_QUERY_COUNT = 5_000
 DEFAULT_CALIBRATION_QUERY_COUNT = 200
 DEFAULT_CALIBRATION_BLOCK_CANDIDATES = 16_384
 DEFAULT_CALIBRATION_MAX_SELECTIVITY = 0.1
+DEFAULT_TAU_CALIBRATION_SELECTIVITIES = (0.001, 0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 1.00)
+DEFAULT_TAU_CALIBRATION_QUERIES_PER_BUCKET = 100
+DEFAULT_TAU_CALIBRATION_SEED = 20260423
 INDEX_PREFIX_CLONE_SUFFIXES = (
     "_disk.index",
     "_disk.index.tags",
@@ -1154,6 +1157,71 @@ def write_densebit_sidecar_from_spmat(
     raise ValueError(f"unsupported sidecar mode: {sidecar_mode}")
 
 
+def format_selectivity_csv(values: Sequence[float]) -> str:
+    return ",".join(f"{float(value):.12g}" for value in values)
+
+
+def parse_csv_floats(value: str) -> list[float]:
+    items = [float(item.strip()) for item in value.split(",") if item.strip()]
+    if not items:
+        raise argparse.ArgumentTypeError("expected at least one comma-separated float")
+    return items
+
+
+def run_auto_tau_calibration(
+    *,
+    index_prefix: Path,
+    base_bin: Path,
+    index_type: str,
+    selector_type: str,
+    similarity: str,
+    nbr_type: str,
+    build_dir: Path,
+    threads: int,
+    beamwidth: int,
+    k: int,
+    mem_l: int,
+    search_l: int,
+    queries_per_bucket: int,
+    seed: int,
+    selectivities: Sequence[float],
+    log_path: Path | None,
+    timeout: int,
+) -> dict[str, Any]:
+    calibrate_binary = find_binary(build_dir, "calibrate_hybrid_threshold")
+    command = [
+        str(calibrate_binary),
+        index_type,
+        str(index_prefix),
+        str(threads),
+        str(beamwidth),
+        "--auto-selectivity",
+        str(base_bin),
+        str(k),
+        similarity,
+        nbr_type,
+        str(mem_l),
+        str(search_l),
+        selector_type,
+        str(queries_per_bucket),
+        str(seed),
+        format_selectivity_csv(selectivities),
+    ]
+    run_command(command, timeout=timeout, log_path=log_path)
+
+    meta_path = Path(f"{index_prefix}_hybrid.meta")
+    return {
+        "status": "ok",
+        "mode": "auto-selectivity",
+        "meta_path": str(meta_path),
+        "meta_bytes": int(meta_path.stat().st_size) if meta_path.exists() else 0,
+        "log_path": None if log_path is None else str(log_path),
+        "queries_per_bucket": int(queries_per_bucket),
+        "selectivities": [float(value) for value in selectivities],
+        "seed": int(seed),
+    }
+
+
 def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
     source_prefix = resolve_path(args.source_prefix)
     dest_prefix = resolve_path(args.dest_prefix)
@@ -1163,7 +1231,7 @@ def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
     require_file(disk_index_path, "source disk index")
     npoints, _, _ = read_spmat_header(label_path)
 
-    copied_paths = clone_index_prefix_files(source_prefix, dest_prefix)
+    copied_paths = [] if source_prefix == dest_prefix else clone_index_prefix_files(source_prefix, dest_prefix)
     sidecar_mode = str(args.sidecar_mode)
     sidecar_path = write_densebit_sidecar_from_spmat(
         label_path,
@@ -1178,6 +1246,32 @@ def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
     sidecar_summary = DenseBitsetSidecar.load(sidecar_path).build_summary()
 
     summary_path = resolve_path(args.summary_json) if args.summary_json else dest_prefix.parent / f"{dest_prefix.name}_label_runtime.json"
+    calibration_summary: dict[str, Any]
+    if args.skip_tau_calibration:
+        calibration_summary = {"status": "skipped"}
+    else:
+        if not args.base_bin:
+            raise ValueError("--base-bin is required unless --skip-tau-calibration is set")
+        calibration_log = summary_path.with_suffix(".tau_calibration.log")
+        calibration_summary = run_auto_tau_calibration(
+            index_prefix=dest_prefix,
+            base_bin=require_file(resolve_path(args.base_bin), "base bin"),
+            index_type=args.index_type,
+            selector_type=args.selector_type,
+            similarity=args.similarity,
+            nbr_type=args.nbr_type,
+            build_dir=resolve_path(args.build_dir),
+            threads=args.calibration_threads,
+            beamwidth=args.calibration_beamwidth,
+            k=args.calibration_k,
+            mem_l=args.calibration_mem_l,
+            search_l=args.calibration_l_search,
+            queries_per_bucket=args.calibration_queries_per_bucket,
+            seed=args.calibration_seed,
+            selectivities=args.calibration_selectivities,
+            log_path=calibration_log,
+            timeout=args.calibration_timeout,
+        )
     summary = {
         "format": "pipeann.hybrid.label_runtime.v2",
         "source_prefix": str(source_prefix),
@@ -1188,6 +1282,7 @@ def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
         "sidecar_path": str(sidecar_path),
         "sidecar_summary": sidecar_summary,
         "hybrid_meta_path": str(meta_path),
+        "tau_calibration": calibration_summary,
         "npoints": npoints,
     }
     with summary_path.open("w", encoding="utf-8") as writer:
@@ -1196,7 +1291,10 @@ def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
 
     print(f"[ok] cloned index prefix from {source_prefix} to {dest_prefix}")
     print(f"[ok] wrote {sidecar_mode} densebit sidecar to {sidecar_path}")
-    print(f"[ok] removed stale hybrid metadata at {meta_path}")
+    if calibration_summary.get("status") == "ok":
+        print(f"[ok] auto-calibrated tau_m metadata at {meta_path}")
+    else:
+        print(f"[ok] removed stale hybrid metadata at {meta_path}")
     print(f"[ok] wrote runtime summary to {summary_path}")
     return summary_path
 
@@ -2891,8 +2989,32 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_parser.add_argument("--source-prefix", required=True)
     runtime_parser.add_argument("--dest-prefix", required=True)
     runtime_parser.add_argument("--label-file", required=True)
-    runtime_parser.add_argument("--sidecar-mode", default="bitmap", choices=["bitmap", "mixed"])
+    runtime_parser.add_argument("--base-bin")
+    runtime_parser.add_argument("--index-type", default="uint8", choices=["float", "int8", "uint8"])
+    runtime_parser.add_argument("--selector-type", default="intersect", choices=["intersect", "subset", "range"])
+    runtime_parser.add_argument("--similarity", default="l2")
+    runtime_parser.add_argument("--nbr-type", default="pq")
+    runtime_parser.add_argument("--build-dir", default=str(DEFAULT_BUILD_DIR))
+    runtime_parser.add_argument("--sidecar-mode", default="mixed", choices=["bitmap", "mixed"])
     runtime_parser.add_argument("--summary-json")
+    runtime_parser.add_argument("--skip-tau-calibration", action="store_true")
+    runtime_parser.add_argument("--calibration-threads", type=int, default=16)
+    runtime_parser.add_argument("--calibration-beamwidth", type=int, default=4)
+    runtime_parser.add_argument("--calibration-k", type=int, default=10)
+    runtime_parser.add_argument("--calibration-mem-l", type=int, default=0)
+    runtime_parser.add_argument("--calibration-l-search", type=int, default=100)
+    runtime_parser.add_argument(
+        "--calibration-queries-per-bucket",
+        type=int,
+        default=DEFAULT_TAU_CALIBRATION_QUERIES_PER_BUCKET,
+    )
+    runtime_parser.add_argument("--calibration-seed", type=int, default=DEFAULT_TAU_CALIBRATION_SEED)
+    runtime_parser.add_argument(
+        "--calibration-selectivities",
+        type=parse_csv_floats,
+        default=list(DEFAULT_TAU_CALIBRATION_SELECTIVITIES),
+    )
+    runtime_parser.add_argument("--calibration-timeout", type=int, default=3600)
 
     sidecar_summary_parser = subparsers.add_parser(
         "summarize-densebit-sidecar",

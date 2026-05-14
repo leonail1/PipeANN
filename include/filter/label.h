@@ -41,6 +41,7 @@ namespace pipeann {
   // spmat format: x[i][j] != 0 means vector i contains label j.
   struct SpmatLabel : public AbstractLabel {
     std::vector<std::vector<uint32_t>> labels_;  // labels_[i] contains all labels for vector i
+    size_t nlabels_ = 0;                         // label universe size from spmat ncol
     size_t max_label_count_ = 0;                 // maximum number of labels per vector
     size_t label_size_ = 0;                      // maximum buffer size needed
 
@@ -58,6 +59,7 @@ namespace pipeann {
       reader.read((char *) &nnz, sizeof(int64_t));
 
       LOG(INFO) << "Loading spmat: nrow=" << nrow << ", ncol=" << ncol << ", nnz=" << nnz;
+      nlabels_ = static_cast<size_t>(ncol);
 
       // Read indptr: nrow+1 int64 values
       std::vector<int64_t> indptr(nrow + 1);
@@ -122,6 +124,10 @@ namespace pipeann {
 
     size_t label_size() override {
       return label_size_;
+    }
+
+    size_t nlabels() const {
+      return nlabels_;
     }
   };
 

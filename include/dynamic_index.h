@@ -25,7 +25,8 @@ namespace pipeann {
   };
 
   struct HybridForegroundBudget {
-    uint32_t active_queries_low_watermark = 1;
+    // Start/continue background calibration only when foreground search is below this count.
+    uint32_t active_queries_low_watermark = 15;
     uint32_t waiting_queries_low_watermark = 0;
   };
 
@@ -182,6 +183,7 @@ namespace pipeann {
     uint64_t live_label_universe_ = 0;
     HybridForegroundCounters foreground_counters_;
     HybridForegroundBudget foreground_budget_;
+    mutable std::shared_timed_mutex hybrid_recalibration_mutation_lock_;
     std::atomic<HybridRecalibrationState> hybrid_recalibration_state_{HybridRecalibrationState::kIdle};
     mutable std::mutex hybrid_recalibration_config_lock_;
     HybridRecalibrationConfig hybrid_recalibration_config_;

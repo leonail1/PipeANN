@@ -11,6 +11,7 @@ target_link_libraries(build_memory_index ${PROJECT_NAME})
 
 add_executable(calibrate_hybrid_threshold calibrate_hybrid_threshold.cpp)
 target_link_libraries(calibrate_hybrid_threshold ${PROJECT_NAME})
+add_dependencies(build_disk_index calibrate_hybrid_threshold)
 
 add_executable(hybrid_metadata_roundtrip hybrid_metadata_roundtrip.cpp)
 target_link_libraries(hybrid_metadata_roundtrip ${PROJECT_NAME})

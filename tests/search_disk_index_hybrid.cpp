@@ -308,8 +308,8 @@ int search_disk_index(int argc, char **argv) {
   }
 
   LOG(INFO) << "Hybrid runtime enabled: " << (index_ptr->hybrid_enabled() ? "true" : "false");
-  if (validate_auto_route && !index_ptr->hybrid_enabled()) {
-    LOG(ERROR) << "validate-auto requires hybrid runtime assets to be present and loadable";
+  if ((route_override == pipeann::HybridRouteOverride::kAuto || validate_auto_route) && !index_ptr->hybrid_enabled()) {
+    LOG(ERROR) << force_route << " requires calibrated hybrid runtime assets to be present and loadable";
     return -1;
   }
 
