@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "filter/densebit_index.h"
 #include "utils/index_build_utils.h"
 #include "utils/cached_io.h"
 #include "index.h"
@@ -18,47 +19,14 @@
 
 namespace pipeann {
   namespace {
-    constexpr uint64_t kDenseBitsetMagic = 0x54494245534E4544ULL;
-    constexpr uint64_t kDenseBitsetVersion = 1ULL;
-
-    struct DenseBitsetFileHeaderV1 {
-      uint64_t magic = kDenseBitsetMagic;
-      uint64_t version = kDenseBitsetVersion;
-      uint64_t npoints = 0;
-      uint64_t nlabels = 0;
-      uint64_t words_per_label = 0;
-      uint64_t nnz = 0;
-    };
-
-    uint64_t dense_words_per_label(uint64_t npoints) {
-      return DIV_ROUND_UP(npoints, 64ULL);
-    }
-
     std::string densebit_sidecar_path_from_output(const std::string &output_file) {
       static const std::string kDiskIndexSuffix = "_disk.index";
-      if (output_file.size() >= kDiskIndexSuffix.size()
-          && output_file.compare(output_file.size() - kDiskIndexSuffix.size(), kDiskIndexSuffix.size(),
-                                 kDiskIndexSuffix) == 0) {
+      if (output_file.size() >= kDiskIndexSuffix.size() &&
+          output_file.compare(output_file.size() - kDiskIndexSuffix.size(), kDiskIndexSuffix.size(),
+                              kDiskIndexSuffix) == 0) {
         return output_file.substr(0, output_file.size() - kDiskIndexSuffix.size()) + "_labels.densebit";
       }
       return output_file + "_labels.densebit";
-    }
-
-    void write_all_or_crash(int fd, const void *buffer, size_t bytes, const std::string &path) {
-      const char *cursor = static_cast<const char *>(buffer);
-      size_t remaining = bytes;
-      while (remaining > 0) {
-        ssize_t written = ::write(fd, cursor, remaining);
-        if (written < 0) {
-          if (errno == EINTR) {
-            continue;
-          }
-          LOG(ERROR) << "Failed to write densebit sidecar " << path << ": " << std::strerror(errno);
-          crash();
-        }
-        cursor += written;
-        remaining -= static_cast<size_t>(written);
-      }
     }
 
     void build_densebit_sidecar(const std::string &label_source_file, uint64_t expected_npoints,
@@ -86,8 +54,10 @@ namespace pipeann {
       std::vector<int64_t> indptr(static_cast<size_t>(nrow) + 1);
       std::vector<int32_t> indices(static_cast<size_t>(nnz));
       std::vector<float> data(static_cast<size_t>(nnz));
-      reader.read(reinterpret_cast<char *>(indptr.data()), static_cast<std::streamsize>(indptr.size() * sizeof(int64_t)));
-      reader.read(reinterpret_cast<char *>(indices.data()), static_cast<std::streamsize>(indices.size() * sizeof(int32_t)));
+      reader.read(reinterpret_cast<char *>(indptr.data()),
+                  static_cast<std::streamsize>(indptr.size() * sizeof(int64_t)));
+      reader.read(reinterpret_cast<char *>(indices.data()),
+                  static_cast<std::streamsize>(indices.size() * sizeof(int32_t)));
       reader.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(data.size() * sizeof(float)));
       if (!reader.good()) {
         LOG(ERROR) << "Failed to read complete spmat payload from " << label_source_file;
@@ -95,14 +65,7 @@ namespace pipeann {
       }
 
       const uint64_t nlabels = static_cast<uint64_t>(ncol);
-      const uint64_t words_per_label = dense_words_per_label(expected_npoints);
-      if (nlabels > 0 && words_per_label > std::numeric_limits<size_t>::max() / nlabels) {
-        LOG(ERROR) << "Densebit sidecar payload would overflow addressable memory for " << label_source_file;
-        crash();
-      }
-
-      std::vector<uint64_t> payload(static_cast<size_t>(nlabels * words_per_label), 0ULL);
-      uint64_t kept_nnz = 0;
+      std::vector<std::vector<uint32_t>> labels_by_point(static_cast<size_t>(expected_npoints));
       for (int64_t row = 0; row < nrow; ++row) {
         const int64_t row_begin = indptr[static_cast<size_t>(row)];
         const int64_t row_end = indptr[static_cast<size_t>(row) + 1];
@@ -110,8 +73,8 @@ namespace pipeann {
           LOG(ERROR) << "Invalid indptr range in label source file: " << label_source_file;
           crash();
         }
-        const uint64_t word_idx = static_cast<uint64_t>(row) >> 6;
-        const uint64_t bit_mask = 1ULL << (static_cast<uint64_t>(row) & 63ULL);
+        auto &row_labels = labels_by_point[static_cast<size_t>(row)];
+        row_labels.reserve(static_cast<size_t>(row_end - row_begin));
         for (int64_t idx = row_begin; idx < row_end; ++idx) {
           if (data[static_cast<size_t>(idx)] == 0.0f) {
             continue;
@@ -121,41 +84,15 @@ namespace pipeann {
             LOG(ERROR) << "Label id " << label_id << " is out of range for densebit sidecar build";
             crash();
           }
-          payload[static_cast<size_t>(label_id) * static_cast<size_t>(words_per_label) + static_cast<size_t>(word_idx)] |= bit_mask;
-          ++kept_nnz;
+          row_labels.push_back(static_cast<uint32_t>(label_id));
         }
       }
 
-      DenseBitsetFileHeaderV1 header;
-      header.npoints = expected_npoints;
-      header.nlabels = nlabels;
-      header.words_per_label = words_per_label;
-      header.nnz = kept_nnz;
-
       const std::string sidecar_path = densebit_sidecar_path_from_output(output_file);
-      const std::string tmp_path = sidecar_path + ".tmp";
-      const int fd = ::open(tmp_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-      if (fd < 0) {
-        LOG(ERROR) << "Failed to open densebit temp file " << tmp_path << ": " << std::strerror(errno);
-        crash();
-      }
-
-      write_all_or_crash(fd, &header, sizeof(header), tmp_path);
-      if (!payload.empty()) {
-        write_all_or_crash(fd, payload.data(), payload.size() * sizeof(uint64_t), tmp_path);
-      }
-      if (::fsync(fd) != 0) {
-        const int saved_errno = errno;
-        ::close(fd);
-        LOG(ERROR) << "Failed to fsync densebit temp file " << tmp_path << ": " << std::strerror(saved_errno);
-        crash();
-      }
-      if (::close(fd) != 0) {
-        LOG(ERROR) << "Failed to close densebit temp file " << tmp_path << ": " << std::strerror(errno);
-        crash();
-      }
-      if (::rename(tmp_path.c_str(), sidecar_path.c_str()) != 0) {
-        LOG(ERROR) << "Failed to publish densebit sidecar " << sidecar_path << ": " << std::strerror(errno);
+      try {
+        DenseBitsetIndex::write_atomically(sidecar_path, expected_npoints, nlabels, labels_by_point);
+      } catch (const std::exception &e) {
+        LOG(ERROR) << "Failed to build densebit sidecar " << sidecar_path << ": " << e.what();
         crash();
       }
       LOG(INFO) << "Densebit sidecar written to " << sidecar_path;
@@ -436,8 +373,7 @@ namespace pipeann {
   // mem_index_file, and the entire disk index will be in output_file.
   template<typename T, typename TagT>
   void create_disk_layout(const std::string &mem_index_file, const std::string &base_file, const std::string &tag_file,
-                          const std::string &output_file, AbstractLabel *label,
-                          const std::string &label_source_file) {
+                          const std::string &output_file, AbstractLabel *label, const std::string &label_source_file) {
     constexpr uint64_t kBlkSize = 64 * 1024 * 1024;
 
     // Open input files

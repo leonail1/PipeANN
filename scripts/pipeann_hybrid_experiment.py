@@ -76,8 +76,26 @@ INDEX_PREFIX_CLONE_SUFFIXES = (
 BIN_HEADER = struct.Struct("<ii")
 SPMAT_HEADER = struct.Struct("<qqq")
 DENSEBIT_HEADER = struct.Struct("<QQQQQQ")
+DENSEBIT_HEADER_V2 = struct.Struct("<QQQQQQQQQQQQ")
+DENSEBIT_V2_ENTRY = struct.Struct("<QQQHHI")
+DENSEBIT_V2_ENTRY_DTYPE = np.dtype(
+    [
+        ("payload_offset", "<u8"),
+        ("payload_size", "<u8"),
+        ("candidate_count", "<u8"),
+        ("encoding", "<u2"),
+        ("reserved16", "<u2"),
+        ("reserved32", "<u4"),
+    ]
+)
 UINT64_ALL_ONES = np.uint64(0xFFFFFFFFFFFFFFFF)
 PREFILTER_RERANK_ENV = "PIPEANN_PREFILTER_RERANK_L"
+DENSEBIT_MAGIC = 0x54494245534E4544
+DENSEBIT_VERSION_BITMAP = 1
+DENSEBIT_VERSION_MIXED = 2
+DENSEBIT_ENCODING_EMPTY = 0
+DENSEBIT_ENCODING_BITMAP = 1
+DENSEBIT_ENCODING_POSTING = 2
 
 
 def configure_stdio() -> None:
@@ -179,35 +197,132 @@ class SpmatMatrix:
 @dataclass
 class DenseBitsetSidecar:
     path: Path
+    version: int
     npoints: int
     nlabels: int
     words_per_label: int
     nnz: int
-    words: np.memmap
+    words: np.memmap | None = None
+    mapped_bytes: np.memmap | None = None
+    label_entries: np.ndarray | None = None
+    payload_offset: int = 0
+    posting_threshold: int = 0
+    dense_label_count: int = 0
+    sparse_label_count: int = 0
 
     @classmethod
     def load(cls, path: Path) -> "DenseBitsetSidecar":
+        sidecar_bytes = path.stat().st_size
         with path.open("rb") as reader:
             header = reader.read(DENSEBIT_HEADER.size)
             if len(header) != DENSEBIT_HEADER.size:
                 raise ValueError(f"invalid densebit header: {path}")
             magic, version, npoints, nlabels, words_per_label, nnz = DENSEBIT_HEADER.unpack(header)
-        if version != 1:
-            raise ValueError(f"unsupported densebit version {version}: {path}")
-        words = np.memmap(
-            path,
-            mode="r",
-            dtype=np.uint64,
-            offset=DENSEBIT_HEADER.size,
-            shape=(int(nlabels), int(words_per_label)),
-        )
+            if magic != DENSEBIT_MAGIC:
+                raise ValueError(f"invalid densebit magic: {path}")
+            if version == DENSEBIT_VERSION_BITMAP:
+                expected_bytes = DENSEBIT_HEADER.size + int(nlabels) * int(words_per_label) * np.dtype(np.uint64).itemsize
+                if sidecar_bytes != expected_bytes:
+                    raise ValueError(f"densebit bitmap payload size mismatch: {path}")
+                words = np.memmap(
+                    path,
+                    mode="r",
+                    dtype=np.uint64,
+                    offset=DENSEBIT_HEADER.size,
+                    shape=(int(nlabels), int(words_per_label)),
+                )
+                return cls(
+                    path=path,
+                    version=int(version),
+                    npoints=int(npoints),
+                    nlabels=int(nlabels),
+                    words_per_label=int(words_per_label),
+                    nnz=int(nnz),
+                    words=words,
+                )
+
+            if version != DENSEBIT_VERSION_MIXED:
+                raise ValueError(f"unsupported densebit version {version}: {path}")
+
+            reader.seek(0)
+            raw_header = reader.read(DENSEBIT_HEADER_V2.size)
+            if len(raw_header) != DENSEBIT_HEADER_V2.size:
+                raise ValueError(f"invalid densebit v2 header: {path}")
+            (
+                _,
+                _,
+                _,
+                _,
+                _,
+                _,
+                label_entry_offset,
+                payload_offset,
+                posting_threshold,
+                dense_label_count,
+                sparse_label_count,
+                _,
+            ) = DENSEBIT_HEADER_V2.unpack(raw_header)
+
+            entry_bytes = int(nlabels) * DENSEBIT_V2_ENTRY.size
+            if (
+                label_entry_offset < DENSEBIT_HEADER_V2.size
+                or label_entry_offset > sidecar_bytes
+                or payload_offset > sidecar_bytes
+                or label_entry_offset + entry_bytes > payload_offset
+            ):
+                raise ValueError(f"densebit v2 directory layout mismatch: {path}")
+
+            reader.seek(int(label_entry_offset))
+            directory = reader.read(entry_bytes)
+            if len(directory) != entry_bytes:
+                raise ValueError(f"incomplete densebit v2 directory: {path}")
+
+        label_entries = np.frombuffer(directory, dtype=DENSEBIT_V2_ENTRY_DTYPE, count=int(nlabels)).copy()
+        payload_bytes = sidecar_bytes - int(payload_offset)
+        dense_labels = 0
+        sparse_labels = 0
+        for entry in label_entries:
+            entry_offset = int(entry["payload_offset"])
+            entry_size = int(entry["payload_size"])
+            candidate_count = int(entry["candidate_count"])
+            encoding = int(entry["encoding"])
+            if entry_offset > payload_bytes or entry_size > payload_bytes - entry_offset:
+                raise ValueError(f"densebit v2 payload range mismatch: {path}")
+            if encoding == DENSEBIT_ENCODING_EMPTY:
+                if entry_size != 0 or candidate_count != 0:
+                    raise ValueError(f"densebit v2 empty entry mismatch: {path}")
+                continue
+            if encoding == DENSEBIT_ENCODING_BITMAP:
+                expected_size = int(words_per_label) * np.dtype(np.uint64).itemsize
+                if entry_size != expected_size:
+                    raise ValueError(f"densebit v2 bitmap payload size mismatch: {path}")
+                dense_labels += 1
+                continue
+            if encoding == DENSEBIT_ENCODING_POSTING:
+                expected_size = candidate_count * np.dtype(np.uint32).itemsize
+                if entry_size != expected_size:
+                    raise ValueError(f"densebit v2 posting payload size mismatch: {path}")
+                sparse_labels += 1
+                continue
+            raise ValueError(f"densebit v2 encoding mismatch: {path}")
+
+        if dense_labels != int(dense_label_count) or sparse_labels != int(sparse_label_count):
+            raise ValueError(f"densebit v2 encoding counts mismatch: {path}")
+
+        mapped_bytes = np.memmap(path, mode="r", dtype=np.uint8)
         return cls(
             path=path,
+            version=int(version),
             npoints=int(npoints),
             nlabels=int(nlabels),
             words_per_label=int(words_per_label),
             nnz=int(nnz),
-            words=words,
+            mapped_bytes=mapped_bytes,
+            label_entries=label_entries,
+            payload_offset=int(payload_offset),
+            posting_threshold=int(posting_threshold),
+            dense_label_count=int(dense_label_count),
+            sparse_label_count=int(sparse_label_count),
         )
 
     @property
@@ -217,10 +332,78 @@ class DenseBitsetSidecar:
             return UINT64_ALL_ONES
         return np.uint64((1 << remainder) - 1)
 
-    def single_label_candidate_count(self, label: int) -> int:
+    def _require_label(self, label: int) -> None:
         if label < 0 or label >= self.nlabels:
             raise ValueError(f"label {label} out of range for densebit sidecar")
-        scratch = np.array(self.words[label], copy=True)
+
+    def _v2_entry(self, label: int) -> np.void:
+        if self.label_entries is None:
+            raise ValueError(f"densebit sidecar does not expose v2 entries: {self.path}")
+        return self.label_entries[label]
+
+    def label_encoding(self, label: int) -> str:
+        self._require_label(label)
+        if self.version == DENSEBIT_VERSION_BITMAP:
+            return "bitmap"
+        encoding = int(self._v2_entry(label)["encoding"])
+        if encoding == DENSEBIT_ENCODING_EMPTY:
+            return "empty"
+        if encoding == DENSEBIT_ENCODING_BITMAP:
+            return "bitmap"
+        if encoding == DENSEBIT_ENCODING_POSTING:
+            return "posting"
+        raise ValueError(f"unsupported densebit encoding {encoding}: {self.path}")
+
+    def _posting_ids(self, label: int) -> np.ndarray:
+        entry = self._v2_entry(label)
+        candidate_count = int(entry["candidate_count"])
+        if candidate_count == 0:
+            return np.empty(0, dtype=np.uint32)
+        if self.mapped_bytes is None:
+            raise ValueError(f"densebit sidecar does not expose payload bytes: {self.path}")
+        file_offset = self.payload_offset + int(entry["payload_offset"])
+        return np.frombuffer(self.mapped_bytes, dtype=np.uint32, count=candidate_count, offset=file_offset)
+
+    def _posting_bitset(self, label: int) -> np.ndarray:
+        scratch = np.zeros(self.words_per_label, dtype=np.uint64)
+        for point_id in self._posting_ids(label).tolist():
+            word_index = point_id // 64
+            bit_index = point_id % 64
+            scratch[word_index] |= np.uint64(1) << np.uint64(bit_index)
+        if scratch.size > 0:
+            scratch[-1] &= self.tail_mask
+        return scratch
+
+    def _bitmap_words(self, label: int) -> np.ndarray:
+        if self.version == DENSEBIT_VERSION_BITMAP:
+            if self.words is None:
+                raise ValueError(f"densebit sidecar does not expose bitmap words: {self.path}")
+            return np.array(self.words[label], copy=True)
+
+        entry = self._v2_entry(label)
+        if self.mapped_bytes is None:
+            raise ValueError(f"densebit sidecar does not expose payload bytes: {self.path}")
+        file_offset = self.payload_offset + int(entry["payload_offset"])
+        return np.frombuffer(self.mapped_bytes, dtype=np.uint64, count=self.words_per_label, offset=file_offset).copy()
+
+    def _label_bitset(self, label: int) -> np.ndarray:
+        self._require_label(label)
+        if self.version == DENSEBIT_VERSION_BITMAP:
+            return self._bitmap_words(label)
+        encoding = int(self._v2_entry(label)["encoding"])
+        if encoding == DENSEBIT_ENCODING_EMPTY:
+            return np.zeros(self.words_per_label, dtype=np.uint64)
+        if encoding == DENSEBIT_ENCODING_BITMAP:
+            return self._bitmap_words(label)
+        if encoding == DENSEBIT_ENCODING_POSTING:
+            return self._posting_bitset(label)
+        raise ValueError(f"unsupported densebit encoding {encoding}: {self.path}")
+
+    def single_label_candidate_count(self, label: int) -> int:
+        self._require_label(label)
+        if self.version == DENSEBIT_VERSION_MIXED:
+            return int(self._v2_entry(label)["candidate_count"])
+        scratch = self._bitmap_words(label)
         if scratch.size > 0:
             scratch[-1] &= self.tail_mask
         return popcount_u64(scratch)
@@ -235,9 +418,9 @@ class DenseBitsetSidecar:
                 return scratch
             if any(label < 0 or label >= self.nlabels for label in normalized):
                 return np.zeros(self.words_per_label, dtype=np.uint64)
-            scratch = np.array(self.words[normalized[0]], copy=True)
+            scratch = self._label_bitset(normalized[0])
             for label in normalized[1:]:
-                np.bitwise_and(scratch, self.words[label], out=scratch)
+                np.bitwise_and(scratch, self._label_bitset(label), out=scratch)
         elif selector_type == "intersect":
             if not normalized:
                 return np.zeros(self.words_per_label, dtype=np.uint64)
@@ -245,7 +428,7 @@ class DenseBitsetSidecar:
             for label in normalized:
                 if label < 0 or label >= self.nlabels:
                     continue
-                np.bitwise_or(scratch, self.words[label], out=scratch)
+                np.bitwise_or(scratch, self._label_bitset(label), out=scratch)
         elif selector_type == "range":
             if not normalized:
                 return np.zeros(self.words_per_label, dtype=np.uint64)
@@ -257,7 +440,7 @@ class DenseBitsetSidecar:
             high = min(high, self.nlabels - 1)
             scratch = np.zeros(self.words_per_label, dtype=np.uint64)
             for label in range(low, high + 1):
-                np.bitwise_or(scratch, self.words[label], out=scratch)
+                np.bitwise_or(scratch, self._label_bitset(label), out=scratch)
         else:
             raise ValueError(f"unsupported selector_type: {selector_type}")
 
@@ -284,6 +467,84 @@ class DenseBitsetSidecar:
             return np.empty(0, dtype=np.uint32)
         return np.asarray(ids, dtype=np.uint32)
 
+    def build_summary(self) -> dict[str, Any]:
+        sidecar_bytes = self.path.stat().st_size
+        header_bytes = DENSEBIT_HEADER.size if self.version == DENSEBIT_VERSION_BITMAP else DENSEBIT_HEADER_V2.size
+        payload_offset = DENSEBIT_HEADER.size if self.version == DENSEBIT_VERSION_BITMAP else self.payload_offset
+        label_directory_bytes = 0 if self.version == DENSEBIT_VERSION_BITMAP else self.nlabels * DENSEBIT_V2_ENTRY.size
+        directory_padding_bytes = 0 if self.version == DENSEBIT_VERSION_BITMAP else payload_offset - (header_bytes + label_directory_bytes)
+
+        if self.version == DENSEBIT_VERSION_BITMAP:
+            bitmap_payload_bytes = self.nlabels * self.words_per_label * np.dtype(np.uint64).itemsize
+            posting_payload_bytes = 0
+            payload_bytes = sidecar_bytes - payload_offset
+            payload_padding_bytes = payload_bytes - bitmap_payload_bytes
+            dense_label_count: int | None = None
+            sparse_label_count: int | None = None
+        else:
+            if self.label_entries is None:
+                raise ValueError(f"densebit sidecar does not expose v2 entries: {self.path}")
+            bitmap_mask = self.label_entries["encoding"] == DENSEBIT_ENCODING_BITMAP
+            posting_mask = self.label_entries["encoding"] == DENSEBIT_ENCODING_POSTING
+            bitmap_payload_bytes = int(self.label_entries["payload_size"][bitmap_mask].sum(dtype=np.uint64))
+            posting_payload_bytes = int(self.label_entries["payload_size"][posting_mask].sum(dtype=np.uint64))
+            payload_bytes = sidecar_bytes - payload_offset
+            payload_padding_bytes = payload_bytes - bitmap_payload_bytes - posting_payload_bytes
+            dense_label_count = self.dense_label_count
+            sparse_label_count = self.sparse_label_count
+
+        return {
+            "path": str(self.path),
+            "version": int(self.version),
+            "sidecar_mode": "bitmap" if self.version == DENSEBIT_VERSION_BITMAP else "mixed",
+            "sidecar_bytes": int(sidecar_bytes),
+            "header_bytes": int(header_bytes),
+            "label_directory_bytes": int(label_directory_bytes),
+            "directory_padding_bytes": int(directory_padding_bytes),
+            "payload_offset": int(payload_offset),
+            "payload_bytes": int(payload_bytes),
+            "payload_padding_bytes": int(payload_padding_bytes),
+            "bitmap_payload_bytes": int(bitmap_payload_bytes),
+            "posting_payload_bytes": int(posting_payload_bytes),
+            "npoints": int(self.npoints),
+            "nlabels": int(self.nlabels),
+            "words_per_label": int(self.words_per_label),
+            "nnz": int(self.nnz),
+            "bytes_per_point": 0.0 if self.npoints == 0 else float(sidecar_bytes / self.npoints),
+            "bytes_per_nonzero": 0.0 if self.nnz == 0 else float(sidecar_bytes / self.nnz),
+            "posting_threshold": None if self.version == DENSEBIT_VERSION_BITMAP else int(self.posting_threshold),
+            "dense_label_count": dense_label_count,
+            "sparse_label_count": sparse_label_count,
+            "empty_label_count": None if dense_label_count is None or sparse_label_count is None else int(self.nlabels - dense_label_count - sparse_label_count),
+        }
+
+    def iter_label_summaries(self) -> Sequence[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        payload_base_offset = DENSEBIT_HEADER.size if self.version == DENSEBIT_VERSION_BITMAP else self.payload_offset
+        for label_id in range(self.nlabels):
+            if self.version == DENSEBIT_VERSION_BITMAP:
+                payload_offset = label_id * self.words_per_label * np.dtype(np.uint64).itemsize
+                payload_size = self.words_per_label * np.dtype(np.uint64).itemsize
+                candidate_count = self.single_label_candidate_count(label_id)
+                encoding = "bitmap"
+            else:
+                entry = self._v2_entry(label_id)
+                payload_offset = int(entry["payload_offset"])
+                payload_size = int(entry["payload_size"])
+                candidate_count = int(entry["candidate_count"])
+                encoding = self.label_encoding(label_id)
+            records.append(
+                {
+                    "label_id": int(label_id),
+                    "encoding": encoding,
+                    "candidate_count": int(candidate_count),
+                    "payload_offset": int(payload_offset),
+                    "file_offset": int(payload_base_offset + payload_offset),
+                    "payload_size": int(payload_size),
+                }
+            )
+        return records
+
 
 def popcount_u64(values: np.ndarray) -> int:
     if values.size == 0:
@@ -293,6 +554,19 @@ def popcount_u64(values: np.ndarray) -> int:
     scratch = (scratch & np.uint64(0x3333333333333333)) + ((scratch >> np.uint64(2)) & np.uint64(0x3333333333333333))
     scratch = (scratch + (scratch >> np.uint64(4))) & np.uint64(0x0F0F0F0F0F0F0F0F)
     return int((((scratch * np.uint64(0x0101010101010101)) >> np.uint64(56))).sum(dtype=np.uint64))
+
+
+def align_up(value: int, alignment: int) -> int:
+    if alignment <= 1:
+        return int(value)
+    remainder = value % alignment
+    if remainder == 0:
+        return int(value)
+    return int(value + (alignment - remainder))
+
+
+def posting_threshold_for_words(words_per_label: int) -> int:
+    return int(words_per_label * 2)
 
 
 def resolve_path(path_str: str) -> Path:
@@ -680,17 +954,30 @@ def clone_index_prefix_files(source_prefix: Path, dest_prefix: Path) -> list[Pat
     return copied_paths
 
 
-def write_densebit_sidecar_from_spmat(label_path: Path, sidecar_path: Path, expected_npoints: int) -> Path:
-    matrix = SpmatMatrix.load(label_path)
-    if matrix.nrow != expected_npoints:
-        raise ValueError(
-            f"label row count mismatch: {label_path} has {matrix.nrow}, expected {expected_npoints}"
-        )
+def compute_spmat_label_counts(matrix: SpmatMatrix, chunk_nnz: int = 10_000_000) -> np.ndarray:
+    counts = np.zeros(int(matrix.ncol), dtype=np.uint64)
+    total_nnz = int(matrix.indices.size)
+    for start in range(0, total_nnz, chunk_nnz):
+        end = min(start + chunk_nnz, total_nnz)
+        mask = matrix.data[start:end] != 0.0
+        if not np.any(mask):
+            continue
+        chunk_counts = np.bincount(matrix.indices[start:end][mask], minlength=int(matrix.ncol))
+        counts += chunk_counts.astype(np.uint64, copy=False)
+    return counts
 
+
+def write_bitmap_densebit_sidecar(matrix: SpmatMatrix, sidecar_path: Path, expected_npoints: int) -> Path:
     nlabels = int(matrix.ncol)
     words_per_label = (expected_npoints + 63) // 64
-    payload = np.zeros((nlabels, words_per_label), dtype=np.uint64)
-    kept_nnz = 0
+    label_counts = compute_spmat_label_counts(matrix)
+    kept_nnz = int(label_counts.sum(dtype=np.uint64))
+    posting_payload = np.zeros(kept_nnz, dtype=np.uint32)
+    label_offsets = np.zeros(nlabels + 1, dtype=np.uint64)
+    if nlabels > 0:
+        np.cumsum(label_counts, dtype=np.uint64, out=label_offsets[1:])
+    write_offsets = label_offsets[:-1].copy()
+
     for row_id in range(matrix.nrow):
         start = int(matrix.indptr[row_id])
         end = int(matrix.indptr[row_id + 1])
@@ -704,26 +991,167 @@ def write_densebit_sidecar_from_spmat(label_path: Path, sidecar_path: Path, expe
         for label_id in row_indices[valid_mask].tolist():
             label_index = int(label_id)
             if label_index < 0 or label_index >= nlabels:
-                raise ValueError(f"label id {label_index} out of range for {label_path}")
-            word_index = row_id // 64
-            bit_index = row_id % 64
-            payload[label_index, word_index] |= np.uint64(1) << np.uint64(bit_index)
-            kept_nnz += 1
+                raise ValueError(f"label id {label_index} out of range for {matrix.path}")
+            offset = int(write_offsets[label_index])
+            posting_payload[offset] = np.uint32(row_id)
+            write_offsets[label_index] += 1
 
     ensure_parent(sidecar_path)
+    bitmap_words = np.zeros(words_per_label, dtype=np.uint64)
     with sidecar_path.open("wb") as writer:
         writer.write(
             DENSEBIT_HEADER.pack(
-                0x54494245534E4544,
-                1,
+                DENSEBIT_MAGIC,
+                DENSEBIT_VERSION_BITMAP,
                 expected_npoints,
                 nlabels,
                 words_per_label,
                 kept_nnz,
             )
         )
-        payload.tofile(writer)
+        for label_id in range(nlabels):
+            bitmap_words.fill(0)
+            start = int(label_offsets[label_id])
+            end = int(label_offsets[label_id + 1])
+            if end > start:
+                for point_id in posting_payload[start:end].tolist():
+                    word_index = point_id // 64
+                    bit_index = point_id % 64
+                    bitmap_words[word_index] |= np.uint64(1) << np.uint64(bit_index)
+            bitmap_words.tofile(writer)
     return sidecar_path
+
+
+def write_mixed_densebit_sidecar(matrix: SpmatMatrix, sidecar_path: Path, expected_npoints: int) -> Path:
+    nlabels = int(matrix.ncol)
+    words_per_label = (expected_npoints + 63) // 64
+    posting_threshold = posting_threshold_for_words(words_per_label)
+    label_counts = compute_spmat_label_counts(matrix)
+    nnz = int(label_counts.sum(dtype=np.uint64))
+
+    entries = np.zeros(nlabels, dtype=DENSEBIT_V2_ENTRY_DTYPE)
+    label_storage_offsets = np.zeros(nlabels, dtype=np.uint64)
+    total_payload_bytes = 0
+    dense_label_count = 0
+    sparse_label_count = 0
+    bitmap_payload_words = 0
+    posting_payload_ids = 0
+    word_bytes = np.dtype(np.uint64).itemsize
+    posting_id_bytes = np.dtype(np.uint32).itemsize
+
+    for label_id in range(nlabels):
+        candidate_count = int(label_counts[label_id])
+        entries["candidate_count"][label_id] = candidate_count
+        if candidate_count == 0:
+            entries["encoding"][label_id] = DENSEBIT_ENCODING_EMPTY
+            continue
+        if candidate_count < posting_threshold:
+            entries["encoding"][label_id] = DENSEBIT_ENCODING_POSTING
+            entries["payload_offset"][label_id] = align_up(total_payload_bytes, posting_id_bytes)
+            entries["payload_size"][label_id] = candidate_count * posting_id_bytes
+            label_storage_offsets[label_id] = posting_payload_ids
+            posting_payload_ids += candidate_count
+            sparse_label_count += 1
+        else:
+            entries["encoding"][label_id] = DENSEBIT_ENCODING_BITMAP
+            entries["payload_offset"][label_id] = align_up(total_payload_bytes, word_bytes)
+            entries["payload_size"][label_id] = words_per_label * word_bytes
+            label_storage_offsets[label_id] = bitmap_payload_words
+            bitmap_payload_words += words_per_label
+            dense_label_count += 1
+        total_payload_bytes = int(entries["payload_offset"][label_id] + entries["payload_size"][label_id])
+
+    bitmap_payload = np.zeros(bitmap_payload_words, dtype=np.uint64)
+    posting_payload = np.zeros(posting_payload_ids, dtype=np.uint32)
+    posting_write_offsets = np.zeros(nlabels, dtype=np.uint64)
+    for row_id in range(matrix.nrow):
+        start = int(matrix.indptr[row_id])
+        end = int(matrix.indptr[row_id + 1])
+        if start == end:
+            continue
+        row_indices = matrix.indices[start:end]
+        row_values = matrix.data[start:end]
+        valid_mask = row_values != 0.0
+        if not np.any(valid_mask):
+            continue
+        valid_labels = row_indices[valid_mask]
+        word_index = row_id // 64
+        bit_mask = np.uint64(1) << np.uint64(row_id % 64)
+        for label_id in valid_labels.tolist():
+            label_index = int(label_id)
+            if label_index < 0 or label_index >= nlabels:
+                raise ValueError(f"label id {label_index} out of range for {matrix.path}")
+            storage_offset = int(label_storage_offsets[label_index])
+            encoding = int(entries["encoding"][label_index])
+            if encoding == DENSEBIT_ENCODING_POSTING:
+                write_offset = int(posting_write_offsets[label_index])
+                posting_payload[storage_offset + write_offset] = np.uint32(row_id)
+                posting_write_offsets[label_index] += 1
+            elif encoding == DENSEBIT_ENCODING_BITMAP:
+                bitmap_payload[storage_offset + word_index] |= bit_mask
+
+    payload_offset = align_up(DENSEBIT_HEADER_V2.size + entries.nbytes, word_bytes)
+    ensure_parent(sidecar_path)
+    with sidecar_path.open("wb") as writer:
+        writer.write(
+            DENSEBIT_HEADER_V2.pack(
+                DENSEBIT_MAGIC,
+                DENSEBIT_VERSION_MIXED,
+                expected_npoints,
+                nlabels,
+                words_per_label,
+                nnz,
+                DENSEBIT_HEADER_V2.size,
+                payload_offset,
+                posting_threshold,
+                dense_label_count,
+                sparse_label_count,
+                0,
+            )
+        )
+        if entries.size:
+            entries.tofile(writer)
+
+        directory_bytes = DENSEBIT_HEADER_V2.size + entries.nbytes
+        if payload_offset > directory_bytes:
+            writer.write(b"\x00" * (payload_offset - directory_bytes))
+
+        written_payload_bytes = 0
+        for label_id in range(nlabels):
+            entry_offset = int(entries["payload_offset"][label_id])
+            entry_size = int(entries["payload_size"][label_id])
+            if entry_offset > written_payload_bytes:
+                writer.write(b"\x00" * (entry_offset - written_payload_bytes))
+                written_payload_bytes = entry_offset
+            if entry_size == 0:
+                continue
+            storage_offset = int(label_storage_offsets[label_id])
+            encoding = int(entries["encoding"][label_id])
+            if encoding == DENSEBIT_ENCODING_POSTING:
+                candidate_count = int(entries["candidate_count"][label_id])
+                posting_payload[storage_offset : storage_offset + candidate_count].tofile(writer)
+            elif encoding == DENSEBIT_ENCODING_BITMAP:
+                bitmap_payload[storage_offset : storage_offset + words_per_label].tofile(writer)
+            written_payload_bytes = entry_offset + entry_size
+    return sidecar_path
+
+
+def write_densebit_sidecar_from_spmat(
+    label_path: Path,
+    sidecar_path: Path,
+    expected_npoints: int,
+    sidecar_mode: str = "bitmap",
+) -> Path:
+    matrix = SpmatMatrix.load(label_path)
+    if matrix.nrow != expected_npoints:
+        raise ValueError(
+            f"label row count mismatch: {label_path} has {matrix.nrow}, expected {expected_npoints}"
+        )
+    if sidecar_mode == "bitmap":
+        return write_bitmap_densebit_sidecar(matrix, sidecar_path, expected_npoints)
+    if sidecar_mode == "mixed":
+        return write_mixed_densebit_sidecar(matrix, sidecar_path, expected_npoints)
+    raise ValueError(f"unsupported sidecar mode: {sidecar_mode}")
 
 
 def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
@@ -736,19 +1164,29 @@ def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
     npoints, _, _ = read_spmat_header(label_path)
 
     copied_paths = clone_index_prefix_files(source_prefix, dest_prefix)
-    sidecar_path = write_densebit_sidecar_from_spmat(label_path, Path(f"{dest_prefix}_labels.densebit"), npoints)
+    sidecar_mode = str(args.sidecar_mode)
+    sidecar_path = write_densebit_sidecar_from_spmat(
+        label_path,
+        Path(f"{dest_prefix}_labels.densebit"),
+        npoints,
+        sidecar_mode=sidecar_mode,
+    )
     meta_path = Path(f"{dest_prefix}_hybrid.meta")
     if meta_path.exists() or meta_path.is_symlink():
         meta_path.unlink()
 
+    sidecar_summary = DenseBitsetSidecar.load(sidecar_path).build_summary()
+
     summary_path = resolve_path(args.summary_json) if args.summary_json else dest_prefix.parent / f"{dest_prefix.name}_label_runtime.json"
     summary = {
-        "format": "pipeann.hybrid.label_runtime.v1",
+        "format": "pipeann.hybrid.label_runtime.v2",
         "source_prefix": str(source_prefix),
         "dest_prefix": str(dest_prefix),
         "label_file": str(label_path),
+        "sidecar_mode": sidecar_mode,
         "copied_files": [str(path) for path in copied_paths],
         "sidecar_path": str(sidecar_path),
+        "sidecar_summary": sidecar_summary,
         "hybrid_meta_path": str(meta_path),
         "npoints": npoints,
     }
@@ -757,9 +1195,42 @@ def create_index_prefix_for_labels(args: argparse.Namespace) -> Path:
         writer.write("\n")
 
     print(f"[ok] cloned index prefix from {source_prefix} to {dest_prefix}")
-    print(f"[ok] wrote densebit sidecar to {sidecar_path}")
+    print(f"[ok] wrote {sidecar_mode} densebit sidecar to {sidecar_path}")
     print(f"[ok] removed stale hybrid metadata at {meta_path}")
     print(f"[ok] wrote runtime summary to {summary_path}")
+    return summary_path
+
+
+def summarize_densebit_sidecar(args: argparse.Namespace) -> Path:
+    if args.sidecar_path:
+        sidecar_path = require_file(resolve_path(args.sidecar_path), "densebit sidecar")
+    else:
+        index_prefix = resolve_path(args.index_prefix)
+        sidecar_path = require_file(Path(f"{index_prefix}_labels.densebit"), "densebit sidecar")
+
+    sidecar = DenseBitsetSidecar.load(sidecar_path)
+    summary = sidecar.build_summary()
+    summary["format"] = "pipeann.hybrid.densebit_sidecar_summary.v1"
+
+    label_summary_path = resolve_path(args.label_summary_jsonl) if args.label_summary_jsonl else None
+    if label_summary_path is not None:
+        ensure_parent(label_summary_path)
+        if label_summary_path.exists():
+            label_summary_path.unlink()
+        for record in sidecar.iter_label_summaries():
+            write_jsonl(label_summary_path, record)
+        summary["label_summary_jsonl"] = str(label_summary_path)
+
+    summary_path = resolve_path(args.summary_json) if args.summary_json else sidecar_path.parent / f"{sidecar_path.name}.summary.json"
+    ensure_parent(summary_path)
+    with summary_path.open("w", encoding="utf-8") as writer:
+        json.dump(summary, writer, indent=2, sort_keys=True)
+        writer.write("\n")
+
+    print(f"[ok] summarized densebit sidecar {sidecar_path}")
+    print(f"[ok] wrote sidecar summary to {summary_path}")
+    if label_summary_path is not None:
+        print(f"[ok] wrote per-label summary to {label_summary_path}")
     return summary_path
 
 
@@ -2420,7 +2891,18 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_parser.add_argument("--source-prefix", required=True)
     runtime_parser.add_argument("--dest-prefix", required=True)
     runtime_parser.add_argument("--label-file", required=True)
+    runtime_parser.add_argument("--sidecar-mode", default="bitmap", choices=["bitmap", "mixed"])
     runtime_parser.add_argument("--summary-json")
+
+    sidecar_summary_parser = subparsers.add_parser(
+        "summarize-densebit-sidecar",
+        help="Inspect a densebit sidecar and emit v1/v2 size plus encoding summary.",
+    )
+    sidecar_summary_group = sidecar_summary_parser.add_mutually_exclusive_group(required=True)
+    sidecar_summary_group.add_argument("--sidecar-path")
+    sidecar_summary_group.add_argument("--index-prefix")
+    sidecar_summary_parser.add_argument("--summary-json")
+    sidecar_summary_parser.add_argument("--label-summary-jsonl")
 
     manifest_from_summary_parser = subparsers.add_parser(
         "build-manifest-from-summary",
@@ -2541,6 +3023,9 @@ def main() -> int:
         return 0
     if args.command == "prepare-index-prefix-for-labels":
         create_index_prefix_for_labels(args)
+        return 0
+    if args.command == "summarize-densebit-sidecar":
+        summarize_densebit_sidecar(args)
         return 0
     if args.command == "build-manifest-from-summary":
         build_manifest_from_workload_summary(args)

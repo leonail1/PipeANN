@@ -88,6 +88,11 @@ def parse_args() -> argparse.Namespace:
         help="Run only exp4_intersect_range_selectivity, then plot and clean.",
     )
     parser.add_argument(
+        "--only-exp6",
+        action="store_true",
+        help="Run only exp6_query_thread_budget, then plot and clean.",
+    )
+    parser.add_argument(
         "--only-exp5",
         action="store_true",
         help="Run only exp5_index_bloat_by_size, then plot and clean.",
@@ -128,6 +133,11 @@ def parse_args() -> argparse.Namespace:
         "--rerun-baseline",
         action="store_true",
         help="Discard existing exp_baseline rows before running it.",
+    )
+    parser.add_argument(
+        "--rerun-exp6",
+        action="store_true",
+        help="Discard existing exp6 rows before running it.",
     )
     parser.add_argument(
         "--baseline-query-count",
@@ -176,6 +186,17 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=100,
         help="Fixed graph-search L for exp4 high-selectivity recall comparison.",
+    )
+    parser.add_argument(
+        "--exp6-thread-sweep",
+        default="",
+        help="Comma-separated query thread counts for exp6. Defaults to an auto sweep up to os.cpu_count().",
+    )
+    parser.add_argument(
+        "--exp6-latency-budget-ms",
+        type=float,
+        default=10.0,
+        help="Latency budget in milliseconds for exp6 threshold detection. Uses avg_latency_us.",
     )
     parser.add_argument("--build-r", type=int, default=64)
     parser.add_argument("--build-l", type=int, default=96)
@@ -238,6 +259,12 @@ def parse_cpu_list(cpu_list: str) -> list[int]:
 
 def parse_int_list(value: str) -> list[int]:
     return [int(part.strip()) for part in value.split(",") if part.strip()]
+
+
+def default_exp6_thread_sweep() -> list[int]:
+    cpu_count = max(1, os.cpu_count() or 1)
+    candidates = [1, 2, 4, 8, 16, 24, 32, 48, cpu_count]
+    return sorted({thread for thread in candidates if 1 <= thread <= cpu_count})
 
 
 def numa_node_cpus(node: int) -> list[int]:
@@ -427,6 +454,59 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         csv_writer.writerows(rows)
 
 
+def summarize_exp6_rows(rows: list[dict], latency_budget_ms: float) -> tuple[dict, list[dict]]:
+    budget_us = latency_budget_ms * 1000.0
+    grouped: dict[tuple[str, str], list[dict]] = {}
+    for row in rows:
+        selector_type = str(row.get("selector_type", "") or "")
+        bucket = str(row.get("bucket", "") or "")
+        if not selector_type or not bucket:
+            continue
+        grouped.setdefault((selector_type, bucket), []).append(row)
+
+    threshold_rows: list[dict] = []
+    safe_candidates: list[int] = []
+    selector_safe: dict[str, list[int]] = {}
+    for selector_type, bucket in sorted(grouped):
+        bucket_rows = sorted(grouped[(selector_type, bucket)], key=lambda row: int(float(row.get("threads", 0) or 0)))
+        last_pass_threads: int | None = None
+        first_fail_threads: int | None = None
+        for row in bucket_rows:
+            recall_ok = float(row.get("recall@10", 0.0) or 0.0) >= 98.0
+            within_budget = float(row.get("avg_latency_us", 0.0) or 0.0) <= budget_us
+            threads = int(float(row.get("threads", 0) or 0))
+            if recall_ok and within_budget:
+                last_pass_threads = threads
+                continue
+            if recall_ok and first_fail_threads is None:
+                first_fail_threads = threads
+        summary_row = {
+            "selector_type": selector_type,
+            "bucket": bucket,
+            "selected_route": str(bucket_rows[0].get("selected_route") or bucket_rows[0].get("route") or "auto"),
+            "chosen_L": int(float(bucket_rows[0].get("chosen_L", 0) or 0)),
+            "thread_sweep": [int(float(row.get("threads", 0) or 0)) for row in bucket_rows],
+            "latency_budget_ms": latency_budget_ms,
+            "last_pass_threads": last_pass_threads,
+            "first_fail_threads": first_fail_threads,
+        }
+        threshold_rows.append(summary_row)
+        if last_pass_threads is not None:
+            safe_candidates.append(last_pass_threads)
+            selector_safe.setdefault(selector_type, []).append(last_pass_threads)
+
+    summary = {
+        "latency_metric": "avg_latency_us",
+        "latency_budget_ms": latency_budget_ms,
+        "safe_query_threads": min(safe_candidates) if safe_candidates else 0,
+        "safe_query_threads_by_selector": {
+            selector_type: min(values) for selector_type, values in sorted(selector_safe.items()) if values
+        },
+        "thresholds": threshold_rows,
+    }
+    return summary, threshold_rows
+
+
 def clean_prefix(prefix: Path) -> None:
     parent = prefix.parent
     if not parent.exists():
@@ -466,7 +546,7 @@ def build_tools(repo: Path) -> None:
         run(["cmake", "-S", ".", "-B", "build"], repo)
     run([
         "cmake", "--build", "build", "--target", "dynamic_update_suite_driver", "build_disk_index",
-        "compute_groundtruth", "calibrate_hybrid_threshold", "-j",
+        "compute_groundtruth", "calibrate_hybrid_threshold", "search_disk_index_hybrid", "-j",
     ], repo)
 
 
@@ -1148,6 +1228,121 @@ def run_exp4(repo: Path, args: argparse.Namespace, assets: dict, total_n: int, m
     return rows
 
 
+def run_exp6(repo: Path, args: argparse.Namespace, assets: dict, total_n: int, mid_n: int, query_count: int) -> list[dict]:
+    out = exp_dir(args.out_dir, "exp6_query_thread_budget")
+    if out.exists() and args.rerun_exp6:
+        clear_experiment_dir(out)
+    out.mkdir(parents=True, exist_ok=True)
+
+    existing = load_jsonl(out / "results.jsonl")
+    if existing and not args.rerun_exp6:
+        write_csv(out / "table.csv", existing)
+        summary, threshold_rows = summarize_exp6_rows(existing, args.exp6_latency_budget_ms)
+        write_csv(out / "threshold_table.csv", threshold_rows)
+        (out / "threshold_summary.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return existing
+
+    for stale in [out / "results.jsonl", out / "table.csv", out / "threshold_table.csv", out / "thresholds.jsonl", out / "measure_driver.jsonl"]:
+        if stale.exists():
+            stale.unlink()
+
+    exp6_query_count = min(query_count, 1000)
+    exp4_rows = load_jsonl(args.out_dir / "exp4_intersect_range_selectivity" / "results.jsonl")
+    if not exp4_rows:
+        exp4_rows = run_exp4(repo, args, assets, total_n, mid_n, exp6_query_count)
+    exp4_rows = [row for row in exp4_rows if row.get("status") == "ok"]
+    if not exp4_rows:
+        raise RuntimeError("exp6 requires at least one successful exp4 row")
+
+    exp6_query_bin = args.out_dir / "data" / f"sift_query_{exp6_query_count}.bin"
+    copy_prefix_bin(args.query_bin, exp6_query_bin, exp6_query_count, assets["dim"])
+    query_labels_by_selector = {
+        "intersect": ensure_query_label_files(args.out_dir / "labels", exp6_query_count),
+        "range": ensure_range_query_label_files(args.out_dir / "labels", exp6_query_count),
+    }
+
+    prefix = out / "tmp" / "direct_1m"
+    if not prefix_exists(prefix):
+        build_index_with_pq_bytes(repo, args, assets["base_bins"][total_n], prefix,
+                                  assets["label_files"][total_n], 32, args.exp4_pq_bytes)
+
+    thread_sweep = parse_int_list(args.exp6_thread_sweep) if args.exp6_thread_sweep else default_exp6_thread_sweep()
+    budget_us = args.exp6_latency_budget_ms * 1000.0
+    exp4_rows_by_key = {
+        (str(row.get("selector_type") or ""), str(row.get("bucket") or "")): row
+        for row in exp4_rows
+        if row.get("selector_type") and row.get("bucket")
+    }
+
+    rows: list[dict] = []
+    for selector_type in ["intersect", "range"]:
+        for bucket, _selectivity in BUCKETS:
+            exp4_row = exp4_rows_by_key.get((selector_type, bucket))
+            if exp4_row is None:
+                continue
+            truth = args.out_dir / "exp4_intersect_range_selectivity" / "truth" / f"gt_1m_{selector_type}_{bucket}.bin"
+            if not truth.exists():
+                compute_truth(repo, args, assets["base_bins"][total_n], exp6_query_bin, truth,
+                              assets["label_files"][total_n], query_labels_by_selector[selector_type][bucket],
+                              selector_type=selector_type)
+            selected_route = str(exp4_row.get("selected_route") or exp4_row.get("route") or "auto")
+            chosen_l = int(float(exp4_row.get("chosen_L", 0) or 0))
+            if chosen_l <= 0:
+                continue
+            for threads in thread_sweep:
+                measured = static_hybrid_search(
+                    repo,
+                    args,
+                    prefix=prefix,
+                    jsonl=out / "measure_driver.jsonl",
+                    query_bin=exp6_query_bin,
+                    truthset=truth,
+                    query_label_file=query_labels_by_selector[selector_type][bucket],
+                    route=selected_route,
+                    threads=threads,
+                    search_l=chosen_l,
+                    selector_type=selector_type,
+                )
+                recall = float(measured.get("recall@10", 0.0) or 0.0)
+                avg_latency_us = float(measured.get("avg_latency_us", 0.0) or 0.0)
+                within_budget = avg_latency_us <= budget_us
+                status = "ok" if recall >= 98.0 else "failed_recall"
+                measured.update({
+                    "status": status,
+                    "bucket": bucket,
+                    "selector_type": selector_type,
+                    "filter_type": selector_type,
+                    "points": total_n,
+                    "query_count": exp6_query_count,
+                    "selected_route": selected_route,
+                    "chosen_L": chosen_l,
+                    "exp6_latency_budget_ms": args.exp6_latency_budget_ms,
+                    "within_latency_budget": within_budget,
+                    "threshold_exceeded": not within_budget,
+                    "target_recall@10": 98.0,
+                    "source_experiment": "exp4_intersect_range_selectivity",
+                })
+                rows.append(measured)
+                append_jsonl(out / "results.jsonl", measured)
+                if status == "ok" and not within_budget:
+                    break
+
+    summary, threshold_rows = summarize_exp6_rows(rows, args.exp6_latency_budget_ms)
+    write_csv(out / "table.csv", rows)
+    write_csv(out / "threshold_table.csv", threshold_rows)
+    for row in threshold_rows:
+        append_jsonl(out / "thresholds.jsonl", row)
+    (out / "threshold_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    clean_prefix(prefix)
+    return rows
+
+
 def run_exp5(repo: Path, args: argparse.Namespace, assets: dict, stages: list[int], dim: int) -> list[dict]:
     out = exp_dir(args.out_dir, "exp5_index_bloat_by_size")
     clear_experiment_dir(out)
@@ -1337,6 +1532,13 @@ def main() -> int:
 
     if args.only_exp4:
         summary["experiments"]["exp4_intersect_range_selectivity"] = run_exp4(
+            repo, args, assets, total_n, mid_n, min(query_count, 1000),
+        )
+        finish_run(repo, args, summary)
+        return 0
+
+    if args.only_exp6:
+        summary["experiments"]["exp6_query_thread_budget"] = run_exp6(
             repo, args, assets, total_n, mid_n, min(query_count, 1000),
         )
         finish_run(repo, args, summary)

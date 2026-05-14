@@ -1,0 +1,98 @@
+{
+  "buckets": [
+    {
+      "label": "t4e-03",
+      "lower": 0.0040071,
+      "midpoint": 0.0040071,
+      "name": "real_t4e-03_l600",
+      "probe_query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t4e-03_l600/probe_query.bin",
+      "probe_query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t4e-03_l600/probe_query.spmat",
+      "query_bin": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t4e-03_l600/queries.spmat",
+      "upper": 0.0040071
+    },
+    {
+      "label": "t5e-03",
+      "lower": 0.0050002,
+      "midpoint": 0.0050002,
+      "name": "real_t5e-03_l902",
+      "probe_query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t5e-03_l902/probe_query.bin",
+      "probe_query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t5e-03_l902/probe_query.spmat",
+      "query_bin": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t5e-03_l902/queries.spmat",
+      "upper": 0.0050002
+    },
+    {
+      "label": "t1e-02",
+      "lower": 0.0097939,
+      "midpoint": 0.0097939,
+      "name": "real_t1e-02_l0",
+      "probe_query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t1e-02_l0/probe_query.bin",
+      "probe_query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t1e-02_l0/probe_query.spmat",
+      "query_bin": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t1e-02_l0/queries.spmat",
+      "upper": 0.0097939
+    },
+    {
+      "label": "t2e-02",
+      "lower": 0.0203896,
+      "midpoint": 0.0203896,
+      "name": "real_t2e-02_l106",
+      "probe_query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t2e-02_l106/probe_query.bin",
+      "probe_query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t2e-02_l106/probe_query.spmat",
+      "query_bin": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t2e-02_l106/queries.spmat",
+      "upper": 0.0203896
+    },
+    {
+      "label": "t5e-02",
+      "lower": 0.0499079,
+      "midpoint": 0.0499079,
+      "name": "real_t5e-02_l24",
+      "probe_query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t5e-02_l24/probe_query.bin",
+      "probe_query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t5e-02_l24/probe_query.spmat",
+      "query_bin": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t5e-02_l24/queries.spmat",
+      "upper": 0.0499079
+    },
+    {
+      "label": "t1e-01",
+      "lower": 0.0991156,
+      "midpoint": 0.0991156,
+      "name": "real_t1e-01_l17",
+      "probe_query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t1e-01_l17/probe_query.bin",
+      "probe_query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t1e-01_l17/probe_query.spmat",
+      "query_bin": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t1e-01_l17/queries.spmat",
+      "upper": 0.0991156
+    },
+    {
+      "label": "t2e-01",
+      "lower": 0.1915985,
+      "midpoint": 0.1915985,
+      "name": "real_t2e-01_l29",
+      "probe_query_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t2e-01_l29/probe_query.bin",
+      "probe_query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t2e-01_l29/probe_query.spmat",
+      "query_bin": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.public.100K.u8bin",
+      "query_count": 100000,
+      "query_labels": "/mnt/bak3/lzg/PipeANN-github/experiments/qps_4sets/yfcc10m/workloads/random_single_label/real_selected_labels/real_t2e-01_l29/queries.spmat",
+      "upper": 0.1915985
+    }
+  ],
+  "format": "pipeann.hybrid.selectivity_manifest.v1",
+  "index_prefix": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/yfcc10m_pipeann",
+  "index_type": "uint8",
+  "npoints": 10000000,
+  "queries_per_bucket": null,
+  "query_bin": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.public.100K.u8bin",
+  "query_labels": null,
+  "scanned_queries": 1000000,
+  "selector_type": "intersect",
+  "sidecar_path": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/yfcc10m_pipeann_labels.densebit"
+}

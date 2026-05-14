@@ -83,24 +83,63 @@ int main() {
 
     std::vector<uint32_t> candidate_ids;
     densebit->materialize_candidates(pipeann::HybridFilterKind::kRange, {1, 2}, &scratch, &candidate_ids);
-    std::vector<uint32_t> expected_ids{1, 2, 5, 6};
-    require(candidate_ids == expected_ids, "range [1,2] materialized ids mismatch");
+    require(candidate_ids == std::vector<uint32_t>({1, 2, 5, 6}), "range [1,2] materialized ids mismatch");
 
     require(densebit->count_candidates(pipeann::HybridFilterKind::kRange, {3}, &scratch) == 2,
             "range equality candidate count mismatch");
     require(densebit->count_candidates(pipeann::HybridFilterKind::kRange, {7, 9}, &scratch) == 0,
             "out-of-universe range should be empty");
 
+    std::vector<std::vector<uint32_t>> mixed_labels_by_point(128);
+    for (uint32_t point_id = 0; point_id < 64; ++point_id) {
+      mixed_labels_by_point[point_id].push_back(1);
+    }
+    mixed_labels_by_point[0].push_back(0);
+    mixed_labels_by_point[64].push_back(0);
+    mixed_labels_by_point[1].push_back(2);
+    mixed_labels_by_point[65].push_back(2);
+
+    const std::filesystem::path mixed_sidecar_path = temp_dir.path / "mixed_labels.densebit";
+    pipeann::DenseBitsetIndex::write_atomically(mixed_sidecar_path.string(), mixed_labels_by_point.size(), 3,
+                                                mixed_labels_by_point);
+    auto mixed_densebit = pipeann::DenseBitsetIndex::load(mixed_sidecar_path.string(), mixed_labels_by_point.size());
+
+    require(mixed_densebit->header().version == 2, "mixed sidecar should use v2 format");
+    require(mixed_densebit->count_candidates(pipeann::HybridFilterKind::kIntersect, {0, 2}, &scratch) == 4,
+            "posting-only intersect count mismatch");
+    mixed_densebit->materialize_candidates(pipeann::HybridFilterKind::kIntersect, {0, 2}, &scratch, &candidate_ids);
+    require(candidate_ids == std::vector<uint32_t>({0, 1, 64, 65}), "posting-only intersect ids mismatch");
+    require(!scratch.bitset_words.empty(), "posting-only intersect should still materialize a bitset");
+
+    require(mixed_densebit->count_candidates(pipeann::HybridFilterKind::kSubset, {0, 1}, &scratch) == 1,
+            "mixed posting+bitmap subset count mismatch");
+    mixed_densebit->materialize_candidates(pipeann::HybridFilterKind::kSubset, {0, 1}, &scratch, &candidate_ids);
+    require(candidate_ids == std::vector<uint32_t>({0}), "mixed posting+bitmap subset ids mismatch");
+
+    require(mixed_densebit->count_candidates(pipeann::HybridFilterKind::kRange, {0, 2}, &scratch) == 66,
+            "mixed range count mismatch");
+
+    std::vector<std::vector<uint32_t>> expected_roundtrip_labels = mixed_labels_by_point;
+    for (auto &point_labels : expected_roundtrip_labels) {
+      std::sort(point_labels.begin(), point_labels.end());
+    }
+    std::vector<std::vector<uint32_t>> roundtrip_labels;
+    mixed_densebit->materialize_labels_by_point(&roundtrip_labels);
+    require(roundtrip_labels == expected_roundtrip_labels, "mixed label round-trip mismatch");
+
     pipeann::RangeSelector selector;
     const auto query_range = label_buffer({1, 2});
     const auto query_equal = label_buffer({3});
-    uint32_t raw_target_two = 2;
-    uint32_t raw_target_zero = 0;
-    uint32_t raw_target_five = 5;
-    require(selector.is_member(0, query_range.data(), &raw_target_two), "range selector should match raw scalar 2");
-    require(!selector.is_member(0, query_equal.data(), &raw_target_two), "equality selector should reject raw scalar 2");
-    require(!selector.is_member(0, query_range.data(), &raw_target_zero), "range selector should reject raw scalar 0");
-    require(!selector.is_member(0, query_range.data(), &raw_target_five), "range selector should reject raw scalar 5 without overreading");
+    const auto target_two = label_buffer({2});
+    const auto target_zero = label_buffer({0});
+    const auto target_five = label_buffer({5});
+    require(selector.is_member(0, query_range.data(), target_two.data()), "range selector should match target label 2");
+    require(!selector.is_member(0, query_equal.data(), target_two.data()),
+            "equality selector should reject target label 2");
+    require(!selector.is_member(0, query_range.data(), target_zero.data()),
+            "range selector should reject target label 0");
+    require(!selector.is_member(0, query_range.data(), target_five.data()),
+            "range selector should reject target label 5 without overreading");
 
     const std::filesystem::path meta_path = temp_dir.path / "sample_hybrid.meta";
     pipeann::HybridMetadataHeaderV1 header;

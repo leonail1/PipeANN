@@ -1,0 +1,378 @@
+{
+  "latency_budget_ms": 10.0,
+  "latency_metric": "avg_latency_us",
+  "safe_query_threads": 8,
+  "safe_query_threads_by_selector": {
+    "intersect": 8,
+    "range": 8
+  },
+  "thresholds": [
+    {
+      "bucket": "u100",
+      "chosen_L": 50,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "graph",
+      "selector_type": "intersect",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    },
+    {
+      "bucket": "u1e-01",
+      "chosen_L": 10,
+      "first_fail_threads": 24,
+      "last_pass_threads": 16,
+      "latency_budget_ms": 10.0,
+      "selected_route": "prefilter",
+      "selector_type": "intersect",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24
+      ]
+    },
+    {
+      "bucket": "u1e-02",
+      "chosen_L": 10,
+      "first_fail_threads": 24,
+      "last_pass_threads": 16,
+      "latency_budget_ms": 10.0,
+      "selected_route": "prefilter",
+      "selector_type": "intersect",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24
+      ]
+    },
+    {
+      "bucket": "u1e-03",
+      "chosen_L": 10,
+      "first_fail_threads": 52,
+      "last_pass_threads": 40,
+      "latency_budget_ms": 10.0,
+      "selected_route": "prefilter",
+      "selector_type": "intersect",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40,
+        52
+      ]
+    },
+    {
+      "bucket": "u25",
+      "chosen_L": 150,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "graph",
+      "selector_type": "intersect",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    },
+    {
+      "bucket": "u30",
+      "chosen_L": 150,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "graph",
+      "selector_type": "intersect",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    },
+    {
+      "bucket": "u3e-03",
+      "chosen_L": 10,
+      "first_fail_threads": 32,
+      "last_pass_threads": 24,
+      "latency_budget_ms": 10.0,
+      "selected_route": "prefilter",
+      "selector_type": "intersect",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32
+      ]
+    },
+    {
+      "bucket": "u50",
+      "chosen_L": 100,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "graph",
+      "selector_type": "intersect",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    },
+    {
+      "bucket": "u5e-02",
+      "chosen_L": 10,
+      "first_fail_threads": 16,
+      "last_pass_threads": 8,
+      "latency_budget_ms": 10.0,
+      "selected_route": "prefilter",
+      "selector_type": "intersect",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ]
+    },
+    {
+      "bucket": "u75",
+      "chosen_L": 75,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "graph",
+      "selector_type": "intersect",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    },
+    {
+      "bucket": "u100",
+      "chosen_L": 50,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "graph",
+      "selector_type": "range",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    },
+    {
+      "bucket": "u1e-01",
+      "chosen_L": 10,
+      "first_fail_threads": 24,
+      "last_pass_threads": 16,
+      "latency_budget_ms": 10.0,
+      "selected_route": "prefilter",
+      "selector_type": "range",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24
+      ]
+    },
+    {
+      "bucket": "u1e-02",
+      "chosen_L": 10,
+      "first_fail_threads": 24,
+      "last_pass_threads": 16,
+      "latency_budget_ms": 10.0,
+      "selected_route": "prefilter",
+      "selector_type": "range",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24
+      ]
+    },
+    {
+      "bucket": "u1e-03",
+      "chosen_L": 10,
+      "first_fail_threads": 52,
+      "last_pass_threads": 40,
+      "latency_budget_ms": 10.0,
+      "selected_route": "prefilter",
+      "selector_type": "range",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40,
+        52
+      ]
+    },
+    {
+      "bucket": "u25",
+      "chosen_L": 150,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "graph",
+      "selector_type": "range",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    },
+    {
+      "bucket": "u30",
+      "chosen_L": 150,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "graph",
+      "selector_type": "range",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    },
+    {
+      "bucket": "u3e-03",
+      "chosen_L": 10,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "prefilter",
+      "selector_type": "range",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    },
+    {
+      "bucket": "u50",
+      "chosen_L": 100,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "graph",
+      "selector_type": "range",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    },
+    {
+      "bucket": "u5e-02",
+      "chosen_L": 10,
+      "first_fail_threads": 16,
+      "last_pass_threads": 8,
+      "latency_budget_ms": 10.0,
+      "selected_route": "prefilter",
+      "selector_type": "range",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ]
+    },
+    {
+      "bucket": "u75",
+      "chosen_L": 75,
+      "first_fail_threads": 40,
+      "last_pass_threads": 32,
+      "latency_budget_ms": 10.0,
+      "selected_route": "graph",
+      "selector_type": "range",
+      "thread_sweep": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        40
+      ]
+    }
+  ]
+}

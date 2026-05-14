@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -33,7 +34,7 @@ namespace pipeann {
     static std::string default_sidecar_path(const std::string &index_prefix);
     static std::unique_ptr<DenseBitsetIndex> load(const std::string &sidecar_path, uint64_t expected_npoints = 0);
     static void write_atomically(const std::string &sidecar_path, uint64_t npoints, uint64_t nlabels,
-                   const std::vector<std::vector<uint32_t>> &labels_by_point);
+                                 const std::vector<std::vector<uint32_t>> &labels_by_point);
 
     ~DenseBitsetIndex();
 
@@ -41,19 +42,19 @@ namespace pipeann {
     DenseBitsetIndex &operator=(const DenseBitsetIndex &) = delete;
 
     const DenseBitsetFileHeaderV1 &header() const;
-  void materialize_labels_by_point(std::vector<std::vector<uint32_t>> *output) const;
+    void materialize_labels_by_point(std::vector<std::vector<uint32_t>> *output) const;
 
     uint64_t count_candidates(HybridFilterKind kind, const std::vector<uint32_t> &labels,
                               HybridQueryScratch *scratch) const;
-    void materialize_candidates(HybridFilterKind kind, const std::vector<uint32_t> &labels,
-                                HybridQueryScratch *scratch, std::vector<uint32_t> *output) const;
+    void materialize_candidates(HybridFilterKind kind, const std::vector<uint32_t> &labels, HybridQueryScratch *scratch,
+                                std::vector<uint32_t> *output) const;
 
    private:
-    DenseBitsetIndex(std::string sidecar_path, int fd, void *mmap_addr, size_t mmap_len,
-                     DenseBitsetFileHeaderV1 header, const uint64_t *base_words);
+    DenseBitsetIndex(std::string sidecar_path, int fd, void *mmap_addr, size_t mmap_len, DenseBitsetFileHeaderV1 header,
+                     const uint64_t *base_words, const uint8_t *label_directory, const uint8_t *payload_base);
 
-    uint64_t compute_bitset(HybridFilterKind kind, const std::vector<uint32_t> &labels,
-                            HybridQueryScratch *scratch) const;
+    uint64_t compute_candidates(HybridFilterKind kind, const std::vector<uint32_t> &labels,
+                                HybridQueryScratch *scratch) const;
     void normalize_labels(const std::vector<uint32_t> &labels, HybridQueryScratch *scratch) const;
     void materialize_from_scratch(HybridQueryScratch *scratch, std::vector<uint32_t> *output) const;
 
@@ -62,6 +63,9 @@ namespace pipeann {
     void *mmap_addr_ = nullptr;
     size_t mmap_len_ = 0;
     DenseBitsetFileHeaderV1 header_{};
+    uint64_t file_version_ = 0;
     const uint64_t *base_words_ = nullptr;
+    const uint8_t *label_directory_ = nullptr;
+    const uint8_t *payload_base_ = nullptr;
   };
 }  // namespace pipeann

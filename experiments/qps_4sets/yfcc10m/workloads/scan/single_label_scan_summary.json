@@ -1,0 +1,150 @@
+{
+  "base_labels": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/base.metadata.10M.spmat",
+  "eligible_label_count": 990,
+  "format": "pipeann.hybrid.single_label_scan.v1",
+  "index_prefix": null,
+  "min_query_count": 20,
+  "nlabels": 200386,
+  "npoints": 10000000,
+  "query_labels": "/mnt/bak3/lzg/PipeANN-github/data/yfcc100M/query.metadata.public.100K.spmat",
+  "recommendations": [
+    {
+      "backup": {
+        "candidate_count": 39815,
+        "label_id": 3156,
+        "log10_distance": 0.002013271265688843,
+        "query_count": 39,
+        "selectivity": 0.0039815
+      },
+      "primary": {
+        "candidate_count": 40071,
+        "label_id": 600,
+        "log10_distance": 0.0007701893643528024,
+        "query_count": 189,
+        "selectivity": 0.0040071
+      },
+      "target_name": "t4e-03",
+      "target_selectivity": 0.004
+    },
+    {
+      "backup": {
+        "candidate_count": 50058,
+        "label_id": 3076,
+        "log10_distance": 0.0005034896314470849,
+        "query_count": 66,
+        "selectivity": 0.0050058
+      },
+      "primary": {
+        "candidate_count": 50002,
+        "label_id": 902,
+        "log10_distance": 1.737143184987744e-05,
+        "query_count": 231,
+        "selectivity": 0.0050002
+      },
+      "target_name": "t5e-03",
+      "target_selectivity": 0.005
+    },
+    {
+      "backup": {
+        "candidate_count": 105398,
+        "label_id": 107,
+        "log10_distance": 0.02283236991633064,
+        "query_count": 521,
+        "selectivity": 0.0105398
+      },
+      "primary": {
+        "candidate_count": 97939,
+        "label_id": 0,
+        "log10_distance": 0.00904433463165688,
+        "query_count": 775,
+        "selectivity": 0.0097939
+      },
+      "target_name": "t1e-02",
+      "target_selectivity": 0.01
+    },
+    {
+      "backup": {
+        "candidate_count": 180512,
+        "label_id": 90,
+        "log10_distance": 0.044523917618681574,
+        "query_count": 1367,
+        "selectivity": 0.0180512
+      },
+      "primary": {
+        "candidate_count": 203896,
+        "label_id": 106,
+        "log10_distance": 0.008378710276162993,
+        "query_count": 1667,
+        "selectivity": 0.0203896
+      },
+      "target_name": "t2e-02",
+      "target_selectivity": 0.02
+    },
+    {
+      "backup": {
+        "candidate_count": 508944,
+        "label_id": 100,
+        "log10_distance": 0.007699994446809466,
+        "query_count": 1717,
+        "selectivity": 0.0508944
+      },
+      "primary": {
+        "candidate_count": 499079,
+        "label_id": 24,
+        "log10_distance": 0.0008007081144456585,
+        "query_count": 322,
+        "selectivity": 0.0499079
+      },
+      "target_name": "t5e-02",
+      "target_selectivity": 0.05
+    },
+    {
+      "backup": {
+        "candidate_count": 959300,
+        "label_id": 18,
+        "log10_distance": 0.013680750127576413,
+        "query_count": 765,
+        "selectivity": 0.09593
+      },
+      "primary": {
+        "candidate_count": 991156,
+        "label_id": 17,
+        "log10_distance": 0.0005068197335869051,
+        "query_count": 1679,
+        "selectivity": 0.0991156
+      },
+      "target_name": "t1e-01",
+      "target_selectivity": 0.099
+    },
+    {
+      "backup": {
+        "candidate_count": 1707412,
+        "label_id": 89,
+        "log10_distance": 0.05096289930708986,
+        "query_count": 3174,
+        "selectivity": 0.1707412
+      },
+      "primary": {
+        "candidate_count": 1915985,
+        "label_id": 29,
+        "log10_distance": 0.0009091239833250997,
+        "query_count": 1999,
+        "selectivity": 0.1915985
+      },
+      "target_name": "t2e-01",
+      "target_selectivity": 0.192
+    }
+  ],
+  "scan_source": "base-labels",
+  "scanned_queries": 100000,
+  "sidecar_path": null,
+  "target_selectivities": [
+    0.004,
+    0.005,
+    0.01,
+    0.02,
+    0.05,
+    0.099,
+    0.192
+  ]
+}
