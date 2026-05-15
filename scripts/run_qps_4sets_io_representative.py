@@ -456,8 +456,33 @@ def plot_all(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         log("[warn] matplotlib unavailable; skip plots")
         return
 
-    def dataset_rows(dataset: str) -> list[dict[str, Any]]:
-        return sorted([row for row in rows if row["dataset"] == dataset and int(row["thread"]) == 1], key=lambda row: float(row["selectivity"]))
+    thread_order = [1, 4, 8]
+    thread_colors = {1: "#315f8d", 4: "#26734d", 8: "#b4552a"}
+    thread_markers = {1: "o", 4: "^", 8: "D"}
+
+    def as_float(value: Any) -> float | None:
+        if value is None or value == "":
+            return None
+        return float(value)
+
+    def dataset_rows(dataset: str, thread: int | None = None) -> list[dict[str, Any]]:
+        selected = [row for row in rows if row["dataset"] == dataset]
+        if thread is not None:
+            selected = [row for row in selected if int(row["thread"]) == thread]
+        return sorted(selected, key=lambda row: (float(row["selectivity"]), int(row["thread"])))
+
+    def xy_for(dataset: str, thread: int, field: str, scale: float = 1.0, skip_missing: bool = True) -> tuple[list[float], list[float]]:
+        x_values: list[float] = []
+        y_values: list[float] = []
+        for row in dataset_rows(dataset, thread):
+            value = as_float(row.get(field))
+            if value is None:
+                if skip_missing:
+                    continue
+                value = 0.0
+            x_values.append(float(row["selectivity"]) * 100.0)
+            y_values.append(value * scale)
+        return x_values, y_values
 
     def common_axes(title: str, ylabel: str):
         fig, axes = plt.subplots(2, 2, figsize=(13.5, 8.2), constrained_layout=True)
@@ -470,51 +495,92 @@ def plot_all(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             axis.grid(True, alpha=0.22)
         return fig, axes
 
-    fig, axes = common_axes("Representative search: QPS and query p99", "QPS")
+    fig, axes = common_axes("Representative search: QPS and query p99 by thread", "QPS")
     for axis, dataset in zip(axes.flat, DATASET_ORDER):
-        ds_rows = dataset_rows(dataset)
-        x = [float(row["selectivity"]) * 100 for row in ds_rows]
-        axis.plot(x, [float(row["qps"]) for row in ds_rows], marker="o", label="QPS")
         twin = axis.twinx()
-        twin.plot(x, [float(row["query_p99_latency_us"]) / 1000.0 for row in ds_rows], marker="x", color="#b4552a", label="p99 ms")
+        for thread in thread_order:
+            x, qps = xy_for(dataset, thread, "qps")
+            if not x:
+                continue
+            color = thread_colors[thread]
+            axis.plot(x, qps, marker=thread_markers[thread], color=color, linewidth=1.7, label=f"QPS t={thread}")
+            x_lat, p99_ms = xy_for(dataset, thread, "query_p99_latency_us", scale=0.001)
+            twin.plot(x_lat, p99_ms, marker=thread_markers[thread], color=color, linestyle="--", linewidth=1.1, alpha=0.72, label=f"p99 t={thread}")
         twin.set_ylabel("Query p99 (ms)")
+        handles, labels = axis.get_legend_handles_labels()
+        twin_handles, twin_labels = twin.get_legend_handles_labels()
+        axis.legend(handles + twin_handles, labels + twin_labels, frameon=False, ncol=2)
     fig.savefig(out_dir / "representative_qps_latency.png", bbox_inches="tight", dpi=300)
     plt.close(fig)
 
-    fig, axes = common_axes("Representative search: CPU", "CPU pct")
+    fig, axes = common_axes("Representative search: CPU by thread", "CPU pct")
     for axis, dataset in zip(axes.flat, DATASET_ORDER):
-        ds_rows = dataset_rows(dataset)
-        axis.plot([float(row["selectivity"]) * 100 for row in ds_rows], [float(row["cpu_pct"]) for row in ds_rows], marker="o")
+        for thread in thread_order:
+            x, cpu = xy_for(dataset, thread, "cpu_pct")
+            if x:
+                axis.plot(x, cpu, marker=thread_markers[thread], color=thread_colors[thread], linewidth=1.7, label=f"t={thread}")
+        axis.legend(frameon=False, ncol=3)
     fig.savefig(out_dir / "representative_cpu.png", bbox_inches="tight", dpi=300)
     plt.close(fig)
 
-    fig, axes = common_axes("Representative search: real disk metrics", "IOPS / QD / await ms")
-    for axis, dataset in zip(axes.flat, DATASET_ORDER):
-        ds_rows = dataset_rows(dataset)
-        valid = [row for row in ds_rows if row.get("disk_metrics_status") in (None, "", "ok")]
-        invalid = [row for row in ds_rows if row.get("disk_metrics_status") not in (None, "", "ok")]
-        x = [float(row["selectivity"]) * 100 for row in valid]
-        if valid:
-            axis.plot(x, [float(row["real_read_iops"] or 0) for row in valid], marker="o", label="read IOPS")
-            axis.plot(x, [float(row["real_qd"] or 0) for row in valid], marker="+", label="QD")
-            axis.plot(x, [float(row["real_read_await_ms"] or 0) for row in valid], marker="x", label="read await ms")
-        for row in invalid:
-            axis.axvline(float(row["selectivity"]) * 100, color="#6a6a6a", alpha=0.22)
-        if valid:
-            axis.legend(frameon=False)
+    disk_metrics = [
+        ("real_read_iops", "Read IOPS", "symlog"),
+        ("real_read_mb_s", "Read MB/s", "symlog"),
+        ("real_qd", "Avg queue depth", "symlog"),
+        ("real_read_await_ms", "Read await (ms)", "linear"),
+    ]
+    fig, axes = plt.subplots(len(DATASET_ORDER), len(disk_metrics), figsize=(17.0, 11.5), constrained_layout=True)
+    fig.suptitle("Representative search: real disk metrics by thread", fontsize=14)
+    for row_index, dataset in enumerate(DATASET_ORDER):
+        for col_index, (field, label, scale_name) in enumerate(disk_metrics):
+            axis = axes[row_index][col_index]
+            for thread in thread_order:
+                x, y = xy_for(dataset, thread, field)
+                if y:
+                    axis.plot(x, y, marker=thread_markers[thread], color=thread_colors[thread], linewidth=1.35, label=f"t={thread}")
+            if scale_name == "symlog":
+                axis.set_yscale("symlog", linthresh=0.01)
+            axis.set_xscale("log")
+            axis.set_xlabel("Selectivity (%)")
+            axis.set_ylabel(label)
+            axis.grid(True, alpha=0.22)
+            if col_index == 0:
+                axis.set_title(DATASET_LABELS[dataset], loc="left")
+            else:
+                axis.set_title(label)
+            if row_index == 0 and col_index == len(disk_metrics) - 1:
+                axis.legend(frameon=False, ncol=1)
     fig.savefig(out_dir / "representative_disk.png", bbox_inches="tight", dpi=300)
     plt.close(fig)
 
-    fig, axes = common_axes("Representative search vs fio same-QD capacity", "Real/Fio capacity ratio")
-    for axis, dataset in zip(axes.flat, DATASET_ORDER):
-        ds_rows = dataset_rows(dataset)
-        axis.plot(
-            [float(row["selectivity"]) * 100 for row in ds_rows],
-            [float(row["fio_capacity_ratio"] or 0) for row in ds_rows],
-            marker="o",
-        )
-        axis.axhline(0.8, color="#333333", linestyle="--", linewidth=1.0, alpha=0.5)
-        axis.axhline(0.5, color="#333333", linestyle=":", linewidth=1.0, alpha=0.5)
+    fig, axes = plt.subplots(len(DATASET_ORDER), 2, figsize=(14.5, 11.5), constrained_layout=True)
+    fig.suptitle("Representative search vs fio same-QD capacity: solid=search, dashed=fio, zero-read search points omitted", fontsize=13)
+    for row_index, dataset in enumerate(DATASET_ORDER):
+        for col_index, (real_field, fio_field, label) in enumerate(
+            [("real_read_iops", "fio_iops", "Read IOPS"), ("real_read_mb_s", "fio_bw_mb_s", "Read MB/s")]
+        ):
+            axis = axes[row_index][col_index]
+            for thread in thread_order:
+                x_real, y_real = xy_for(dataset, thread, real_field)
+                x_fio, y_fio = xy_for(dataset, thread, fio_field)
+                real_points = [(x, y) for x, y in zip(x_real, y_real) if y > 0.0]
+                fio_points = [(x, y) for x, y in zip(x_fio, y_fio) if y > 0.0]
+                if y_real:
+                    if real_points:
+                        axis.plot([x for x, _ in real_points], [y for _, y in real_points], marker=thread_markers[thread], color=thread_colors[thread], linewidth=1.45, label=f"search t={thread}")
+                    elif col_index == 0:
+                        axis.text(0.03, 0.1 + 0.06 * thread_order.index(thread), f"search t={thread}: 0 reads", transform=axis.transAxes, fontsize=8, color=thread_colors[thread])
+                if fio_points:
+                    axis.plot([x for x, _ in fio_points], [y for _, y in fio_points], marker=thread_markers[thread], color=thread_colors[thread], linestyle="--", linewidth=1.2, alpha=0.72, label=f"fio t={thread}")
+            axis.set_xscale("log")
+            axis.set_yscale("log")
+            axis.set_xlabel("Selectivity (%)")
+            axis.set_ylabel(label)
+            axis.grid(True, alpha=0.22)
+            title = DATASET_LABELS[dataset] if col_index == 0 else label
+            axis.set_title(title, loc="left" if col_index == 0 else "center")
+            if row_index == 0 and col_index == 1:
+                axis.legend(frameon=False, ncol=2)
     fig.savefig(out_dir / "representative_vs_fio.png", bbox_inches="tight", dpi=300)
     plt.close(fig)
 

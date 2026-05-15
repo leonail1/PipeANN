@@ -146,44 +146,47 @@ def plot_scaling(rows: list[dict[str, str]], output_path: Path, savefig_dpi: int
             representative = by_thread[1]
             dataset_points.append(
                 {
+                    "bucket": representative["bucket_name"],
                     "selectivity": to_float(representative["selectivity_midpoint"]) * 100,
-                    "efficiency": qps_8 / qps_1 / 8.0,
-                    "speedup": qps_8 / qps_1,
+                    "speedups": {thread: to_float(by_thread[thread]["qps"]) / qps_1 for thread in THREAD_ORDER},
                     "route": route_for(representative),
                 }
             )
 
         dataset_points.sort(key=lambda item: item["selectivity"])
-        for route in ["prefilter", "graph", "fallback"]:
-            points = [item for item in dataset_points if item["route"] == route]
-            if not points:
-                continue
+        for item in dataset_points:
             axis.plot(
-                [item["selectivity"] for item in points],
-                [item["efficiency"] for item in points],
+                THREAD_ORDER,
+                [item["speedups"][thread] for thread in THREAD_ORDER],
                 marker="o",
-                linewidth=1.8,
-                color=ROUTE_COLORS[route],
-                label=route,
+                linewidth=1.45,
+                color=ROUTE_COLORS[item["route"]],
+                alpha=0.78,
             )
-            for item in points:
-                axis.annotate(f"{item['speedup']:.1f}x", (item["selectivity"], item["efficiency"]),
-                              textcoords="offset points", xytext=(0, 7), ha="center", fontsize=8)
+            axis.annotate(
+                item["bucket"],
+                (THREAD_ORDER[-1], item["speedups"][THREAD_ORDER[-1]]),
+                textcoords="offset points",
+                xytext=(5, 0),
+                va="center",
+                fontsize=7,
+                color=ROUTE_COLORS[item["route"]],
+            )
 
-        axis.axhline(1.0, color="#333333", linestyle="--", linewidth=1.0, alpha=0.55, label="linear")
-        axis.set_ylim(0, 1.05)
-        axis.set_xscale("log")
+        axis.plot(THREAD_ORDER, THREAD_ORDER, color="#333333", linestyle="--", linewidth=1.0, alpha=0.55, label="linear speedup")
+        axis.set_xticks(THREAD_ORDER)
         axis.set_title(DATASET_LABELS[dataset])
-        axis.set_xlabel("Selectivity (%)")
-        axis.set_ylabel("8-thread efficiency vs t=1")
-        axis.legend(frameon=False)
+        axis.set_xlabel("Threads")
+        axis.set_ylabel("QPS speedup vs t=1")
+        axis.legend(frameon=False, loc="upper left")
 
-    fig.suptitle("qps_4sets reproduction: scaling efficiency exposes non-linear bottlenecks", fontsize=14)
+    fig.suptitle("qps_4sets reproduction: speedup curves by selectivity bucket and route", fontsize=14)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
 
 
 def plot_route_io(rows: list[dict[str, str]], output_path: Path, savefig_dpi: int = 400) -> None:
+    import matplotlib.lines as mlines
     import matplotlib.pyplot as plt
 
     set_common_style(savefig_dpi)
@@ -195,31 +198,44 @@ def plot_route_io(rows: list[dict[str, str]], output_path: Path, savefig_dpi: in
         mean_ios = [to_float(row["mean_ios"]) for row in dataset_rows]
         candidates = [to_float(row["mean_candidate_count"]) for row in dataset_rows]
 
-        axis.plot(x_values, mean_ios, color="#3b5f8a", marker="o", linewidth=1.8, label="Mean IOs/query")
+        axis.plot(x_values, mean_ios, color="#3b5f8a", marker="o", linewidth=1.8, label="logical IOs/query")
         twin = axis.twinx()
-        twin.plot(x_values, candidates, color="#8a3b52", marker="s", linewidth=1.5, label="Mean candidates")
+        twin.plot(x_values, candidates, color="#8a3b52", marker="s", linewidth=1.5, label="candidate count")
         twin.set_yscale("log")
-        twin.set_ylabel("Mean candidates/query")
+        twin.set_ylabel("Candidate count/query")
 
         for row in dataset_rows:
+            route = route_for(row)
             axis.scatter(
                 [to_float(row["selectivity_midpoint"]) * 100],
                 [to_float(row["mean_ios"])],
-                color=ROUTE_COLORS[route_for(row)],
+                color=ROUTE_COLORS[route],
                 s=48,
                 zorder=4,
+            )
+            axis.annotate(
+                row["bucket_name"],
+                (to_float(row["selectivity_midpoint"]) * 100, to_float(row["mean_ios"])),
+                textcoords="offset points",
+                xytext=(0, 6),
+                ha="center",
+                fontsize=7,
             )
 
         axis.set_xscale("log")
         axis.set_title(DATASET_LABELS[dataset])
         axis.set_xlabel("Selectivity (%)")
-        axis.set_ylabel("Mean IOs/query")
+        axis.set_ylabel("Logical IOs/query, t=1")
 
         handles, labels = axis.get_legend_handles_labels()
         twin_handles, twin_labels = twin.get_legend_handles_labels()
-        axis.legend(handles + twin_handles, labels + twin_labels, frameon=False, loc="upper left")
+        route_handles = [
+            mlines.Line2D([], [], color=color, marker="o", linestyle="None", label=f"route: {route}")
+            for route, color in ROUTE_COLORS.items()
+        ]
+        axis.legend(handles + twin_handles + route_handles[:2], labels + twin_labels + [h.get_label() for h in route_handles[:2]], frameon=False, loc="upper left")
 
-    fig.suptitle("qps_4sets reproduction: route behavior and per-query IO/candidate pressure", fontsize=14)
+    fig.suptitle("qps_4sets reproduction: thread-1 route choice, logical IOs, and candidate counts", fontsize=14)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
 
@@ -274,8 +290,9 @@ def plot_disk_diagnostics(rows: list[dict[str, str]], output_path: Path, savefig
 
     for axis, dataset in zip(axes.flat, DATASET_ORDER):
         thread1_rows = sorted_dataset_rows([row for row in rows if row["dataset"] == dataset and int(row["threads"]) == 1])
-        ok_rows = [row for row in thread1_rows if row.get("disk_metrics_status", "ok") in ("", "ok")]
-        invalid_rows = [row for row in thread1_rows if row.get("disk_metrics_status", "ok") not in ("", "ok")]
+        has_status = any("disk_metrics_status" in row for row in thread1_rows)
+        ok_rows = [row for row in thread1_rows if has_status and row.get("disk_metrics_status", "ok") in ("", "ok")]
+        invalid_rows = [row for row in thread1_rows if (not has_status) or row.get("disk_metrics_status", "ok") not in ("", "ok")]
 
         x_values = [to_float(row["selectivity_midpoint"]) * 100 for row in ok_rows]
         read_values = [to_optional_float(row.get("avg_read_mb_s")) for row in ok_rows]
@@ -295,22 +312,17 @@ def plot_disk_diagnostics(rows: list[dict[str, str]], output_path: Path, savefig
         for row in invalid_rows:
             x_value = to_float(row["selectivity_midpoint"]) * 100
             axis.axvline(x_value, color="#6a6a6a", linewidth=0.9, alpha=0.22)
-            axis.annotate(
-                "unavailable",
-                (x_value, 0.02),
-                xycoords=("data", "axes fraction"),
-                rotation=90,
-                va="bottom",
-                ha="right",
-                fontsize=8,
-                color="#6a6a6a",
-            )
+        if invalid_rows:
+            reason = "legacy counters unavailable" if not has_status else "unavailable"
+            axis.text(0.5, 0.5, reason, transform=axis.transAxes, ha="center", va="center", color="#6a6a6a", fontsize=10)
 
         axis.set_xscale("log")
         axis.set_title(DATASET_LABELS[dataset])
         axis.set_xlabel("Selectivity (%)")
         axis.set_ylabel("Disk metrics, t=1")
-        axis.legend(frameon=False)
+        handles, labels = axis.get_legend_handles_labels()
+        if handles:
+            axis.legend(handles, labels, frameon=False)
 
     fig.suptitle("qps_4sets reproduction: disk metrics with invalid counters marked", fontsize=14)
     fig.savefig(output_path, bbox_inches="tight")
@@ -341,31 +353,6 @@ def plot_bottleneck_diagnostics(rows: list[dict[str, str]], output_path: Path, s
             )
 
         thread1_rows = [row for row in dataset_rows if int(row["threads"]) == 1]
-        x_values = [to_float(row["selectivity_midpoint"]) * 100 for row in thread1_rows]
-        disk_values = [to_float(row["avg_disk_util_pct"]) for row in thread1_rows]
-        read_values = [to_float(row["avg_read_mb_s"]) for row in thread1_rows]
-
-        twin = axis.twinx()
-        twin.plot(
-            x_values,
-            disk_values,
-            marker="x",
-            linestyle="--",
-            linewidth=1.4,
-            color="#8a3b52",
-            label="Disk util %, t=1",
-        )
-        twin.plot(
-            x_values,
-            read_values,
-            marker="+",
-            linestyle=":",
-            linewidth=1.4,
-            color="#b4552a",
-            label="Read MB/s, t=1",
-        )
-        twin.set_ylabel("Disk util (%) / read MB/s")
-
         for row in thread1_rows:
             axis.scatter(
                 [to_float(row["selectivity_midpoint"]) * 100],
@@ -374,21 +361,37 @@ def plot_bottleneck_diagnostics(rows: list[dict[str, str]], output_path: Path, s
                 s=48,
                 zorder=4,
             )
+            axis.annotate(
+                row["bucket_name"],
+                (to_float(row["selectivity_midpoint"]) * 100, to_float(row["avg_cpu_pct"])),
+                textcoords="offset points",
+                xytext=(0, 6),
+                ha="center",
+                fontsize=7,
+            )
 
         axis.set_xscale("log")
         axis.set_title(DATASET_LABELS[dataset])
         axis.set_xlabel("Selectivity (%)")
         axis.set_ylabel("Avg CPU pct per requested thread")
+        axis.text(
+            0.02,
+            0.03,
+            "legacy disk counters unavailable;\nuse io_representative plots for SSD evidence",
+            transform=axis.transAxes,
+            fontsize=8,
+            color="#6a6a6a",
+            va="bottom",
+        )
 
         handles, labels = axis.get_legend_handles_labels()
-        twin_handles, twin_labels = twin.get_legend_handles_labels()
         route_handles = [
             mlines.Line2D([], [], color=color, marker="o", linestyle="None", label=f"route: {route}")
             for route, color in ROUTE_COLORS.items()
         ]
-        axis.legend(handles[:2] + twin_handles + route_handles[:2], labels[:2] + twin_labels + [h.get_label() for h in route_handles[:2]], frameon=False)
+        axis.legend(handles[:4] + route_handles[:2], labels[:4] + [h.get_label() for h in route_handles[:2]], frameon=False)
 
-    fig.suptitle("qps_4sets reproduction: CPU activity vs observed SSD pressure", fontsize=14)
+    fig.suptitle("qps_4sets reproduction: CPU activity and route diagnostics", fontsize=14)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
 
