@@ -73,6 +73,8 @@ COMPARISON_FIELDS = [
     "mean_ios",
     "real_read_iops",
     "real_read_mb_s",
+    "real_iops",
+    "real_mb_s",
     "real_qd",
     "real_read_await_ms",
     "real_ssd_lat_status",
@@ -80,8 +82,12 @@ COMPARISON_FIELDS = [
     "real_ssd_lat_p95_ms",
     "real_ssd_lat_p99_ms",
     "fio_matched_iodepth",
+    "fio_matched_achieved_qd",
     "fio_iops",
+    "fio_mb_s",
     "fio_bw_mb_s",
+    "iops_vs_fio_ratio",
+    "bw_vs_fio_ratio",
     "fio_lat_mean_ms",
     "fio_lat_p99_ms",
     "fio_capacity_ratio",
@@ -141,7 +147,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]], fields: list[str] | None =
     if fields is None:
         fields = sorted({key for row in rows for key in row})
     with path.open("w", newline="", encoding="utf-8") as writer:
-        csv_writer = csv.DictWriter(writer, fieldnames=fields, extrasaction="ignore")
+        csv_writer = csv.DictWriter(writer, fieldnames=fields, extrasaction="ignore", lineterminator="\n")
         csv_writer.writeheader()
         for row in rows:
             csv_writer.writerow(row)
@@ -369,7 +375,34 @@ def match_fio(row: dict[str, Any], fio_rows: list[dict[str, Any]]) -> dict[str, 
     if not candidates:
         return None
     target = 1.0 if real_qd is None else real_qd
-    return sorted(candidates, key=lambda item: (abs(float(item["iodepth"]) - target), float(item["iodepth"])))[0]
+    return sorted(
+        candidates,
+        key=lambda item: (
+            abs(fio_effective_qd(item) - target),
+            fio_effective_qd(item),
+            float(item["iodepth"]),
+        ),
+    )[0]
+
+
+def fio_effective_qd(fio: dict[str, Any]) -> float:
+    achieved = safe_float(fio.get("achieved_qd"))
+    if achieved is not None and achieved > 0:
+        return achieved
+    return float(fio["iodepth"])
+
+
+def fio_capacity_ratios(row: dict[str, Any], fio: dict[str, Any] | None) -> tuple[float | None, float | None, float | None]:
+    if fio is None:
+        return None, None, None
+    real_iops = safe_float(row.get("avg_read_iops")) or 0.0
+    real_bw = safe_float(row.get("avg_read_mb_s")) or 0.0
+    fio_iops = safe_float(fio.get("read_iops")) or 0.0
+    fio_bw = safe_float(fio.get("read_mb_s")) or 0.0
+    iops_ratio = None if fio_iops <= 0 else real_iops / fio_iops
+    bw_ratio = None if fio_bw <= 0 else real_bw / fio_bw
+    capacity_ratio = max(value for value in (iops_ratio, bw_ratio) if value is not None) if iops_ratio is not None or bw_ratio is not None else None
+    return iops_ratio, bw_ratio, capacity_ratio
 
 
 def conclude(row: dict[str, Any], fio: dict[str, Any] | None, scaling_efficiency: float | None) -> tuple[str, float | None]:
@@ -377,13 +410,9 @@ def conclude(row: dict[str, Any], fio: dict[str, Any] | None, scaling_efficiency
         return "inconclusive_monitor_invalid", None
     if fio is None:
         return "inconclusive_missing_fio", None
-    real_iops = safe_float(row.get("avg_read_iops")) or 0.0
-    real_bw = safe_float(row.get("avg_read_mb_s")) or 0.0
-    fio_iops = safe_float(fio.get("read_iops")) or 0.0
-    fio_bw = safe_float(fio.get("read_mb_s")) or 0.0
-    iops_ratio = 0.0 if fio_iops <= 0 else real_iops / fio_iops
-    bw_ratio = 0.0 if fio_bw <= 0 else real_bw / fio_bw
-    capacity_ratio = max(iops_ratio, bw_ratio)
+    _, _, capacity_ratio = fio_capacity_ratios(row, fio)
+    if capacity_ratio is None:
+        return "inconclusive_missing_fio_capacity", None
     real_latency = safe_float(row.get("block_latency_p99_ms"))
     fio_latency = safe_float(fio.get("lat_p99_ms"))
     if real_latency is None or fio_latency is None:
@@ -414,6 +443,7 @@ def summarize(args: argparse.Namespace) -> None:
         fio = match_fio(row, fio_rows)
         efficiency = efficiencies.get((str(row.get("dataset")), str(row.get("bucket_name"))))
         conclusion, ratio = conclude(row, fio, efficiency)
+        iops_ratio, bw_ratio, _ = fio_capacity_ratios(row, fio)
         comparison_rows.append(
             {
                 "dataset": row.get("dataset"),
@@ -428,6 +458,8 @@ def summarize(args: argparse.Namespace) -> None:
                 "mean_ios": row.get("mean_ios"),
                 "real_read_iops": row.get("avg_read_iops"),
                 "real_read_mb_s": row.get("avg_read_mb_s"),
+                "real_iops": row.get("avg_read_iops"),
+                "real_mb_s": row.get("avg_read_mb_s"),
                 "real_qd": row.get("avg_qd"),
                 "real_read_await_ms": row.get("avg_read_await_ms"),
                 "real_ssd_lat_status": row.get("block_latency_status"),
@@ -435,8 +467,12 @@ def summarize(args: argparse.Namespace) -> None:
                 "real_ssd_lat_p95_ms": row.get("block_latency_p95_ms"),
                 "real_ssd_lat_p99_ms": row.get("block_latency_p99_ms"),
                 "fio_matched_iodepth": None if fio is None else fio.get("iodepth"),
+                "fio_matched_achieved_qd": None if fio is None else fio.get("achieved_qd"),
                 "fio_iops": None if fio is None else fio.get("read_iops"),
+                "fio_mb_s": None if fio is None else fio.get("read_mb_s"),
                 "fio_bw_mb_s": None if fio is None else fio.get("read_mb_s"),
+                "iops_vs_fio_ratio": iops_ratio,
+                "bw_vs_fio_ratio": bw_ratio,
                 "fio_lat_mean_ms": None if fio is None else fio.get("read_lat_mean_ms"),
                 "fio_lat_p99_ms": None if fio is None else fio.get("lat_p99_ms"),
                 "fio_capacity_ratio": ratio,

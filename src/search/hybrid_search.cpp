@@ -2,6 +2,8 @@
 
 #include <cstring>
 #include <limits>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "filter/selector.h"
@@ -76,6 +78,44 @@ namespace pipeann {
       return labels;
     }
 
+    bool metadata_matches_query(const HybridMetadataHeaderV1 *header, uint64_t selector_mask, uint64_t k_search,
+                                uint32_t mem_L, uint64_t l_search, uint64_t beam_width, std::string *reason) {
+      if (header == nullptr) {
+        *reason = "metadata is not loaded";
+        return false;
+      }
+      if ((header->flags & kMetadataAllowPrefilterFlag) == 0) {
+        *reason = "prefilter routing is not enabled in metadata";
+        return false;
+      }
+      if ((header->route_selector_mask & selector_mask) == 0) {
+        *reason = "selector is not covered by metadata";
+        return false;
+      }
+      if (header->tau_m == 0 || header->threshold_version == 0) {
+        *reason = "metadata has zero tau_m or threshold_version";
+        return false;
+      }
+      if (header->calib_k != k_search) {
+        *reason = "K does not match metadata calibration";
+        return false;
+      }
+      if (header->calib_mem_L != mem_L) {
+        *reason = "mem_L does not match metadata calibration";
+        return false;
+      }
+      if (header->calib_l_search != l_search) {
+        *reason = "L does not match metadata calibration";
+        return false;
+      }
+      if (header->calib_beamwidth != beam_width) {
+        *reason = "beamwidth does not match metadata calibration";
+        return false;
+      }
+      reason->clear();
+      return true;
+    }
+
     template<typename TagT>
     void clear_result_buffers(uint64_t k_search, TagT *res_tags, float *res_dists) {
       for (uint64_t result_idx = 0; result_idx < k_search; ++result_idx) {
@@ -121,8 +161,14 @@ namespace pipeann {
       return finish_graph_path(HybridRouteDecision::kAutoGraphFallback, selector, filter_data);
     }
 
+    const bool force_prefilter = route_override == HybridRouteOverride::kForcePrefilter;
+    const bool force_graph_only = route_override == HybridRouteOverride::kForceGraphOnly;
+    const bool auto_route = !force_prefilter && !force_graph_only;
     const uint64_t selector_mask = selector_mask_for_kind(filter_kind);
     if (densebit_index_ == nullptr) {
+      if (auto_route) {
+        throw std::runtime_error("filtered auto query requires a loaded densebit sidecar");
+      }
       return finish_graph_path(HybridRouteDecision::kAutoGraphFallback, selector, filter_data);
     }
 
@@ -132,9 +178,12 @@ namespace pipeann {
     const uint64_t route_overhead_us = route_timer.elapsed();
     const bool routing_metadata_ready = hybrid_enabled() && hybrid_metadata_ != nullptr;
     const HybridMetadataHeaderV1 *meta_header = routing_metadata_ready ? &hybrid_metadata_->header() : nullptr;
-    const bool calibrated_for_selector =
-        meta_header != nullptr && (meta_header->flags & kMetadataAllowPrefilterFlag) != 0
-        && (meta_header->route_selector_mask & selector_mask) != 0;
+    std::string metadata_mismatch_reason;
+    const bool calibrated_for_selector = metadata_matches_query(meta_header, selector_mask, k_search, mem_L,
+                                                                l_search, beam_width, &metadata_mismatch_reason);
+    if (auto_route && !calibrated_for_selector) {
+      throw std::runtime_error("filtered auto query requires compatible hybrid metadata: " + metadata_mismatch_reason);
+    }
     const uint64_t tau_m = calibrated_for_selector ? meta_header->tau_m : 0;
 
     if (hybrid_stats != nullptr) {
@@ -156,8 +205,6 @@ namespace pipeann {
       return 0;
     }
 
-    const bool force_prefilter = route_override == HybridRouteOverride::kForcePrefilter;
-    const bool force_graph_only = route_override == HybridRouteOverride::kForceGraphOnly;
     const bool choose_prefilter = force_prefilter || (!force_graph_only && calibrated_for_selector
                                                       && candidate_count <= tau_m);
 

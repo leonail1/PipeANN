@@ -39,6 +39,20 @@ pipeann::HybridFilterKind parse_filter_kind(const std::string &selector_type) {
   return pipeann::HybridFilterKind::kUnsupported;
 }
 
+uint64_t selector_mask_for_kind(pipeann::HybridFilterKind filter_kind) {
+  switch (filter_kind) {
+    case pipeann::HybridFilterKind::kIntersect:
+      return 1ULL;
+    case pipeann::HybridFilterKind::kSubset:
+      return 2ULL;
+    case pipeann::HybridFilterKind::kRange:
+      return 4ULL;
+    case pipeann::HybridFilterKind::kUnsupported:
+    default:
+      return 0ULL;
+  }
+}
+
 bool parse_route_override(const std::string &force_route, pipeann::HybridRouteOverride *route_override,
                           bool *validate_auto_route) {
   *validate_auto_route = false;
@@ -60,6 +74,45 @@ bool parse_route_override(const std::string &force_route, pipeann::HybridRouteOv
     return true;
   }
   return false;
+}
+
+bool validate_auto_calibration_config(const pipeann::HybridMetadataHeaderV1 &header,
+                                      pipeann::HybridFilterKind filter_kind, uint64_t k_search, uint32_t mem_L,
+                                      uint32_t beamwidth, const std::vector<uint64_t> &l_search_values) {
+  const uint64_t selector_mask = selector_mask_for_kind(filter_kind);
+  if ((header.route_selector_mask & selector_mask) == 0) {
+    LOG(ERROR) << "filtered auto query selector is not covered by hybrid metadata; selector_mask=" << selector_mask
+               << ", metadata_selector_mask=" << header.route_selector_mask;
+    return false;
+  }
+  if (header.tau_m == 0 || header.threshold_version == 0) {
+    LOG(ERROR) << "filtered auto query requires nonzero calibrated tau_m and threshold_version; tau_m="
+               << header.tau_m << ", threshold_version=" << header.threshold_version;
+    return false;
+  }
+  if (header.calib_k != k_search) {
+    LOG(ERROR) << "filtered auto query K does not match hybrid metadata calibration; query K=" << k_search
+               << ", calibration K=" << header.calib_k;
+    return false;
+  }
+  if (header.calib_mem_L != mem_L) {
+    LOG(ERROR) << "filtered auto query mem_L does not match hybrid metadata calibration; query mem_L=" << mem_L
+               << ", calibration mem_L=" << header.calib_mem_L;
+    return false;
+  }
+  if (header.calib_beamwidth != beamwidth) {
+    LOG(ERROR) << "filtered auto query beamwidth does not match hybrid metadata calibration; query beamwidth="
+               << beamwidth << ", calibration beamwidth=" << header.calib_beamwidth;
+    return false;
+  }
+  for (uint64_t l_search : l_search_values) {
+    if (header.calib_l_search != l_search) {
+      LOG(ERROR) << "filtered auto query L does not match hybrid metadata calibration; query L=" << l_search
+                 << ", calibration L=" << header.calib_l_search;
+      return false;
+    }
+  }
+  return true;
 }
 
 bool results_match(size_t lhs_count, const std::vector<uint32_t> &lhs_tags, const std::vector<float> &lhs_dists,
@@ -311,6 +364,14 @@ int search_disk_index(int argc, char **argv) {
   if ((route_override == pipeann::HybridRouteOverride::kAuto || validate_auto_route) && !index_ptr->hybrid_enabled()) {
     LOG(ERROR) << force_route << " requires calibrated hybrid runtime assets to be present and loadable";
     return -1;
+  }
+  if (route_override == pipeann::HybridRouteOverride::kAuto || validate_auto_route) {
+    const pipeann::HybridMetadata *metadata = index_ptr->hybrid_metadata();
+    if (metadata == nullptr
+        || !validate_auto_calibration_config(metadata->header(), filter_kind, recall_at, mem_L, beamwidth, Lvec)) {
+      LOG(ERROR) << force_route << " requires hybrid metadata calibrated with the same selector/K/L/beamwidth/mem_L";
+      return -1;
+    }
   }
 
   omp_set_num_threads(num_threads);

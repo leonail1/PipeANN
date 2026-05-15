@@ -1131,7 +1131,7 @@ def sudo_noninteractive_available() -> bool:
 def bpftrace_block_latency_script() -> str:
     return "\n".join(
         [
-            'tracepoint:block:block_rq_issue /args->rwbs == "R"/ {',
+            'tracepoint:block:block_rq_issue /strncmp(args->rwbs, "R", 1) == 0/ {',
             "  @start[args->dev, args->sector] = nsecs;",
             "}",
             "tracepoint:block:block_rq_complete /@start[args->dev, args->sector]/ {",
