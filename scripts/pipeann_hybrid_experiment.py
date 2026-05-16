@@ -784,29 +784,58 @@ def format_logged_command(cmd: Sequence[str], env_overrides: dict[str, str] | No
     return env_prefix + " ".join(shlex.quote(part) for part in cmd)
 
 
+def maybe_unlink_jsonl_output(cmd: Sequence[str]) -> None:
+    for idx, value in enumerate(cmd):
+        if value == "--jsonl-output" and idx + 1 < len(cmd):
+            path = Path(cmd[idx + 1])
+            if path.exists():
+                path.unlink()
+            return
+
+
+def should_retry_command(cmd: Sequence[str]) -> bool:
+    if not cmd:
+        return False
+    return Path(cmd[0]).name == "search_disk_index_hybrid"
+
+
 def run_command(
     cmd: Sequence[str],
     timeout: int,
     log_path: Path | None = None,
     env_overrides: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        list(cmd),
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        timeout=timeout,
-        check=False,
-        env=build_process_env(env_overrides),
-    )
+    attempts: list[subprocess.CompletedProcess[str]] = []
+    max_attempts = 3 if should_retry_command(cmd) else 1
+    result: subprocess.CompletedProcess[str] | None = None
+    for attempt in range(1, max_attempts + 1):
+        if attempt > 1:
+            maybe_unlink_jsonl_output(cmd)
+            time.sleep(2)
+        result = subprocess.run(
+            list(cmd),
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+            env=build_process_env(env_overrides),
+        )
+        attempts.append(result)
+        if result.returncode == 0:
+            break
+    assert result is not None
     if log_path is not None:
         ensure_parent(log_path)
         with log_path.open("w", encoding="utf-8") as writer:
             writer.write("$ ")
             writer.write(format_logged_command(cmd, env_overrides))
             writer.write("\n\n")
-            writer.write(result.stdout)
-            writer.write(result.stderr)
+            for attempt, attempt_result in enumerate(attempts, start=1):
+                if len(attempts) > 1:
+                    writer.write(f"\n[attempt {attempt}/{len(attempts)} exit_code={attempt_result.returncode}]\n")
+                writer.write(attempt_result.stdout)
+                writer.write(attempt_result.stderr)
     if result.returncode != 0:
         raise RuntimeError(
             f"command failed with code {result.returncode}: {' '.join(cmd)}\n"
@@ -955,6 +984,15 @@ def load_prefilter_rerank_overrides(path: Path | None) -> dict[str, int]:
         if not isinstance(overrides, dict):
             raise ValueError(f"invalid overrides payload in {path}")
         return {str(bucket_name): int(value) for bucket_name, value in overrides.items()}
+    if isinstance(payload, dict) and isinstance(payload.get("entries"), list):
+        overrides = {}
+        for item in payload["entries"]:
+            if not isinstance(item, dict) or "bucket" not in item:
+                continue
+            value = item.get("prefilter_rerank_l") or item.get("chosen_prefilter_rerank_l")
+            if value is not None:
+                overrides[str(item["bucket"])] = int(value)
+        return overrides
     if isinstance(payload, dict):
         return {str(bucket_name): int(value) for bucket_name, value in payload.items()}
     raise ValueError(f"unsupported prefilter rerank json format: {path}")
@@ -3656,7 +3694,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
                 str(args.threads),
                 str(args.beamwidth),
                 bucket["query_bin"],
-                "null",
+                str(bucket.get("truthset_bin") or manifest.get("truthset_bin") or "null"),
                 str(args.k),
                 args.similarity,
                 args.nbr_type,

@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import math
 import os
 import re
 import signal
@@ -22,6 +24,24 @@ from typing import Any
 
 import numpy as np
 
+from pipeann_hybrid_experiment import (
+    DenseBitsetSidecar,
+    PREFILTER_RERANK_ENV,
+    SpmatMatrix,
+    compute_exact_topk_ids,
+    default_prefilter_rerank_l,
+    load_bin_matrix,
+    load_tags_by_id,
+    write_bin_subset,
+    write_spmat_subset,
+    write_truthset_ids,
+)
+
+try:
+    from threadpoolctl import threadpool_limits
+except ImportError:  # pragma: no cover - optional runtime dependency.
+    threadpool_limits = None
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DATA_ROOT = REPO_ROOT / "data"
@@ -34,6 +54,10 @@ DEFAULT_THREAD_SWEEP = (1, 2, 4, 8)
 DEFAULT_SMALL_SELECTIVITIES = (0.001, 0.005, 0.01, 0.02, 0.05, 0.10, 0.25, 0.50, 1.0)
 DEFAULT_YFCC_SELECTIVITIES = (0.004, 0.005, 0.01, 0.02, 0.05, 0.099, 0.192)
 DEFAULT_SAMPLE_INTERVAL_S = 0.5
+DEFAULT_RECALL_QUERY_COUNT = 1000
+DEFAULT_RECALL_TARGET = 98.0
+DEFAULT_RECALL_CALIBRATION_THREADS = 32
+DEFAULT_RECALL_MAX_L = 65536
 SECTOR_SIZE_BYTES = 512
 DISK_METRIC_FIELDS = (
     "avg_read_mb_s",
@@ -159,6 +183,77 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as writer:
         for row in rows:
             writer.write(json.dumps(row, sort_keys=True) + "\n")
+
+
+_FILE_HASH_CACHE: dict[str, str] = {}
+
+
+def available_cpu_count() -> int:
+    if hasattr(os, "sched_getaffinity"):
+        try:
+            return max(1, len(os.sched_getaffinity(0)))
+        except OSError:
+            pass
+    return max(1, os.cpu_count() or 1)
+
+
+def normalize_gt_threads(value: int) -> int:
+    return available_cpu_count() if value == 0 else max(1, int(value))
+
+
+def sha256_file(path: Path) -> str:
+    resolved = str(path.resolve())
+    cached = _FILE_HASH_CACHE.get(resolved)
+    if cached is not None:
+        return cached
+    digest = hashlib.sha256()
+    with path.open("rb") as reader:
+        for chunk in iter(lambda: reader.read(16 * 1024 * 1024), b""):
+            digest.update(chunk)
+    value = digest.hexdigest()
+    _FILE_HASH_CACHE[resolved] = value
+    return value
+
+
+def stable_seed(seed: int, *parts: str) -> int:
+    digest = hashlib.sha256()
+    digest.update(str(seed).encode("utf-8"))
+    for part in parts:
+        digest.update(b"\0")
+        digest.update(part.encode("utf-8"))
+    return int.from_bytes(digest.digest()[:8], "little") & 0x7FFFFFFF
+
+
+def sample_row_ids(total_rows: int, requested_rows: int, seed: int, dataset: str, bucket: str) -> list[int]:
+    sample_count = min(max(1, int(requested_rows)), int(total_rows))
+    if sample_count >= total_rows:
+        return list(range(total_rows))
+    rng = np.random.default_rng(stable_seed(seed, dataset, bucket))
+    return sorted(int(value) for value in rng.choice(total_rows, size=sample_count, replace=False))
+
+
+def first_search_record(path: Path) -> dict[str, Any]:
+    rows = [row for row in load_jsonl(path) if row.get("format") == "pipeann.hybrid.search.v1"]
+    if len(rows) != 1:
+        raise RuntimeError(f"expected exactly one search record in {path}, found {len(rows)}")
+    return rows[0]
+
+
+def thread_limited_exact_topk(*args: Any, gt_threads: int, **kwargs: Any) -> np.ndarray:
+    if threadpool_limits is None:
+        old_env = {name: os.environ.get(name) for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS")}
+        try:
+            for name in old_env:
+                os.environ[name] = str(gt_threads)
+            return compute_exact_topk_ids(*args, **kwargs)
+        finally:
+            for name, value in old_env.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+    with threadpool_limits(limits=gt_threads):
+        return compute_exact_topk_ids(*args, **kwargs)
 
 
 def parse_csv_ints(value: str) -> list[int]:
@@ -658,7 +753,7 @@ def prepare_yfcc_workloads(
     return payload
 
 
-def load_bucket_plan(path: Path | None) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+def load_bucket_plan(path: Path | None, dataset: str | None = None) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     if path is None:
         return {}, {}
     payload = read_json(path)
@@ -666,11 +761,12 @@ def load_bucket_plan(path: Path | None) -> tuple[dict[str, dict[str, Any]], dict
     entries_raw = payload.get("entries", []) if isinstance(payload, dict) else []
     entries: dict[str, dict[str, Any]] = {}
     for item in entries_raw:
+        if dataset is not None and item.get("dataset") not in (None, dataset):
+            continue
         key = str(item["bucket"])
-        entries[key] = {
-            "route": item.get("route"),
-            "L": item.get("L"),
-        }
+        entries[key] = dict(item)
+        entries[key]["route"] = item.get("route")
+        entries[key]["L"] = item.get("L") or item.get("chosen_L")
     return entries, defaults
 
 
@@ -1417,6 +1513,25 @@ def summarize_formal_results(args: argparse.Namespace) -> dict[str, Any]:
     out_dir = resolve_path(args.out_dir) if args.out_dir else experiment_root / "summary"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.require_recall_at_least is not None:
+        bad_rows = []
+        for row in rows:
+            recall = row.get("recall")
+            if recall is None or float(recall) < float(args.require_recall_at_least):
+                bad_rows.append(
+                    {
+                        "dataset": row.get("dataset"),
+                        "bucket_name": row.get("bucket_name"),
+                        "threads": row.get("threads"),
+                        "recall": recall,
+                    }
+                )
+        if bad_rows:
+            raise RuntimeError(
+                f"{len(bad_rows)} formal rows do not satisfy recall >= {args.require_recall_at_least}: "
+                f"{bad_rows[:5]}"
+            )
+
     enriched: list[dict[str, Any]] = []
     for row in rows:
         selectivity = row.get("selectivity_midpoint", row.get("bucket_midpoint"))
@@ -1488,6 +1603,546 @@ def default_manifest_for_dataset(data_root: Path, experiment_root: Path, dataset
     return manifest_path(experiment_root, dataset)
 
 
+def base_bin_for_dataset(data_root: Path, experiment_root: Path, dataset: str) -> Path:
+    if dataset == "yfcc10m":
+        return default_yfcc_paths(data_root, experiment_root)["base_bin"]
+    return default_small_paths(data_root, dataset)["base_bin"]
+
+
+def run_hybrid_search_record(
+    *,
+    search_binary: Path,
+    index_type: str,
+    index_prefix: str,
+    threads: int,
+    beamwidth: int,
+    query_bin: Path,
+    truthset_bin: Path | str,
+    k: int,
+    similarity: str,
+    nbr_type: str,
+    selector_type: str,
+    query_labels: Path,
+    route: str,
+    mem_l: int,
+    l_value: int,
+    output_jsonl: Path,
+    log_path: Path,
+    timeout: int,
+    env_overrides: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    ensure_parent(output_jsonl)
+    ensure_parent(log_path)
+    if output_jsonl.exists():
+        try:
+            return first_search_record(output_jsonl)
+        except Exception:
+            output_jsonl.unlink()
+    command = [
+        str(search_binary),
+        index_type,
+        index_prefix,
+        str(threads),
+        str(beamwidth),
+        str(query_bin),
+        str(truthset_bin),
+        str(k),
+        similarity,
+        nbr_type,
+        selector_type,
+        str(query_labels),
+        route,
+        "0",
+        str(mem_l),
+        str(l_value),
+        "--jsonl-output",
+        str(output_jsonl),
+    ]
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    if env_overrides:
+        env.update(env_overrides)
+    log("+ " + shell_join(command))
+    attempts: list[subprocess.CompletedProcess[str]] = []
+    max_attempts = 3
+    result: subprocess.CompletedProcess[str] | None = None
+    for attempt in range(1, max_attempts + 1):
+        if output_jsonl.exists():
+            output_jsonl.unlink()
+        result = subprocess.run(command, cwd=REPO_ROOT, text=True, capture_output=True, timeout=timeout, env=env)
+        attempts.append(result)
+        if result.returncode == 0:
+            break
+        if attempt < max_attempts:
+            log(f"[warn] search failed with code {result.returncode}; retrying attempt {attempt + 1}/{max_attempts}")
+            time.sleep(2)
+    assert result is not None
+    with log_path.open("w", encoding="utf-8") as writer:
+        writer.write("$ ")
+        if env_overrides:
+            writer.write(" ".join(f"{key}={shlex.quote(value)}" for key, value in sorted(env_overrides.items())))
+            writer.write(" ")
+        writer.write(shell_join(command))
+        writer.write("\n\n")
+        for attempt, attempt_result in enumerate(attempts, start=1):
+            if len(attempts) > 1:
+                writer.write(f"\n[attempt {attempt}/{len(attempts)} exit_code={attempt_result.returncode}]\n")
+            writer.write(attempt_result.stdout)
+            writer.write(attempt_result.stderr)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, command, output=result.stdout, stderr=result.stderr)
+    return first_search_record(output_jsonl)
+
+
+def route_from_record(record: dict[str, Any]) -> str:
+    query_count = int(record.get("query_count") or 0)
+    if query_count > 0 and int(record.get("prefilter_count") or 0) == query_count:
+        return "prefilter"
+    if query_count > 0 and int(record.get("graph_count") or 0) == query_count:
+        return "graph"
+    raise RuntimeError(
+        "route probe did not resolve to a single route: "
+        f"prefilter={record.get('prefilter_count')} graph={record.get('graph_count')} query_count={query_count}"
+    )
+
+
+def ensure_recall_workload_and_truthset(
+    *,
+    dataset: str,
+    manifest: dict[str, Any],
+    bucket: dict[str, Any],
+    data_root: Path,
+    experiment_root: Path,
+    query_count: int,
+    seed: int,
+    gt_threads: int,
+    k: int,
+    similarity: str,
+    block_candidates: int,
+    force_gt: bool,
+    base_rows: np.memmap,
+    sidecar: DenseBitsetSidecar,
+    tags_by_id: np.ndarray,
+) -> dict[str, Any]:
+    bucket_name = str(bucket["name"])
+    workload_dir_path = dataset_experiment_dir(experiment_root, dataset) / "recall_workloads" / bucket_name
+    workload_dir_path.mkdir(parents=True, exist_ok=True)
+    query_bin = workload_dir_path / "queries.bin"
+    query_labels_path = workload_dir_path / "query_labels.spmat"
+    truthset_path = workload_dir_path / "truthset.bin"
+    metadata_path = workload_dir_path / "truthset_meta.json"
+
+    source_query_bin = resolve_path(bucket["query_bin"])
+    source_query_labels = resolve_path(bucket["query_labels"])
+    query_total, _, query_rows = load_bin_matrix(source_query_bin, manifest["index_type"])
+    query_labels = SpmatMatrix.load(source_query_labels)
+    if query_total != query_labels.nrow:
+        raise ValueError(f"query/query-label row mismatch for {dataset}/{bucket_name}")
+    row_ids = sample_row_ids(query_total, query_count, seed, dataset, bucket_name)
+    write_bin_subset(query_bin, query_rows, row_ids)
+    write_spmat_subset(query_labels_path, query_labels, row_ids)
+
+    sampled_labels = [query_labels.row_labels(row_id) for row_id in row_ids]
+    filter_labels = sampled_labels[0]
+    if any(labels != filter_labels for labels in sampled_labels[1:]):
+        raise ValueError(f"recall workload for {dataset}/{bucket_name} must have one filter label set")
+
+    candidate_index_ids = sidecar.materialize_candidates(manifest["selector_type"], filter_labels)
+    candidate_ids = np.asarray(tags_by_id[candidate_index_ids], dtype=np.uint32)
+    if candidate_ids.size < k:
+        raise ValueError(f"{dataset}/{bucket_name} has only {candidate_ids.size} candidates, smaller than k={k}")
+
+    expected_meta = {
+        "format": "pipeann.qps4.recall_truthset.v1",
+        "dataset": dataset,
+        "bucket": bucket_name,
+        "k": int(k),
+        "similarity": similarity,
+        "index_type": manifest["index_type"],
+        "selector_type": manifest["selector_type"],
+        "sample_seed": int(seed),
+        "source_query_bin": str(source_query_bin),
+        "source_query_labels": str(source_query_labels),
+        "sampled_row_ids_hash": hashlib.sha256(json.dumps(row_ids, separators=(",", ":")).encode("utf-8")).hexdigest(),
+        "base_hash": sha256_file(base_bin_for_dataset(data_root, experiment_root, dataset)),
+        "query_hash": sha256_file(query_bin),
+        "query_label_hash": sha256_file(query_labels_path),
+        "candidate_count": int(candidate_ids.size),
+        "query_count": int(len(row_ids)),
+        "gt_threads": int(gt_threads),
+    }
+    reuse_gt = False
+    if truthset_path.exists() and metadata_path.exists() and not force_gt:
+        existing_meta = read_json(metadata_path)
+        reuse_gt = all(existing_meta.get(key) == value for key, value in expected_meta.items())
+    if not reuse_gt:
+        _, _, sampled_rows = load_bin_matrix(query_bin, manifest["index_type"])
+        log(f"[gt] compute {dataset}/{bucket_name}: queries={len(row_ids)} candidates={candidate_ids.size} threads={gt_threads}")
+        exact_topk_ids = thread_limited_exact_topk(
+            np.asarray(sampled_rows, dtype=np.float32),
+            base_rows,
+            candidate_ids,
+            k=k,
+            similarity=similarity,
+            block_candidates=block_candidates,
+            gt_threads=gt_threads,
+        )
+        write_truthset_ids(truthset_path, exact_topk_ids)
+        write_json(metadata_path, expected_meta)
+    else:
+        log(f"[gt] reuse {dataset}/{bucket_name}: {truthset_path}")
+
+    recall_bucket = {
+        **bucket,
+        "query_bin": str(query_bin),
+        "query_labels": str(query_labels_path),
+        "probe_query_bin": str(query_bin),
+        "probe_query_labels": str(query_labels_path),
+        "truthset_bin": str(truthset_path),
+        "query_count": int(len(row_ids)),
+        "recall_workload_source_query_bin": str(source_query_bin),
+        "recall_workload_source_query_labels": str(source_query_labels),
+        "recall_candidate_count": int(candidate_ids.size),
+    }
+    return {
+        "bucket": recall_bucket,
+        "filter_labels": filter_labels,
+        "candidate_count": int(candidate_ids.size),
+        "query_count": int(len(row_ids)),
+        "truthset_bin": str(truthset_path),
+        "query_bin": str(query_bin),
+        "query_labels": str(query_labels_path),
+    }
+
+
+def calibrate_graph_l(
+    *,
+    search_binary: Path,
+    manifest: dict[str, Any],
+    bucket_info: dict[str, Any],
+    threads: int,
+    beamwidth: int,
+    k: int,
+    similarity: str,
+    nbr_type: str,
+    mem_l: int,
+    target_recall: float,
+    max_l: int,
+    timeout: int,
+    calib_dir: Path,
+) -> dict[str, Any]:
+    evaluations: dict[int, dict[str, Any]] = {}
+
+    def evaluate(l_value: int) -> dict[str, Any]:
+        l_value = max(int(k), int(l_value))
+        if l_value not in evaluations:
+            evaluations[l_value] = run_hybrid_search_record(
+                search_binary=search_binary,
+                index_type=manifest["index_type"],
+                index_prefix=manifest["index_prefix"],
+                threads=threads,
+                beamwidth=beamwidth,
+                query_bin=Path(bucket_info["query_bin"]),
+                truthset_bin=bucket_info["truthset_bin"],
+                k=k,
+                similarity=similarity,
+                nbr_type=nbr_type,
+                selector_type=manifest["selector_type"],
+                query_labels=Path(bucket_info["query_labels"]),
+                route="graph",
+                mem_l=mem_l,
+                l_value=l_value,
+                output_jsonl=calib_dir / f"graph_L{l_value}.jsonl",
+                log_path=calib_dir / f"graph_L{l_value}.log",
+                timeout=timeout,
+            )
+        return evaluations[l_value]
+
+    low = k - 1
+    high = None
+    current = k
+    while current <= max_l:
+        record = evaluate(current)
+        if float(record.get("recall") or 0.0) >= target_recall:
+            high = current
+            break
+        low = current
+        next_l = max(current + 1, int(math.ceil(current * 1.7)))
+        current = max_l if next_l > max_l and current < max_l else next_l
+    if high is None:
+        return {
+            "status": "unreachable_recall",
+            "route": "graph",
+            "chosen_L": None,
+            "achieved_recall": max(float(row.get("recall") or 0.0) for row in evaluations.values()),
+            "evaluations": sorted(evaluations.values(), key=lambda row: int(row["L"])),
+        }
+    while high > low + 1:
+        mid = (low + high) // 2
+        record = evaluate(mid)
+        if float(record.get("recall") or 0.0) >= target_recall:
+            high = mid
+        else:
+            low = mid
+    chosen = evaluate(high)
+    return {
+        "status": "ok",
+        "route": "graph",
+        "chosen_L": int(high),
+        "chosen_prefilter_rerank_l": None,
+        "achieved_recall": float(chosen.get("recall") or 0.0),
+        "achieved_qps": float(chosen.get("qps") or 0.0),
+        "evaluations": sorted(evaluations.values(), key=lambda row: int(row["L"])),
+    }
+
+
+def calibrate_prefilter_rerank_for_recall(
+    *,
+    search_binary: Path,
+    manifest: dict[str, Any],
+    bucket_info: dict[str, Any],
+    threads: int,
+    beamwidth: int,
+    k: int,
+    similarity: str,
+    nbr_type: str,
+    mem_l: int,
+    target_recall: float,
+    timeout: int,
+    calib_dir: Path,
+) -> dict[str, Any]:
+    candidate_count = int(bucket_info["candidate_count"])
+    total_points = int(manifest.get("npoints") or 0)
+    evaluations: dict[int, dict[str, Any]] = {}
+
+    def evaluate(rerank_l: int) -> dict[str, Any]:
+        rerank_l = min(candidate_count, max(int(k), int(rerank_l)))
+        if rerank_l not in evaluations:
+            evaluations[rerank_l] = run_hybrid_search_record(
+                search_binary=search_binary,
+                index_type=manifest["index_type"],
+                index_prefix=manifest["index_prefix"],
+                threads=threads,
+                beamwidth=beamwidth,
+                query_bin=Path(bucket_info["query_bin"]),
+                truthset_bin=bucket_info["truthset_bin"],
+                k=k,
+                similarity=similarity,
+                nbr_type=nbr_type,
+                selector_type=manifest["selector_type"],
+                query_labels=Path(bucket_info["query_labels"]),
+                route="prefilter",
+                mem_l=mem_l,
+                l_value=100,
+                output_jsonl=calib_dir / f"prefilter_rerank{rerank_l}.jsonl",
+                log_path=calib_dir / f"prefilter_rerank{rerank_l}.log",
+                timeout=timeout,
+                env_overrides={PREFILTER_RERANK_ENV: str(rerank_l)},
+            )
+        return evaluations[rerank_l]
+
+    high = min(candidate_count, default_prefilter_rerank_l(k, candidate_count, total_points))
+    high_eval = evaluate(high)
+    while float(high_eval.get("recall") or 0.0) < target_recall and high < candidate_count:
+        high = min(candidate_count, max(high + 1, high * 2))
+        high_eval = evaluate(high)
+    if float(high_eval.get("recall") or 0.0) < target_recall:
+        return {
+            "status": "unreachable_recall",
+            "route": "prefilter",
+            "chosen_L": 100,
+            "chosen_prefilter_rerank_l": None,
+            "achieved_recall": max(float(row.get("recall") or 0.0) for row in evaluations.values()),
+            "evaluations": sorted(evaluations.values(), key=lambda row: int(row.get("prefilter_rerank_l") or 0)),
+        }
+    low = k - 1
+    while high > low + 1:
+        mid = (low + high) // 2
+        record = evaluate(mid)
+        if float(record.get("recall") or 0.0) >= target_recall:
+            high = mid
+        else:
+            low = mid
+    chosen = evaluate(high)
+    return {
+        "status": "ok",
+        "route": "prefilter",
+        "chosen_L": 100,
+        "chosen_prefilter_rerank_l": int(high),
+        "achieved_recall": float(chosen.get("recall") or 0.0),
+        "achieved_qps": float(chosen.get("qps") or 0.0),
+        "evaluations": sorted(evaluations.values(), key=lambda row: int(row.get("prefilter_rerank_l") or 0)),
+    }
+
+
+def calibrate_recall_plan(args: argparse.Namespace) -> dict[str, Any]:
+    data_root = resolve_path(args.data_root)
+    experiment_root = resolve_path(args.experiment_root)
+    build_dir = resolve_path(args.build_dir)
+    search_binary = build_dir / "tests" / "search_disk_index_hybrid"
+    if not search_binary.exists():
+        raise FileNotFoundError(f"missing search binary: {search_binary}")
+    gt_threads = normalize_gt_threads(args.gt_threads)
+    datasets = args.dataset or ["fashion_mnist784", "gist960", "glove100", "yfcc10m"]
+    summary_dir = experiment_root / "summary"
+    summary_dir.mkdir(parents=True, exist_ok=True)
+    combined_entries: list[dict[str, Any]] = []
+    manifests: dict[str, str] = {}
+
+    for dataset in datasets:
+        manifest_file = resolve_path(args.manifest) if args.manifest and len(datasets) == 1 else default_manifest_for_dataset(data_root, experiment_root, dataset)
+        manifest = read_json(manifest_file)
+        base_bin = base_bin_for_dataset(data_root, experiment_root, dataset)
+        _, _, base_rows = load_bin_matrix(base_bin, manifest["index_type"])
+        sidecar = DenseBitsetSidecar.load(Path(f"{manifest['index_prefix']}_labels.densebit"))
+        tags_by_id = load_tags_by_id(Path(manifest["index_prefix"]), sidecar.npoints)
+        recall_buckets: list[dict[str, Any]] = []
+        dataset_entries: list[dict[str, Any]] = []
+        bucket_filter = set(args.bucket or [])
+
+        for bucket in manifest.get("buckets", []):
+            bucket_name = str(bucket["name"])
+            if bucket_filter and bucket_name not in bucket_filter and str(bucket.get("label")) not in bucket_filter:
+                continue
+            bucket_info = ensure_recall_workload_and_truthset(
+                dataset=dataset,
+                manifest=manifest,
+                bucket=bucket,
+                data_root=data_root,
+                experiment_root=experiment_root,
+                query_count=args.recall_query_count,
+                seed=args.seed,
+                gt_threads=gt_threads,
+                k=args.k,
+                similarity=args.similarity,
+                block_candidates=args.block_candidates,
+                force_gt=args.force_gt,
+                base_rows=base_rows,
+                sidecar=sidecar,
+                tags_by_id=tags_by_id,
+            )
+            recall_buckets.append(bucket_info["bucket"])
+            calib_dir = dataset_experiment_dir(experiment_root, dataset) / "recall_calibration" / bucket_name
+            calib_dir.mkdir(parents=True, exist_ok=True)
+
+            route_probe = run_hybrid_search_record(
+                search_binary=search_binary,
+                index_type=manifest["index_type"],
+                index_prefix=manifest["index_prefix"],
+                threads=args.calibration_threads,
+                beamwidth=args.beamwidth,
+                query_bin=Path(bucket_info["query_bin"]),
+                truthset_bin=bucket_info["truthset_bin"],
+                k=args.k,
+                similarity=args.similarity,
+                nbr_type=args.nbr_type,
+                selector_type=manifest["selector_type"],
+                query_labels=Path(bucket_info["query_labels"]),
+                route="auto",
+                mem_l=args.mem_l,
+                l_value=args.auto_probe_l,
+                output_jsonl=calib_dir / "route_probe.jsonl",
+                log_path=calib_dir / "route_probe.log",
+                timeout=args.timeout,
+            )
+            route = route_from_record(route_probe)
+            if route == "graph":
+                calibration = calibrate_graph_l(
+                    search_binary=search_binary,
+                    manifest=manifest,
+                    bucket_info=bucket_info,
+                    threads=args.calibration_threads,
+                    beamwidth=args.beamwidth,
+                    k=args.k,
+                    similarity=args.similarity,
+                    nbr_type=args.nbr_type,
+                    mem_l=args.mem_l,
+                    target_recall=args.target_recall,
+                    max_l=args.max_l,
+                    timeout=args.timeout,
+                    calib_dir=calib_dir,
+                )
+            else:
+                calibration = calibrate_prefilter_rerank_for_recall(
+                    search_binary=search_binary,
+                    manifest=manifest,
+                    bucket_info=bucket_info,
+                    threads=args.calibration_threads,
+                    beamwidth=args.beamwidth,
+                    k=args.k,
+                    similarity=args.similarity,
+                    nbr_type=args.nbr_type,
+                    mem_l=args.mem_l,
+                    target_recall=args.target_recall,
+                    timeout=args.timeout,
+                    calib_dir=calib_dir,
+                )
+            entry = {
+                "dataset": dataset,
+                "bucket": bucket_name,
+                "label": bucket.get("label"),
+                "selectivity_midpoint": bucket.get("midpoint"),
+                "route": route,
+                "L": int(calibration.get("chosen_L") or args.auto_probe_l),
+                "chosen_L": calibration.get("chosen_L"),
+                "prefilter_rerank_l": calibration.get("chosen_prefilter_rerank_l"),
+                "chosen_prefilter_rerank_l": calibration.get("chosen_prefilter_rerank_l"),
+                "target_recall": float(args.target_recall),
+                "achieved_recall": calibration.get("achieved_recall"),
+                "achieved_qps": calibration.get("achieved_qps"),
+                "candidate_count": bucket_info["candidate_count"],
+                "query_count": bucket_info["query_count"],
+                "calibration_threads": int(args.calibration_threads),
+                "gt_threads": int(gt_threads),
+                "status": calibration["status"],
+            }
+            write_json(calib_dir / "calibration_summary.json", {**entry, "route_probe": route_probe, "calibration": calibration})
+            dataset_entries.append(entry)
+            combined_entries.append(entry)
+            log(f"[calib] {dataset}/{bucket_name} route={route} status={entry['status']} L={entry['chosen_L']} rerank={entry['chosen_prefilter_rerank_l']} recall={entry['achieved_recall']}")
+            if entry["status"] != "ok":
+                raise RuntimeError(f"recall calibration failed for {dataset}/{bucket_name}: {entry['status']}")
+
+        recall_manifest = {
+            **manifest,
+            "format": "pipeann.hybrid.selectivity_manifest.v1",
+            "buckets": recall_buckets,
+            "recall_workload": {
+                "format": "pipeann.qps4.recall_workload.v1",
+                "source_manifest": str(manifest_file),
+                "target_recall": float(args.target_recall),
+                "sample_query_count": int(args.recall_query_count),
+                "seed": int(args.seed),
+                "gt_threads": int(gt_threads),
+            },
+        }
+        manifest_out = dataset_experiment_dir(experiment_root, dataset) / "recall_workloads" / "recall_manifest.json"
+        write_json(manifest_out, recall_manifest)
+        manifests[dataset] = str(manifest_out)
+        write_json(
+            dataset_experiment_dir(experiment_root, dataset) / "recall_calibration" / "bucket_plan_recall98.json",
+            {
+                "format": "pipeann.qps4.recall98_bucket_plan.v1",
+                "dataset": dataset,
+                "manifest": str(manifest_out),
+                "defaults": {"target_recall": float(args.target_recall), "calibration_threads": int(args.calibration_threads)},
+                "entries": dataset_entries,
+            },
+        )
+
+    combined_plan = {
+        "format": "pipeann.qps4.recall98_bucket_plan.v1",
+        "target_recall": float(args.target_recall),
+        "calibration_threads": int(args.calibration_threads),
+        "gt_threads": int(gt_threads),
+        "manifests": manifests,
+        "defaults": {"target_recall": float(args.target_recall), "calibration_threads": int(args.calibration_threads)},
+        "entries": combined_entries,
+    }
+    plan_path = summary_dir / "bucket_plan_recall98.json"
+    write_json(plan_path, combined_plan)
+    return {"plan": str(plan_path), "manifests": manifests, "entries": len(combined_entries)}
+
+
 def run_thread_sweep(args: argparse.Namespace) -> dict[str, Any]:
     data_root = resolve_path(args.data_root)
     experiment_root = resolve_path(args.experiment_root)
@@ -1497,7 +2152,7 @@ def run_thread_sweep(args: argparse.Namespace) -> dict[str, Any]:
     run_root.mkdir(parents=True, exist_ok=True)
 
     bucket_filter = set(args.bucket or [])
-    plan_entries, plan_defaults = load_bucket_plan(resolve_path(args.bucket_plan_json) if args.bucket_plan_json else None)
+    plan_entries, plan_defaults = load_bucket_plan(resolve_path(args.bucket_plan_json) if args.bucket_plan_json else None, args.dataset)
     requested_device = args.ssd_device or infer_block_device(Path(manifest["index_prefix"]))
     if requested_device is None:
         log("[warn] could not infer block device; CPU monitoring will still run")
@@ -1517,10 +2172,12 @@ def run_thread_sweep(args: argparse.Namespace) -> dict[str, Any]:
             continue
 
         route, l_value = resolve_bucket_settings(bucket, plan_entries, plan_defaults, args.default_route, args.default_l)
+        plan_entry = plan_entries.get(bucket_name) or plan_entries.get(bucket_label) or {}
         bucket_root = run_root / bucket_name
         bucket_root.mkdir(parents=True, exist_ok=True)
         single_manifest = bucket_root / "manifest.json"
         write_single_bucket_manifest(manifest, bucket, single_manifest)
+        prefilter_rerank_json = args.prefilter_rerank_json or args.bucket_plan_json
 
         for thread in args.threads:
             run_dir = bucket_root / f"t{thread}"
@@ -1546,6 +2203,11 @@ def run_thread_sweep(args: argparse.Namespace) -> dict[str, Any]:
                         "configured_route": route,
                         "configured_L": l_value,
                         "target_threads": thread,
+                        "chosen_L": plan_entry.get("chosen_L") or l_value,
+                        "chosen_prefilter_rerank_l": plan_entry.get("chosen_prefilter_rerank_l")
+                        or plan_entry.get("prefilter_rerank_l"),
+                        "recall_target": plan_entry.get("target_recall"),
+                        "recall_calibration_threads": plan_entry.get("calibration_threads"),
                     }
                 )
                 rows.append(merged)
@@ -1583,8 +2245,8 @@ def run_thread_sweep(args: argparse.Namespace) -> dict[str, Any]:
                 "--timeout",
                 str(args.timeout),
             ]
-            if args.prefilter_rerank_json:
-                command.extend(["--prefilter-rerank-json", str(resolve_path(args.prefilter_rerank_json))])
+            if prefilter_rerank_json:
+                command.extend(["--prefilter-rerank-json", str(resolve_path(prefilter_rerank_json))])
 
             if args.dry_run:
                 log(f"[dry-run] {shell_join(command)}")
@@ -1617,6 +2279,11 @@ def run_thread_sweep(args: argparse.Namespace) -> dict[str, Any]:
                 "configured_route": route,
                 "configured_L": l_value,
                 "target_threads": thread,
+                "chosen_L": plan_entry.get("chosen_L") or l_value,
+                "chosen_prefilter_rerank_l": plan_entry.get("chosen_prefilter_rerank_l")
+                or plan_entry.get("prefilter_rerank_l"),
+                "recall_target": plan_entry.get("target_recall"),
+                "recall_calibration_threads": plan_entry.get("calibration_threads"),
             }
             rows.append(merged)
 
@@ -1693,6 +2360,32 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_yfcc_parser.add_argument("--min-query-count", type=int, default=20)
     prepare_yfcc_parser.add_argument("--max-scanned-queries", type=int, default=0)
 
+    recall_parser = subparsers.add_parser(
+        "calibrate-recall-plan",
+        help="Build sampled recall workloads, exact filtered GT, and per-bucket recall@10>=98 route budgets.",
+    )
+    recall_parser.add_argument("--dataset", action="append", choices=sorted(ALL_DATASETS))
+    recall_parser.add_argument("--bucket", action="append", help="Specific bucket name or label to calibrate. May be repeated.")
+    recall_parser.add_argument("--manifest", help="Override manifest path. Only valid with one dataset.")
+    recall_parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
+    recall_parser.add_argument("--experiment-root", default=str(DEFAULT_EXPERIMENT_ROOT))
+    recall_parser.add_argument("--build-dir", default=str(REPO_ROOT / "build"))
+    recall_parser.add_argument("--recall-query-count", type=int, default=DEFAULT_RECALL_QUERY_COUNT)
+    recall_parser.add_argument("--target-recall", type=float, default=DEFAULT_RECALL_TARGET)
+    recall_parser.add_argument("--calibration-threads", type=int, default=DEFAULT_RECALL_CALIBRATION_THREADS)
+    recall_parser.add_argument("--gt-threads", type=int, default=0, help="0 means all available CPU cores.")
+    recall_parser.add_argument("--seed", type=int, default=20260515)
+    recall_parser.add_argument("--auto-probe-l", type=int, default=100)
+    recall_parser.add_argument("--max-l", type=int, default=DEFAULT_RECALL_MAX_L)
+    recall_parser.add_argument("--beamwidth", type=int, default=4)
+    recall_parser.add_argument("--k", type=int, default=10)
+    recall_parser.add_argument("--similarity", default="l2")
+    recall_parser.add_argument("--nbr-type", default="pq")
+    recall_parser.add_argument("--mem-l", type=int, default=0)
+    recall_parser.add_argument("--block-candidates", type=int, default=100_000)
+    recall_parser.add_argument("--timeout", type=int, default=7200)
+    recall_parser.add_argument("--force-gt", action="store_true")
+
     sweep_parser = subparsers.add_parser(
         "run-thread-sweep",
         help="Run single-bucket single-thread sweeps with external CPU/SSD monitoring.",
@@ -1734,6 +2427,7 @@ def build_parser() -> argparse.ArgumentParser:
     summarize_parser.add_argument("--high-threshold", type=float, default=0.10)
     summarize_parser.add_argument("--cpu-saturation-pct", type=float, default=80.0)
     summarize_parser.add_argument("--disk-util-saturation-pct", type=float, default=80.0)
+    summarize_parser.add_argument("--require-recall-at-least", type=float)
 
     return parser
 
@@ -1823,6 +2517,10 @@ def main() -> int:
             args.min_query_count,
             args.max_scanned_queries,
         )
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    if args.command == "calibrate-recall-plan":
+        payload = calibrate_recall_plan(args)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
     if args.command == "run-thread-sweep":

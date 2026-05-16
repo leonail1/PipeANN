@@ -54,6 +54,11 @@ def route_for(row: dict[str, str]) -> str:
     return "fallback"
 
 
+def is_recall_aware(rows: list[dict[str, str]]) -> bool:
+    recall_values = [to_optional_float(row.get("recall")) for row in rows]
+    return bool(recall_values) and all(value is not None and value >= 98.0 for value in recall_values)
+
+
 def grouped_by_dataset_bucket(rows: Iterable[dict[str, str]]) -> dict[tuple[str, str], list[dict[str, str]]]:
     grouped: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
     for row in rows:
@@ -119,7 +124,64 @@ def plot_qps(rows: list[dict[str, str]], output_path: Path, savefig_dpi: int = 4
         axis.set_ylabel("QPS")
         axis.legend(ncol=2, frameon=False)
 
-    fig.suptitle("qps_4sets reproduction: QPS by selectivity and threads", fontsize=14)
+    title = (
+        "qps_4sets: QPS by selectivity and threads (each point recall@10 >= 98)"
+        if is_recall_aware(rows)
+        else "qps_4sets reproduction: QPS by selectivity and threads"
+    )
+    fig.suptitle(title, fontsize=14)
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_recall_budget(rows: list[dict[str, str]], output_path: Path, savefig_dpi: int = 400) -> None:
+    import matplotlib.pyplot as plt
+
+    set_common_style(savefig_dpi)
+    fig, axes = plt.subplots(2, 2, figsize=(13.5, 8.2), constrained_layout=True)
+
+    for axis, dataset in zip(axes.flat, DATASET_ORDER):
+        thread1_rows = sorted_dataset_rows([row for row in rows if row["dataset"] == dataset and int(row["threads"]) == 1])
+        x_values = [to_float(row["selectivity_midpoint"]) * 100 for row in thread1_rows]
+        budgets = []
+        labels = []
+        colors = []
+        recalls = []
+        for row in thread1_rows:
+            route = route_for(row)
+            colors.append(ROUTE_COLORS[route])
+            recalls.append(to_optional_float(row.get("recall")) or 0.0)
+            if route == "prefilter":
+                budgets.append(
+                    to_optional_float(row.get("chosen_prefilter_rerank_l"))
+                    or to_optional_float(row.get("prefilter_rerank_l"))
+                    or to_float(row.get("mean_ios", row.get("configured_L", "1")))
+                )
+                labels.append("rerank")
+            else:
+                budgets.append(to_optional_float(row.get("chosen_L")) or to_float(row.get("configured_L", row.get("L", "1"))))
+                labels.append("L")
+
+        axis.scatter(x_values, budgets, c=colors, s=54, zorder=4)
+        for x_value, budget, row, label in zip(x_values, budgets, thread1_rows, labels):
+            axis.annotate(
+                f"{label}={int(budget)}\nR={to_optional_float(row.get('recall')) or 0:.1f}",
+                (x_value, budget),
+                textcoords="offset points",
+                xytext=(0, 7),
+                ha="center",
+                fontsize=7,
+            )
+        if budgets:
+            axis.plot(x_values, budgets, color="#6a6a6a", linewidth=1.0, alpha=0.45)
+        axis.axhline(10, color="#333333", linestyle=":", linewidth=0.8, alpha=0.5)
+        axis.set_xscale("log")
+        axis.set_yscale("log")
+        axis.set_title(DATASET_LABELS[dataset])
+        axis.set_xlabel("Selectivity (%)")
+        axis.set_ylabel("Chosen graph L or prefilter rerank_l")
+
+    fig.suptitle("qps_4sets recall-aware budget: chosen minimum budget for recall@10 >= 98", fontsize=14)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
 
@@ -413,6 +475,9 @@ def write_scaling_csv(rows: list[dict[str, str]], output_path: Path) -> None:
         "mean_candidate_count_t1",
         "avg_read_mb_s_t1",
         "avg_disk_util_pct_t1",
+        "recall_t1",
+        "chosen_L",
+        "chosen_prefilter_rerank_l",
     ]
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="") as handle:
@@ -443,6 +508,9 @@ def write_scaling_csv(rows: list[dict[str, str]], output_path: Path) -> None:
                         "mean_candidate_count_t1": by_thread[1]["mean_candidate_count"],
                         "avg_read_mb_s_t1": by_thread[1]["avg_read_mb_s"],
                         "avg_disk_util_pct_t1": by_thread[1]["avg_disk_util_pct"],
+                        "recall_t1": by_thread[1].get("recall", ""),
+                        "chosen_L": by_thread[1].get("chosen_L", by_thread[1].get("configured_L", "")),
+                        "chosen_prefilter_rerank_l": by_thread[1].get("chosen_prefilter_rerank_l", ""),
                     }
                 )
 
@@ -469,6 +537,7 @@ def main() -> None:
         plot_qps(rows, args.legacy_qps_output, args.dpi)
     plot_scaling(rows, args.out_dir / "qps_4sets_scaling_efficiency.png", args.dpi)
     plot_route_io(rows, args.out_dir / "qps_4sets_route_io_pressure.png", args.dpi)
+    plot_recall_budget(rows, args.out_dir / "qps_4sets_recall_budget.png", args.dpi)
     plot_cpu_diagnostics(rows, args.out_dir / "qps_4sets_cpu_diagnostics.png", args.dpi)
     plot_disk_diagnostics(rows, args.out_dir / "qps_4sets_disk_diagnostics.png", args.dpi)
     plot_bottleneck_diagnostics(rows, args.out_dir / "qps_4sets_bottleneck_diagnostics.png", args.dpi)
@@ -479,6 +548,7 @@ def main() -> None:
         print(args.legacy_qps_output)
     print(args.out_dir / "qps_4sets_scaling_efficiency.png")
     print(args.out_dir / "qps_4sets_route_io_pressure.png")
+    print(args.out_dir / "qps_4sets_recall_budget.png")
     print(args.out_dir / "qps_4sets_cpu_diagnostics.png")
     print(args.out_dir / "qps_4sets_disk_diagnostics.png")
     print(args.out_dir / "qps_4sets_bottleneck_diagnostics.png")
