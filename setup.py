@@ -48,6 +48,7 @@ class CMakeBuild(build_ext):
             f"-DPYTHON_EXECUTABLE={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
             "-DBUILD_PYTHON_INTERFACE=ON",
+            "-DUSE_TCMALLOC=OFF",
         ]
         build_args = []
         # Adding CMake arguments set as environment variable
@@ -116,7 +117,9 @@ class CMakeBuild(build_ext):
             ["cmake", ext.sourcedir, *cmake_args], cwd=build_temp, check=True
         )
         subprocess.run(
-            ["cmake", "--build", ".", *build_args], cwd=build_temp, check=True
+            ["cmake", "--build", ".", "--target", ext.name.split(".")[-1], *build_args],
+            cwd=build_temp,
+            check=True,
         )
 
 
@@ -124,7 +127,7 @@ class CMakeBuild(build_ext):
 # logic and declaration, and simpler if you include description/version in a file.
 setup(
     name="pipeann",
-    version="0.2.0",
+    version="0.3.0",
     author="Hao Guo",
     author_email="gh23@mails.tsinghua.edu.cn",
     description="Python wrapper for PipeANN",

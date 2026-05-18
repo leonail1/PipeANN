@@ -49,13 +49,13 @@ namespace pipeann {
     }
 
     // For PQ, out-buffer is filled with PQ table distances.
-    void initialize_query(const T *query, QueryBuffer<T> *query_buf) {
+    void initialize_query(const T *query, QueryBuffer *query_buf) {
       return pq_table.populate_chunk_distances(query, query_buf->nbr_ctx_scratch);
     }
 
     // call initialize_query first!
     // output to query_buf->aligned_dist_scratch
-    void compute_dists(QueryBuffer<T> *query_buf, const uint32_t *ids, const uint64_t n_ids) {
+    void compute_dists(QueryBuffer *query_buf, const uint32_t *ids, const uint64_t n_ids) {
       pq_mu.lock_shared();
       aggregate_coords(ids, n_ids, this->data.data(), pq_table.n_chunks, query_buf->nbr_vec_scratch);
       pq_dist_lookup(query_buf->nbr_vec_scratch, n_ids, pq_table.n_chunks, query_buf->nbr_ctx_scratch,
@@ -255,8 +255,9 @@ namespace pipeann {
             int val1 = 0, val2 = 0;
             memcpy(&val1, &passed_train_data[i * dim + j], sizeof(int));
             memcpy(&val2, &train_data[i * dim + j], sizeof(int));
-            LOG(ERROR) << "Hex: " << "passed_train_data[" << i << "][" << j << "] = " << val1 << ", train_data[" << i
-                       << "][" << j << "] = " << val2;
+            LOG(ERROR) << "Hex: "
+                       << "passed_train_data[" << i << "][" << j << "] = " << val1 << ", train_data[" << i << "][" << j
+                       << "] = " << val2;
             exit(-1);
           }
         }
@@ -440,7 +441,6 @@ namespace pipeann {
         compressed_file_writer.write((char *) (block_compressed_base.get()),
                                      cur_blk_size * num_pq_chunks * sizeof(uint8_t));
       }
-      auto ed = std::chrono::high_resolution_clock::now();
       compressed_file_writer.close();
       return 0;
     }

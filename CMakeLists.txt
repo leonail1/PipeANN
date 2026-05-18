@@ -1,14 +1,27 @@
 cmake_minimum_required(VERSION 3.0)
 project(pipeann)
 
-set(CMAKE_STANDARD 17)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-option(USE_AIO "Use AIO instead of liburing" OFF)
+set(IO_ENGINE "uring" CACHE STRING "I/O engine: uring, aio, or spdk")
+set_property(CACHE IO_ENGINE PROPERTY STRINGS uring aio spdk)
+option(USE_TCMALLOC "Use tcmalloc allocator" ON)
 option(BUILD_PYTHON_INTERFACE "Build Python interface (requires pybind11)" OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-# set(CMAKE_C_COMPILER_LAUNCHER ccache)
-# set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
+
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM AND CMAKE_VERSION VERSION_LESS "3.4")
+	# CMake 3.0 does not support compiler launchers, so fall back to the global rule.
+	set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+	message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
+elseif(CCACHE_PROGRAM)
+	set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+	set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+	message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
+else()
+	message(STATUS "ccache not found, building without compiler cache")
+endif()
 
 include_directories(
 	${PROJECT_SOURCE_DIR}/include 
@@ -28,7 +41,7 @@ add_compile_options(
 )
 add_compile_options(-g -O3 -march=native -mtune=native -ftree-vectorize -funroll-loops -Wl,--no-as-needed)
 
-message("Additional definitions: " $ENV{ADDITIONAL_DEFINITIONS})
+message(STATUS "Additional definitions: " $ENV{ADDITIONAL_DEFINITIONS})
 add_definitions(
 	$ENV{ADDITIONAL_DEFINITIONS}
 	-DNDEBUG
@@ -37,34 +50,46 @@ add_definitions(
 
 	# -DNO_POLLUTE_ORIGINAL
 
-	# optimizations.
+	# For read-only tests without updates, enable the following defs:
 	# -DREAD_ONLY_TESTS
-	# -DNO_MAPPING # starling: must disable this!
-	-DOVERLAP_INIT
+	# -DNO_MAPPING # page_search (Starling): must disable this!
 )
 
-include_directories(
-	${PROJECT_SOURCE_DIR}/third_party/liburing/src/include
-)
-link_directories(
-	${PROJECT_SOURCE_DIR}/third_party/liburing/src
-)
-
-if(USE_AIO)
-	message(STATUS "Using AIO for asynchronous I/O, compatible but slower.")
-	link_libraries(aio)
-	add_definitions(-DUSE_AIO)
-else()
-	message(STATUS "Using liburing for asynchronous I/O, faster but requires kernel support.")
-	link_libraries(uring)
-endif()
-
-# Use tcmalloc, as jemalloc does not support python (static TLS block).
-link_libraries(
-	tcmalloc
-)
 # add_compile_options(-fsanitize=address,undefined -lasan -lubsan)
 # add_link_options(-fsanitize=address,undefined)
+
+# check if uring is available.
+try_run(
+	PIPEANN_IO_URING_RUN_RESULT
+	PIPEANN_IO_URING_COMPILE_RESULT
+	"${CMAKE_BINARY_DIR}"
+	SOURCES "${PROJECT_SOURCE_DIR}/tests/test_uring.cpp"
+)
+
+if(IO_ENGINE STREQUAL "aio" OR NOT PIPEANN_IO_URING_COMPILE_RESULT OR NOT "${PIPEANN_IO_URING_RUN_RESULT}" STREQUAL "0")
+	# AIO is specified or uring is unavailable.
+	set(IO_ENGINE "aio" CACHE STRING "I/O engine: uring, aio, or spdk" FORCE)
+	message(STATUS "Using AIO for asynchronous I/O, compatible but slower.")
+else()
+	include_directories(${PROJECT_SOURCE_DIR}/third_party/liburing/src/include)
+	link_directories(${PROJECT_SOURCE_DIR}/third_party/liburing/src)
+	if(IO_ENGINE STREQUAL "spdk")
+		add_definitions(-DUSE_SPDK)
+		message(STATUS "Using SPDK for vector I/O & liburing for attr I/O, fastest but require user-space bdev.")
+	elseif(IO_ENGINE STREQUAL "uring")
+		add_definitions(-DUSE_URING)
+		message(STATUS "Using liburing for asynchronous I/O, faster but requires kernel support.")
+	else()
+		message(FATAL_ERROR "Invalid IO_ENGINE=${IO_ENGINE}. Expected uring, aio, or spdk.")
+	endif()
+endif()
+
+if(USE_TCMALLOC)
+	add_definitions(-DUSE_TCMALLOC)
+	message(STATUS "Using tcmalloc allocator.")
+else()
+	message(STATUS "Building without tcmalloc allocator.")
+endif()
 
 # check for AVX512 and AVX2, add the corresponding definitions.
 # First, for the compiler.
@@ -138,7 +163,6 @@ if(BLAS_FOUND)
 		message(STATUS "BLAS is MKL, adding mkl_rt")
 		set(BLAS_LIBRARIES mkl_rt)
     endif()
-	link_libraries(${BLAS_LIBRARIES})
 endif()
 
 add_subdirectory(src)

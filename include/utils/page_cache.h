@@ -3,9 +3,8 @@
 
 #include <cstring>
 #include <cstdint>
-#include "ssd_index_defs.h"
+#include "utils.h"
 #include "utils/libcuckoo/cuckoohash_map.hh"
-#include "utils/lock_table.h"
 
 namespace pipeann {
   // User-space page cache for update acceleration (in fact it's a buffer)
@@ -27,9 +26,29 @@ namespace pipeann {
     }
   };
 
+  union PageCacheKey {
+    struct {
+      uint32_t block_no;
+      int fd;
+    };
+    uint64_t raw;
+
+    PageCacheKey(int fd, uint32_t block_no) : block_no(block_no), fd(fd) {
+    }
+
+    static PageCacheKey from_raw(uint64_t raw) {
+      return PageCacheKey(raw);
+    }
+
+   private:
+    PageCacheKey(uint64_t raw) : raw(raw) {
+    }
+  };
+
   struct PageCache {
-    bool get(uint64_t block_no, uint8_t *value, bool ref = false) {
-      bool ret = cache.update_fn(block_no, [&](PageCacheItem &v) {
+    // max file size: SECTOR_LEN * 4GB = 16TB.
+    bool get(PageCacheKey key, uint8_t *value, bool ref = false) {
+      bool ret = cache.update_fn(key.raw, [&](PageCacheItem &v) {
         memcpy(value, v.buf, SECTOR_LEN);
         if (ref) {
           v.ref();
@@ -38,8 +57,8 @@ namespace pipeann {
       return ret;
     }
 
-    bool put(uint64_t block_no, uint8_t *value, bool ref = false) {
-      return cache.upsert(block_no, [&](PageCacheItem &v, libcuckoo::UpsertContext ctx) {
+    bool put(PageCacheKey key, uint8_t *value, bool ref = false) {
+      return cache.upsert(key.raw, [&](PageCacheItem &v, libcuckoo::UpsertContext ctx) {
         if (ctx == libcuckoo::UpsertContext::NEWLY_INSERTED) {
           v = PageCacheItem{.buf = new uint8_t[SECTOR_LEN], .ref_cnt = 0};
         }
@@ -50,10 +69,10 @@ namespace pipeann {
       });
     }
 
-    bool deref(uint64_t block_no) {
-      bool ret = cache.uprase_fn(block_no, [&](PageCacheItem &v, libcuckoo::UpsertContext ctx) {
+    bool deref(PageCacheKey key) {
+      bool ret = cache.uprase_fn(key.raw, [&](PageCacheItem &v, libcuckoo::UpsertContext ctx) {
         if (ctx == libcuckoo::UpsertContext::NEWLY_INSERTED) {
-          LOG(ERROR) << "PageCache: deref a non-exist block_no: " << block_no;
+          LOG(ERROR) << "PageCache: deref a non-exist fd: " << key.fd << " block_no: " << key.block_no;
           return true;
           __builtin_trap();
         }
@@ -69,8 +88,6 @@ namespace pipeann {
     void clear() {
       cache.clear();
     }
-
-    SparseLockTable<uint64_t> lock_table;
     libcuckoo::cuckoohash_map<uint64_t, PageCacheItem> cache;
   };
 

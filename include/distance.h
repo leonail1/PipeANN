@@ -63,12 +63,6 @@ namespace pipeann {
                               float *result) const override;
   };
 
-  template<typename T>
-  class DistanceInnerProduct : public Distance<T> {
-   public:
-    virtual float compare(const T *a, const T *b, unsigned size);
-  };
-
   inline Metric get_metric(const std::string &metric_str) {
     if (metric_str == "l2") {
       return Metric::L2;
@@ -101,4 +95,58 @@ namespace pipeann {
   // Note that cosine distance function is used for both inner_product and cosine metrics.
   template<typename T>
   Distance<T> *get_distance_function(Metric m);
+
+  // Convert the distance calculated by Distance<T>, to actual distance.
+  template<typename T>
+  inline float get_actual_distance(float distance, Metric m) {
+    float A_2 = 1.0f;  // A^2
+    if constexpr (std::is_same_v<T, float>) {
+      A_2 = 1.0f * 1.0f;
+    } else if constexpr (std::is_same_v<T, int8_t>) {
+      A_2 = 127.0f * 127.0f;
+    } else if constexpr (std::is_same_v<T, uint8_t>) {
+      A_2 = 255.0f * 255.0f;
+    } else {
+      LOG(ERROR) << "Unsupported type: " << typeid(T).name();
+      return distance;
+    }
+
+    if (m == Metric::L2) {
+      return std::sqrt(distance);
+    } else if (m == Metric::COSINE) {
+      // distance = A^2 * (1 - cosine(theta))
+      return 1 - (distance / A_2);
+    } else if (m == Metric::INNER_PRODUCT) {
+      return A_2 - distance;
+    }
+    LOG(ERROR) << "Unsupported metric: " << m << " and type: " << typeid(T).name();
+    return distance;
+  }
+
+  // Inverse of get_actual_distance: convert a user-facing range threshold into
+  // the partial-order distance used internally by Distance<T>::compare().
+  template<typename T>
+  inline float get_partial_order_distance(float range, Metric m) {
+    float A_2 = 1.0f;
+    if constexpr (std::is_same_v<T, float>) {
+      A_2 = 1.0f * 1.0f;
+    } else if constexpr (std::is_same_v<T, int8_t>) {
+      A_2 = 127.0f * 127.0f;
+    } else if constexpr (std::is_same_v<T, uint8_t>) {
+      A_2 = 255.0f * 255.0f;
+    } else {
+      LOG(ERROR) << "Unsupported type: " << typeid(T).name();
+      return range;
+    }
+
+    if (m == Metric::L2) {
+      return range * range;
+    } else if (m == Metric::COSINE) {
+      return A_2 * (1.0f - range);
+    } else if (m == Metric::INNER_PRODUCT) {
+      return A_2 - range;
+    }
+    LOG(ERROR) << "Unsupported metric: " << m << " and type: " << typeid(T).name();
+    return range;
+  }
 }  // namespace pipeann

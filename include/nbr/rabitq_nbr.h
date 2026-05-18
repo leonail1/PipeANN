@@ -94,7 +94,7 @@ namespace pipeann {
       return this;
     }
 
-    void initialize_query(const T *query, QueryBuffer<T> *query_buf) {
+    void initialize_query(const T *query, QueryBuffer *query_buf) {
       std::vector<float> query_float(data_dim);
       std::vector<float> rotated_query_float(pad_dim);
       for (uint64_t i = 0; i < data_dim; ++i) {
@@ -139,7 +139,7 @@ namespace pipeann {
     }
 
     // Compute dists using assymetric distance computation.
-    void compute_dists(QueryBuffer<T> *query_buf, const uint32_t *ids, const uint64_t n_ids) {
+    void compute_dists(QueryBuffer *query_buf, const uint32_t *ids, const uint64_t n_ids) {
       uint64_t *query_bin = (uint64_t *) (query_buf->nbr_ctx_scratch);
       float *q_to_centroids = get_q_to_centroids(query_buf->nbr_ctx_scratch);
       float *meta = get_meta(query_buf->nbr_ctx_scratch);
@@ -413,7 +413,7 @@ namespace pipeann {
   template<typename T, size_t BITS = 1>
   class RaBitQNeighbor : public AbstractNeighbor<T> {
    public:
-    RaBitQNeighbor<T, BITS>(pipeann::Metric metric) : AbstractNeighbor<T>(metric) {
+    RaBitQNeighbor(pipeann::Metric metric) : AbstractNeighbor<T>(metric) {
       LOG(ERROR) << "RaBitQNeighbor requires AVX512 support.";
       exit(-1);
     }
@@ -426,10 +426,10 @@ namespace pipeann {
                                  uint32_t nthreads) {
       return this;
     }
-    void initialize_query(const T *query, QueryBuffer<T> *query_buf) {
+    void initialize_query(const T *query, QueryBuffer *query_buf) {
     }
     // Compute dists using assymetric distance computation.
-    void compute_dists(QueryBuffer<T> *query_buf, const uint32_t *ids, const uint64_t n_ids) {
+    void compute_dists(QueryBuffer *query_buf, const uint32_t *ids, const uint64_t n_ids) {
     }
     // Compute dists using PQ all-to-all.
     void compute_dists(const uint32_t query_id, const uint32_t *ids, const uint64_t n_ids, float *dists_out,

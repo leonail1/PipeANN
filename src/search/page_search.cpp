@@ -25,20 +25,20 @@ namespace pipeann {
   size_t SSDIndex<T, TagT>::page_search(const T *query1, const uint64_t k_search, const uint32_t mem_L,
                                         const uint64_t l_search, TagT *res_tags, float *distances,
                                         const uint64_t beam_width, QueryStats *stats) {
-    QueryBuffer<T> *query_buf = pop_query_buf(query1);
+    QueryBuffer *query_buf = pop_query_buf(query1);
     void *ctx = reader->get_ctx();
 
     if (beam_width > MAX_N_SECTOR_READS) {
       LOG(ERROR) << "Beamwidth can not be higher than MAX_N_SECTOR_READS";
       crash();
     }
-    const T *query = query_buf->aligned_query_T;
+    const T *query = query_buf->aligned_query<T>();
 
     // reset query
     query_buf->reset();
 
     // pointers to current vector for comparison
-    T *data_buf = query_buf->coord_scratch;
+    T *data_buf = query_buf->coord_scratch<T>();
     _mm_prefetch((char *) data_buf, _MM_HINT_T1);
 
     // sector scratch
@@ -169,34 +169,28 @@ namespace pipeann {
       }
 
       // read nhoods of frontier ids
-      std::vector<uint32_t> locked, page_locked;
       int n_ios = 0;
       if (!frontier.empty()) {
         if (stats != nullptr)
           stats->n_hops++;
 
-        locked = this->lock_idx(idx_lock_table, kInvalidID, frontier, true);
-        page_locked = this->lock_page_idx(page_idx_lock_table, kInvalidID, frontier, true);
-
         for (uint64_t i = 0; i < frontier.size(); i++) {
           auto id = frontier[i];
           uint64_t page_id = id2page(id);
-          auto buf = sector_scratch + sector_scratch_idx * size_per_io;
+          auto buf = sector_scratch + sector_scratch_idx * io_size;
           PageArr layout = get_page_layout(page_id);
           page_fnhood_t fnhood = std::make_tuple(id, page_id, layout, buf);
           sector_scratch_idx++;
           frontier_nhoods.push_back(fnhood);
           // read the page to the temporary buffer
-          frontier_read_reqs.emplace_back(
-              IORequest(page_id * SECTOR_LEN, size_per_io, buf, page_id * SECTOR_LEN, size_per_io));
+          frontier_read_reqs.emplace_back(IORequest(page_id * SECTOR_LEN, io_size, buf, page_id * SECTOR_LEN, io_size));
           if (stats != nullptr) {
-            stats->n_4k++;
             stats->n_ios++;
           }
           num_ios++;
         }
 
-        n_ios = reader->send_read_no_alloc(frontier_read_reqs, ctx);
+        n_ios = reader->send_read(frontier_read_reqs, ctx);
       }
 
       // compute remaining nodes in the pages that are fetched in the previous
@@ -234,10 +228,10 @@ namespace pipeann {
       // get last submitted io results, blocking
       if (!frontier.empty()) {
         for (int i = 0; i < n_ios; ++i) {
-          reader->poll_wait(ctx);
+          while (!frontier_read_reqs[i].finished) {
+            reader->poll(ctx);
+          }
         }
-        this->unlock_page_idx(page_idx_lock_table, page_locked);
-        this->unlock_idx(idx_lock_table, locked);
       }
       auto io_time_ed = std::chrono::high_resolution_clock::now();
       stats->io_us += std::chrono::duration_cast<std::chrono::microseconds>(io_time_ed - io_time_st).count();
@@ -272,18 +266,7 @@ namespace pipeann {
     std::sort(full_retset.begin(), full_retset.end(),
               [](const Neighbor &left, const Neighbor &right) { return left < right; });
 
-    // copy k_search values
-    uint64_t t = 0;
-    for (uint64_t i = 0; i < full_retset.size() && t < k_search; i++) {
-      if (i > 0 && full_retset[i].id == full_retset[i - 1].id) {
-        continue;
-      }
-      res_tags[t] = id2tag(full_retset[i].id);
-      if (distances != nullptr) {
-        distances[t] = full_retset[i].distance;
-      }
-      t++;
-    }
+    auto t = copy_top_k(full_retset, k_search, res_tags, distances);
 
     push_query_buf(query_buf);
 

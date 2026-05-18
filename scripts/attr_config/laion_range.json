@@ -1,0 +1,15 @@
+{
+    "base": [
+        {
+            "key": 1,
+            "type": "range",
+            "file": "/mnt/nvme4/indices/laion/100M.label.1"
+        }
+    ],
+    "query": {
+        "key": 1,
+        "base_key": 1,
+        "type": "range",
+        "file": "/mnt/nvme/data/laion/metadata_width_query_10k.spmat"
+    }
+}

@@ -1,4 +1,5 @@
 #include "aligned_file_reader.h"
+#include "linux_aligned_file_reader.h"
 #include "ssd_index.h"
 #include <malloc.h>
 
@@ -6,16 +7,53 @@
 #include <cmath>
 #include "distance.h"
 #include "nbr/nbr.h"
+#include "nbr/pq_nbr.h"
 #include "ssd_index_defs.h"
+#include "utils/prune_neighbors.h"
 #include "utils/timer.h"
 #include "utils.h"
 
+#include <atomic>
+#include <chrono>
 #include <filesystem>
-#include <unistd.h>
-#include <sys/syscall.h>
+#include <thread>
 #include "utils/tsl/robin_set.h"
 
 namespace pipeann {
+
+  // Copy file using direct I/O. File size must be 4KB-aligned.
+  void copy_file(const std::string &src, const std::string &dst) {
+    const uint64_t total_bytes = get_file_size(src);
+    if (total_bytes == 0) {
+      LOG(ERROR) << "Empty or missing source: " << src;
+      crash();
+    }
+    LOG(INFO) << "Copying " << src << " -> " << dst << " (" << (total_bytes >> 20) << " MiB)";
+
+    remove(dst.c_str());
+
+    const int rfd = ::open(src.c_str(), O_DIRECT | O_LARGEFILE | O_RDONLY, 0644);
+    const int wfd = ::open(dst.c_str(), O_DIRECT | O_LARGEFILE | O_RDWR | O_CREAT, 0644);
+
+    char *buf = nullptr;
+    constexpr uint64_t kBufBytes = 64 << 20;
+    alloc_aligned((void **) &buf, kBufBytes, SECTOR_LEN);
+
+    for (uint64_t off = 0; off < total_bytes;) {
+      uint64_t len = std::min(kBufBytes, total_bytes - off);
+      std::ignore = ::pread(rfd, buf, len, off);
+      std::ignore = ::pwrite(wfd, buf, len, off);
+      if (off % (10000ULL << 20) < len) {
+        LOG(INFO) << "Copied " << ((off + len) >> 20) << "/" << (total_bytes >> 20) << " MiB";
+      }
+      off += len;
+    }
+
+    ::close(rfd);
+    ::close(wfd);
+    LOG(INFO) << "Copied " << (total_bytes >> 20) << " MiB to " << dst;
+  }
+
   template<typename T, typename TagT>
   SSDIndex<T, TagT>::SSDIndex(pipeann::Metric m, std::shared_ptr<AlignedFileReader> &file_reader,
                               AbstractNeighbor<T> *nbr_handler, bool tags, IndexBuildParameters *parameters)
@@ -26,7 +64,11 @@ namespace pipeann {
       this->params = *parameters;
       params.print();
     }
-    LOG(INFO) << "Use " << nbr_handler->get_name() << " as neighbor handler, metric: " << get_metric_str(m);
+    if (nbr_handler == nullptr) {
+      LOG(INFO) << "Use PQ neighbors by default";
+      this->nbr_handler = new PQNeighbor<T>(m);
+    }
+    LOG(INFO) << "Use " << this->nbr_handler->get_name() << " as neighbor handler, metric: " << get_metric_str(m);
   }
 
   template<typename T, typename TagT>
@@ -43,8 +85,7 @@ namespace pipeann {
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::copy_index(const std::string &prefix_in, const std::string &prefix_out) {
     LOG(INFO) << "Copying disk index from " << prefix_in << " to " << prefix_out;
-    std::filesystem::copy(prefix_in + "_disk.index", prefix_out + "_disk.index",
-                          std::filesystem::copy_options::overwrite_existing);
+    copy_file(prefix_in + "_disk.index", prefix_out + "_disk.index");
     if (file_exists(prefix_in + "_disk.index.tags")) {
       std::filesystem::copy(prefix_in + "_disk.index.tags", prefix_out + "_disk.index.tags",
                             std::filesystem::copy_options::overwrite_existing);
@@ -70,7 +111,7 @@ namespace pipeann {
     LOG(INFO) << "Init buffers for " << n_threads << " threads, setup " << n_buffers << " buffers.";
     this->thread_data_queue.null_T = nullptr;
     for (uint64_t i = 0; i < n_buffers; i++) {
-      QueryBuffer<T> *data = new QueryBuffer<T>();
+      QueryBuffer *data = new QueryBuffer();
       this->init_query_buf(*data);
       this->thread_data_bufs.push_back(data);
       this->thread_data_queue.push(data);
@@ -103,12 +144,12 @@ namespace pipeann {
 
     while (!this->thread_data_bufs.empty()) {
       auto buf = this->thread_data_bufs.back();
-      pipeann::aligned_free((void *) buf->coord_scratch);
-      pipeann::aligned_free((void *) buf->sector_scratch);
+      pipeann::aligned_free((void *) buf->coord_scratch_);
+      this->reader->free_io_buf((void *) buf->sector_scratch);
       pipeann::aligned_free((void *) buf->nbr_vec_scratch);
       pipeann::aligned_free((void *) buf->nbr_ctx_scratch);
       pipeann::aligned_free((void *) buf->aligned_dist_scratch);
-      pipeann::aligned_free((void *) buf->aligned_query_T);
+      pipeann::aligned_free((void *) buf->aligned_query_);
       this->thread_data_bufs.pop_back();
       this->thread_data_queue.pop();
       delete buf;
@@ -121,12 +162,11 @@ namespace pipeann {
       LOG(ERROR) << "Index is not loaded. Please load the index first.";
       exit(-1);
     }
-    mem_index_ = std::make_unique<pipeann::Index<T, uint32_t>>(this->metric, this->meta_.data_dim);
-    mem_index_->load(mem_index_path.c_str());
+    mem_index_.reset(SSDIndex<T, TagT>::load_to_mem(mem_index_path, this->metric));
   }
 
   template<typename T, typename TagT>
-  int SSDIndex<T, TagT>::load(const char *index_prefix, uint32_t num_threads, bool use_page_search) {
+  int SSDIndex<T, TagT>::load(const char *index_prefix, bool enable_writes) {
     std::string disk_index_file = std::string(index_prefix) + "_disk.index";
     this->disk_index_file = disk_index_file;
 
@@ -145,12 +185,10 @@ namespace pipeann {
     }
 
     this->destroy_buffers();  // in case of re-init.
-    reader->open(disk_index_file, true, false);
-    this->init_buffers(num_threads);
-    this->max_nthreads = num_threads;
+    reader->open(disk_index_file, enable_writes, false);
+    this->init_buffers(params.max_nthreads);
 
     // load page layout.
-    this->use_page_search_ = use_page_search;
     this->load_page_layout(index_prefix, meta_.nnodes_per_sector, meta_.npoints);
 
     // load tags
@@ -243,7 +281,7 @@ namespace pipeann {
       pipeann::load_bin<TagT>(tag_file_name, tag_v, tag_num, tag_dim, offset);
       tags.reserve(tag_v.size());
 
-#pragma omp parallel for num_threads(max_nthreads)
+#pragma omp parallel for
       for (size_t i = 0; i < tag_num; ++i) {
         tags.insert_or_assign(i, tag_v[i]);
       }
@@ -252,71 +290,112 @@ namespace pipeann {
   }
 
   template<typename T, typename TagT>
-  Index<T, TagT> *SSDIndex<T, TagT>::load_to_mem(const std::string &filename) {
-    std::string disk_index_file = std::string(filename) + "_disk.index";
+  Index<T, TagT> *SSDIndex<T, TagT>::load_to_mem(const std::string &disk_file, Metric metric) {
     SSDIndexMetadata<T> meta;
-    meta.load_from_disk_index(disk_index_file);
-    this->init_metadata(meta);  // ensure that loc_sector_no is correct.
+    meta.load_from_disk_index(disk_file);
+    auto mem = new Index<T, TagT>(metric, meta);
 
-    Index<T, TagT> *mem_index = new Index<T, TagT>(this->metric, meta.data_dim);
+    constexpr uint64_t kTargetBatchBytes = 64 << 20;  // ~64 MiB per I/O.
+    const uint64_t unit_bytes = meta.io_size_dense();
+    const uint64_t unit_nodes = meta.nodes_per_io();
+    const uint64_t batch_units = std::max<uint64_t>(1, kTargetBatchBytes / unit_bytes);
 
-    mem_index->_ep = meta.entry_point;
-    mem_index->range = meta.range;
-    mem_index->_nd = meta.npoints;
-    mem_index->resize(meta.npoints);
-
-    reader->open(disk_index_file, true, false);
-
-    const uint64_t kLocsPerRead = meta_.nnodes_per_sector > 0 ? ROUND_UP(131072, meta_.nnodes_per_sector)
-                                                              : 131072;  // process this many locs per iteration
-
-    // Calculate buffer size based on whether we have large or small nodes
-    uint64_t sectors_per_batch = meta_.nnodes_per_sector > 0
-                                     ? kLocsPerRead / meta_.nnodes_per_sector
-                                     : kLocsPerRead * DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN);
-    uint64_t buf_size_per_batch = sectors_per_batch * SECTOR_LEN;
+    int fd = open(disk_file.c_str(), O_RDONLY | O_DIRECT);
 
     char *buf;
-    pipeann::alloc_aligned((void **) &buf, buf_size_per_batch, SECTOR_LEN);
+    alloc_aligned((void **) &buf, batch_units * unit_bytes, SECTOR_LEN);
 
-    for (uint64_t loc_st = 0; loc_st < meta.npoints; loc_st += kLocsPerRead) {
-      uint64_t loc_ed = std::min(meta.npoints, loc_st + kLocsPerRead);
+    for (uint64_t loc = 0; loc < meta.npoints;) {
+      const uint64_t cur_nodes = std::min(batch_units * unit_nodes, meta.npoints - loc);
+      std::ignore = pread(fd, buf, DIV_ROUND_UP(cur_nodes, unit_nodes) * unit_bytes, meta.loc_sector_no(loc) * SECTOR_LEN);
 
-      // Calculate sector range to read for [loc_st, loc_ed)
-      uint64_t st_sector = loc_sector_no(loc_st);
-      uint64_t ed_sector = loc_sector_no(loc_ed > 0 ? loc_ed - 1 : 0);
-      uint64_t n_sectors_to_read = ed_sector - st_sector + 1;
+      for (uint64_t i = 0; i < cur_nodes; i++, loc++) {
+        DiskNode<T> node(buf + (i / unit_nodes) * unit_bytes, (uint32_t) loc, meta);
+        memcpy(mem->_data.data() + loc * meta.data_dim, node.coords, meta.data_dim * sizeof(T));
+        mem->_final_graph[loc].assign(node.nbrs, node.nbrs + node.nnbrs);
+      }
+      if (loc % 1000000 < cur_nodes) {
+        LOG(INFO) << "Loaded " << loc << "/" << meta.npoints << " nodes.";
+      }
+    }
 
-      std::vector<IORequest> read_reqs;
-      read_reqs.push_back(IORequest(st_sector * SECTOR_LEN, n_sectors_to_read * SECTOR_LEN, buf, 0, 0));
-      reader->read(read_reqs, reader->get_ctx(), false);
+    aligned_free(buf);
+    close(fd);
 
-#pragma omp parallel for
-      for (uint64_t loc = loc_st; loc < loc_ed; ++loc) {
-        uint64_t id = loc;
-#pragma omp critical
-        {
-          mem_index->_location_to_tag[id] = id;
-          mem_index->_tag_to_location[id] = id;
+    mem->load_tags(disk_file + ".tags");
+    return mem;
+  }
+
+  template<typename T, typename TagT>
+  void SSDIndex<T, TagT>::save_from_mem(Index<T, TagT> &mem, const std::string &disk_file, uint16_t target_range_dense,
+                                        AttrWriter *attr_writer) {
+    const uint64_t range_dense = std::max(target_range_dense, mem.range);
+    const uint64_t attr_size = (attr_writer != nullptr) ? attr_writer->attr_size() : 0;
+    const uint64_t max_node_len = (range_dense + 1) * sizeof(uint32_t) + mem._dim * sizeof(T) + attr_size;
+    SSDIndexMetadata<T> meta(mem._nd, mem._dim, mem._ep, max_node_len, SECTOR_LEN / max_node_len, mem.range, attr_size,
+                             mem.R_ood);
+
+    constexpr uint64_t kTargetBatchBytes = 64 << 20;  // ~64 MiB per I/O.
+    const uint64_t unit_bytes = meta.io_size_dense();
+    const uint64_t unit_nodes = meta.nodes_per_io();
+    const uint64_t batch_units = std::max<uint64_t>(1, kTargetBatchBytes / unit_bytes);
+
+    std::remove(disk_file.c_str());
+    int fd = open(disk_file.c_str(), O_DIRECT | O_LARGEFILE | O_RDWR | O_CREAT, 0644);
+
+    meta.save_to_disk_index(disk_file);
+
+    char *buf;
+    alloc_aligned((void **) &buf, batch_units * unit_bytes, SECTOR_LEN);
+
+    for (uint64_t loc = 0; loc < meta.npoints;) {
+      const uint64_t cur_nodes = std::min(batch_units * unit_nodes, meta.npoints - loc);
+      const uint64_t write_bytes = DIV_ROUND_UP(cur_nodes, unit_nodes) * unit_bytes;
+      memset(buf, 0, write_bytes);
+
+#pragma omp parallel for schedule(static)
+      for (uint64_t i = 0; i < cur_nodes; i++) {
+        const uint64_t gl = loc + i;
+        DiskNode<T> node(buf + (i / unit_nodes) * unit_bytes, (uint32_t) gl, meta);
+        memcpy(node.coords, mem._data.data() + gl * meta.data_dim, meta.data_dim * sizeof(T));
+
+        const auto &nbrs = mem._final_graph[gl];
+        node.nnbrs = std::min<size_t>(nbrs.size(), meta.range);
+        memcpy(node.nbrs, nbrs.data(), node.nnbrs * sizeof(uint32_t));
+
+        if (meta.range_dense > meta.range) {
+          node.n_dense_nbrs = sample_two_hop_nbrs(gl, meta.range_dense - meta.range, node.dense_nbrs, [&](uint32_t id) {
+            const auto &g = mem._final_graph[id];
+            return std::make_pair(g.data(), g.size());
+          });
+        } else {
+          node.n_dense_nbrs = 0;
         }
 
-        uint64_t loc_sector = loc_sector_no(loc);
-        auto page_rbuf = buf + (loc_sector - st_sector) * SECTOR_LEN;
-        DiskNode<T> node = node_from_page(page_rbuf, loc);
-
-        // load data and nhood.
-        memcpy(mem_index->_data.data() + id * meta.data_dim, node.coords, meta.data_dim * sizeof(T));
-        std::vector<uint32_t> nhood;
-
-        for (uint32_t i = 0; i < node.nnbrs; ++i) {
-          nhood.push_back(node.nbrs[i]);
+        if (attr_size > 0) {
+          attr_writer->write((uint32_t) gl, node.attrs);
         }
-        mem_index->_final_graph[id] = nhood;
       }
 
-      LOG(INFO) << "Loaded " << loc_ed << "/" << meta.npoints << " nodes.";
+      const uint64_t write_offset = meta.loc_sector_no(loc) * SECTOR_LEN;
+      ssize_t ret = ::pwrite(fd, buf, write_bytes, write_offset);
+      if (ret != static_cast<ssize_t>(write_bytes)) {
+        LOG(ERROR) << "Direct I/O write failed for " << disk_file << " offset=" << write_offset
+                   << " bytes=" << write_bytes << " ret=" << ret
+                   << (ret < 0 ? std::string(" err=") + strerror(errno) : std::string());
+        crash();
+      }
+
+      loc += cur_nodes;
+      if (loc % 1000000 < cur_nodes) {
+        LOG(INFO) << "Nodes written: " << loc << "/" << meta.npoints;
+      }
     }
-    return mem_index;
+    aligned_free(buf);
+    close(fd);
+
+    mem.save_tags(disk_file + ".tags");
+    LOG(INFO) << "save_from_mem: wrote " << disk_file;
   }
 
   template<typename T, typename TagT>
@@ -330,9 +409,9 @@ namespace pipeann {
 
     size_t num_sectors = loc_sector_no(loc);
     std::ifstream disk_reader(disk_index_file.c_str(), std::ios::binary);
-    std::unique_ptr<char[]> sector_buf = std::make_unique<char[]>(size_per_io);
+    std::unique_ptr<char[]> sector_buf = std::make_unique<char[]>(io_size);
     disk_reader.seekg(SECTOR_LEN * num_sectors, std::ios::beg);
-    disk_reader.read(sector_buf.get(), size_per_io);
+    disk_reader.read(sector_buf.get(), io_size);
     DiskNode<T> node = node_from_page(sector_buf.get(), loc);
     memcpy((void *) vector_coords, (void *) node.coords, meta_.data_dim * sizeof(T));
     return 0;
@@ -350,6 +429,26 @@ namespace pipeann {
       return id;
     }
 #endif
+  }
+
+  template<typename T, typename TagT>
+  size_t SSDIndex<T, TagT>::copy_top_k(const std::vector<Neighbor> &sorted_results, uint64_t k, TagT *res_tags,
+                                       float *res_dists, float max_dist) {
+    uint64_t t = 0;
+    for (uint64_t i = 0; i < sorted_results.size() && t < k; i++) {
+      if (sorted_results[i].distance > max_dist) {
+        break;
+      }
+      if (i > 0 && sorted_results[i].id == sorted_results[i - 1].id) {
+        continue;
+      }
+      res_tags[t] = id2tag(sorted_results[i].id);
+      if (res_dists != nullptr) {
+        res_dists[t] = sorted_results[i].distance;
+      }
+      t++;
+    }
+    return t;
   }
 
   template<typename T, typename TagT>
@@ -456,6 +555,8 @@ namespace pipeann {
     if (target != kInvalidID)
       to_lock.push_back(target);
     std::sort(to_lock.begin(), to_lock.end());
+    auto orig_size = to_lock.size();
+    to_lock.erase(std::unique(to_lock.begin(), to_lock.end()), to_lock.end());
     for (auto &id : to_lock) {
       rd ? lock_table.rdlock(id) : lock_table.wrlock(id);
     }
@@ -464,9 +565,13 @@ namespace pipeann {
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::unlock_vec(pipeann::SparseLockTable<uint64_t> &lock_table, uint32_t target,
                                      const std::vector<uint32_t> &neighbors) {
+    std::vector<uint32_t> to_unlock;
+    to_unlock.assign(neighbors.begin(), neighbors.end());
     if (target != kInvalidID)
-      lock_table.unlock(target);
-    for (auto &id : neighbors) {
+      to_unlock.push_back(target);
+    std::sort(to_unlock.begin(), to_unlock.end());
+    to_unlock.erase(std::unique(to_unlock.begin(), to_unlock.end()), to_unlock.end());
+    for (auto &id : to_unlock) {
       lock_table.unlock(id);
     }
   }
@@ -485,14 +590,40 @@ namespace pipeann {
     return to_lock;
   }
 
-  // Lock the mapping for target/page if use_page_search == false/true.
   template<typename T, typename TagT>
   std::vector<uint32_t> SSDIndex<T, TagT>::lock_idx(pipeann::SparseLockTable<uint64_t> &lock_table, uint32_t target,
                                                     const std::vector<uint32_t> &neighbors, bool rd) {
 #ifndef READ_ONLY_TESTS
     std::vector<uint32_t> to_lock = get_to_lock_idx(target, neighbors);
-    for (auto &id : to_lock) {
-      rd ? lock_table.rdlock(id) : lock_table.wrlock(id);
+    if (rd) {
+      for (auto &id : to_lock) {
+        lock_table.rdlock(id);
+      }
+      return to_lock;
+    }
+
+    // For pipe_search, read locks may not acquired in the ascending order.
+    // Deadlock may happen for concurrent pipe_search and insert.
+    // We prioritize search, so use try_lock for updates.
+    while (true) {
+      uint32_t locked = 0;
+      for (; locked < to_lock.size(); ++locked) {
+        if (lock_table.trywrlock(to_lock[locked]) != 0) {
+          break;
+        }
+      }
+
+      // All locks are grabbed, return the locked ids.
+      if (locked == to_lock.size()) {
+        return to_lock;
+      }
+
+      // Not all locks are grabbed, release the grabbed locks and retry.
+      while (locked > 0) {
+        --locked;
+        lock_table.unlock(to_lock[locked]);
+      }
+      thread_pause();
     }
     return to_lock;
 #else
@@ -514,51 +645,6 @@ namespace pipeann {
   void SSDIndex<T, TagT>::unlock_idx(pipeann::SparseLockTable<uint64_t> &lock_table, const uint32_t &to_lock) {
 #ifndef READ_ONLY_TESTS
     lock_table.unlock(to_lock);
-#endif
-  }
-
-  // Two-level lock, as id2page may change before and after grabbing the lock.
-  template<typename T, typename TagT>
-  std::vector<uint32_t> SSDIndex<T, TagT>::lock_page_idx(pipeann::SparseLockTable<uint64_t> &lock_table,
-                                                         uint32_t target, const std::vector<uint32_t> &neighbors,
-                                                         bool rd) {
-#ifndef READ_ONLY_TESTS
-    if (!use_page_search_) {
-      return std::vector<uint32_t>();
-    }
-    std::vector<uint32_t> to_lock(neighbors.begin(), neighbors.end());
-    if (target != kInvalidID) {
-      to_lock.push_back(target);
-    }
-
-    for (size_t i = 0; i < to_lock.size(); ++i) {
-      to_lock[i] = id2page(to_lock[i]);
-    }
-
-    // Sort and deduplicate.
-    std::sort(to_lock.begin(), to_lock.end());
-    auto last = std::unique(to_lock.begin(), to_lock.end());
-    to_lock.erase(last, to_lock.end());
-
-    for (auto &id : to_lock) {
-      rd ? lock_table.rdlock(id) : lock_table.wrlock(id);
-    }
-    return to_lock;
-#else
-    return std::vector<uint32_t>();
-#endif
-  }
-
-  template<typename T, typename TagT>
-  void SSDIndex<T, TagT>::unlock_page_idx(pipeann::SparseLockTable<uint64_t> &lock_table,
-                                          const std::vector<uint32_t> &to_lock) {
-#ifndef READ_ONLY_TESTS
-    if (!use_page_search_) {
-      return;
-    }
-    for (auto &id : to_lock) {
-      lock_table.unlock(id);
-    }
 #endif
   }
 

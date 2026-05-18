@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <immintrin.h>
+#include <omp.h>
 
 #include "utils/log.h"
 
@@ -112,12 +113,14 @@ inline int delete_file(const std::string &fileName) {
 
 namespace pipeann {
   enum Metric { L2 = 0, INNER_PRODUCT = 1, COSINE = 2 };
+  enum FilterType : int { PRE_FILTER = 0, IN_FILTER = 1, POST_FILTER = 2, N_FILTER_TYPES = 3 };
 
   inline void alloc_aligned(void **ptr, size_t size, size_t align) {
-    *ptr = nullptr;
-    assert(IS_ALIGNED(size, align));
-    *ptr = ::aligned_alloc(align, size);
-    assert(*ptr != nullptr);
+    std::ignore = posix_memalign(ptr, align, size);
+    // *ptr = nullptr;
+    // assert(IS_ALIGNED(size, align));
+    // *ptr = ::aligned_alloc(align, size);
+    // assert(*ptr != nullptr);
   }
 
   inline void aligned_free(void *ptr) {
@@ -328,7 +331,7 @@ namespace pipeann {
     int pmax = 1000;
     int first_layer_fanout = 6;
     int second_layer_fanout = 10;
-    int k = 2;                    // k-NN in leaf build
+    int k = 2;  // k-NN in leaf build
     int num_hyperplanes = 12;
     int climit = 128;
     uint32_t seed = 42;
@@ -340,20 +343,24 @@ namespace pipeann {
     }
   };
 
-  /* Parameters for index build. */
+  /* Index parameters: graph build + runtime config. */
   struct IndexBuildParameters {
-    uint32_t R = 0;              // maximum out-neighbors.
-    uint32_t L = 0;              // build L.
+    uint32_t R = 0;              // maximum out-neighbors (0 means auto-configure).
+    uint32_t L = 0;              // build L (0 means auto-configure).
     uint32_t C = 384;            // delete pruning capacity.
     float alpha = 1.2f;          // alpha for Vamana.
-    uint32_t num_threads = 0;    // num_threads used.
+    uint32_t num_threads = 0;    // num_threads used for build (0 uses all available threads).
     bool saturate_graph = true;  // saturate graph during build (using kNN neighbors).
-    uint32_t beam_width = 4;     // insert beam width. (for SSD)
+    uint32_t beam_width = 8;     // insert beam width. (for SSD)
     bool use_pipnn = false;
     PiPNNConfig pipnn_config;
 
+    // By default, we assume a maximum parallelism of 128.
+    uint32_t max_nthreads = 128;            // max threads for SSD I/O buffer allocation.
+    uint32_t sampled_nbrs_for_delete = 20;  // neighbors sampled during merge.
+
     void set(uint32_t R, uint32_t L, uint32_t C, float alpha = 1.2, uint32_t num_threads = 0,
-             bool saturate_graph = true, uint32_t beam_width = 4) {
+             bool saturate_graph = true, uint32_t beam_width = 8) {
       this->R = R;
       this->L = L;
       this->C = C;
@@ -363,17 +370,18 @@ namespace pipeann {
       this->saturate_graph = saturate_graph;
     }
 
-    void pipnn_set(int cmax, int cmin, float p_samp, int pmax, int first_layer_fanout, int second_layer_fanout,
-                   int k, int num_hyperplanes, int climit, uint32_t seed = 42) {
-      this->use_pipnn = true;
-      this->pipnn_config = {cmax, cmin, p_samp, pmax, first_layer_fanout, second_layer_fanout,
-                            k, num_hyperplanes, climit, seed};
+    void pipnn_set(int cmax, int cmin, float p_samp, int pmax, int first_layer_fanout, int second_layer_fanout, int k,
+                   int num_hyperplanes, int climit, uint32_t seed = 42) {
+      this->pipnn_config = {cmax,   cmin, p_samp, pmax, first_layer_fanout, second_layer_fanout, k, num_hyperplanes,
+                            climit, seed};
     }
 
     void print() {
-      LOG(INFO) << "IndexBuildParameters with L: " << L << " R: " << R << " C: " << C << " alpha: " << alpha
-                << " num_threads: " << num_threads << " beam_width: " << beam_width
-                << " saturate_graph: " << saturate_graph;
+      LOG(INFO) << "IndexBuildParameters with L: " << (L == 0 ? "auto" : std::to_string(L))
+                << " R: " << (R == 0 ? "auto" : std::to_string(R)) << " C: " << C << " alpha: " << alpha
+                << " num_threads: " << (num_threads == 0 ? "auto" : std::to_string(num_threads))
+                << " beam_width: " << beam_width << " saturate_graph: " << saturate_graph
+                << " max_nthreads: " << max_nthreads;
       if (use_pipnn) {
         pipnn_config.print();
       }
@@ -386,37 +394,50 @@ namespace pipeann {
     float distance;
     bool flag;
     bool visited;
+    bool is_member_approx;  // used by in-filter, prioritize them in the retset.
+    bool is_member;         // Accurate, to check if early stop.
 
     Neighbor() = default;
-    Neighbor(unsigned id, float distance, bool f) : id{id}, distance{distance}, flag(f), visited(false) {
+    Neighbor(unsigned id, float distance, bool f, bool is_member_approx = true)
+        : id{id}, distance{distance}, flag(f), visited(false), is_member_approx(is_member_approx), is_member(false) {
     }
 
     inline bool operator<(const Neighbor &other) const {
-      return (distance < other.distance) || (distance == other.distance && id < other.id);
+      // is_member goes first.
+      return (is_member_approx > other.is_member_approx) ||
+             (is_member_approx == other.is_member_approx && distance < other.distance) ||
+             (is_member_approx == other.is_member_approx && distance == other.distance && id < other.id);
     }
     inline bool operator==(const Neighbor &other) const {
       return (id == other.id);
     }
     inline bool operator>(const Neighbor &other) const {
-      return (distance > other.distance) || (distance == other.distance && id > other.id);
+      return (is_member_approx < other.is_member_approx) ||
+             (is_member_approx == other.is_member_approx && distance > other.distance) ||
+             (is_member_approx == other.is_member_approx && distance == other.distance && id > other.id);
+    }
+    inline bool operator>=(const Neighbor &other) const {
+      return (is_member_approx < other.is_member_approx) ||
+             (is_member_approx == other.is_member_approx && distance >= other.distance) ||
+             (is_member_approx == other.is_member_approx && distance == other.distance && id >= other.id);
     }
   };
 
   static inline unsigned InsertIntoPool(Neighbor *addr, unsigned K, Neighbor nn) {
     // find the location to insert
     unsigned left = 0, right = K - 1;
-    if (addr[left].distance > nn.distance) {
+    if (addr[left] > nn) {
       memmove((char *) &addr[left + 1], &addr[left], K * sizeof(Neighbor));
       addr[left] = nn;
       return left;
     }
-    if (addr[right].distance < nn.distance) {
+    if (addr[right] < nn) {
       addr[K] = nn;
       return K;
     }
     while (right > 1 && left < right - 1) {
       unsigned mid = (left + right) / 2;
-      if (addr[mid].distance > nn.distance)
+      if (addr[mid] > nn)
         right = mid;
       else
         left = mid;
@@ -424,7 +445,7 @@ namespace pipeann {
     // check equal ID
 
     while (left > 0) {
-      if (addr[left].distance < nn.distance)
+      if (addr[left] < nn)
         break;
       if (addr[left].id == nn.id)
         return K + 1;

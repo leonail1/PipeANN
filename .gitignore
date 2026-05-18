@@ -7,6 +7,9 @@ data-example/*
 figures/*
 scripts/tests-pipeann/drop_cache
 pipeann/*.so
+__pycache__/
+*.pyc
 pipeann/__pycache__/*
 pipeann.egg-info/
 dist/
+logs/**/*

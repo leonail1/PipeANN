@@ -7,7 +7,7 @@ mkdir data
 
 CWD=$(pwd)
 
-build/tests/test_insert_search float /mnt/nvme/data/deep/200M.fbin 128 1000000 100 10 32 0 /mnt/nvme/indices_upd/deep/100M /mnt/nvme/data/deep/queries.fbin /mnt/nvme/indices_upd/deep_gnd_insert/200M_topk 0 10 4 4 0 25 30 33 37 40 45 60 80 |& tee $CWD/data/OdinANN-insertonly-deep.txt
+build/tests/test_insert_search float /mnt/nvme/data/deep/200M.fbin 128 1000000 100 6 12 /mnt/nvme/indices_upd/deep/100M /mnt/nvme/data/deep/queries.fbin /mnt/nvme/indices_upd/deep_gnd_insert/200M_topk 0 10 25 30 33 37 40 45 60 80 |& tee $CWD/data/OdinANN-insertonly-deep.txt
 
 rm /mnt/nvme/indices_upd/deep/100M_mem*
 rm /mnt/nvme/indices_upd/deep/100Mtemp0*

@@ -37,7 +37,6 @@ int search_disk_index(int argc, char **argv) {
   std::string dist_metric(argv[index++]);
   std::string nbr_type = argv[index++];
   int search_mode = std::atoi(argv[index++]);
-  bool use_page_search = search_mode != 0;
   uint32_t mem_L = std::atoi(argv[index++]);
 
   pipeann::Metric m = pipeann::get_metric(dist_metric);
@@ -76,9 +75,12 @@ int search_disk_index(int argc, char **argv) {
   std::shared_ptr<AlignedFileReader> reader = nullptr;
   reader.reset(new LinuxAlignedFileReader());
   pipeann::AbstractNeighbor<T> *nbr_handler = pipeann::get_nbr_handler<T>(m, nbr_type);
-  std::unique_ptr<pipeann::SSDIndex<T>> _pFlashIndex(new pipeann::SSDIndex<T>(m, reader, nbr_handler, tags_flag));
+  pipeann::IndexBuildParameters idx_params;
+  idx_params.max_nthreads = num_threads; // Restrict the number of buffers allocated. Unspecify this is also OK (default = 128).
+  std::unique_ptr<pipeann::SSDIndex<T>> _pFlashIndex(
+      new pipeann::SSDIndex<T>(m, reader, nbr_handler, tags_flag, &idx_params));
 
-  int res = _pFlashIndex->load(index_prefix_path.c_str(), num_threads, use_page_search);
+  int res = _pFlashIndex->load(index_prefix_path.c_str(), false);
   if (res != 0) {
     return res;
   }
@@ -146,8 +148,8 @@ int search_disk_index(int argc, char **argv) {
       for (int64_t i = 0; i < (int64_t) query_num; i++) {
         _pFlashIndex->beam_search(query + (i * query_dim), (uint64_t) recall_at, mem_L, (uint64_t) L,
                                   query_result_tags_32.data() + (i * recall_at),
-                                  query_result_dists[test_id].data() + (i * recall_at), (uint64_t) beamwidth, stats + i,
-                                  nullptr, false);
+                                  query_result_dists[test_id].data() + (i * recall_at), (uint64_t) beamwidth,
+                                  stats + i);
       }
     } else {
       std::cout << "Unknown search mode: " << search_mode << std::endl;
@@ -164,8 +166,8 @@ int search_disk_index(int argc, char **argv) {
     float mean_latency = (float) pipeann::get_mean_stats(
         stats, query_num, [](const pipeann::QueryStats &stats) { return stats.total_us; });
 
-    float latency_999 = (float) pipeann::get_percentile_stats(
-        stats, query_num, 0.999f, [](const pipeann::QueryStats &stats) { return stats.total_us; });
+    float latency_99 = (float) pipeann::get_percentile_stats(
+        stats, query_num, 0.99f, [](const pipeann::QueryStats &stats) { return stats.total_us; });
 
     float mean_hops = (float) pipeann::get_mean_stats(stats, query_num,
                                                       [](const pipeann::QueryStats &stats) { return stats.n_hops; });
@@ -186,7 +188,7 @@ int search_disk_index(int argc, char **argv) {
       }
 
       std::cout << std::setw(6) << L << std::setw(12) << beamwidth << std::setw(12) << qps << std::setw(12)
-                << mean_latency << std::setw(12) << latency_999 << std::setw(12) << mean_hops << std::setw(12)
+                << mean_latency << std::setw(12) << latency_99 << std::setw(12) << mean_hops << std::setw(12)
                 << mean_ios;
       if (calc_recall_flag) {
         std::cout << std::setw(12) << recall << std::endl;

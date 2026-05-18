@@ -41,7 +41,6 @@ int search_disk_index(int argc, char **argv) {
   std::string dist_metric(argv[index++]);
   std::string nbr_type = argv[index++];
   int search_mode = std::atoi(argv[index++]);
-  bool use_page_search = search_mode != 0;
   uint32_t mem_L = std::atoi(argv[index++]);
 
   pipeann::Metric m = pipeann::get_metric(dist_metric);
@@ -77,16 +76,11 @@ int search_disk_index(int argc, char **argv) {
     calc_recall_flag = true;
   }
 
-  std::shared_ptr<AlignedFileReader> reader = nullptr;
-  reader.reset(new LinuxAlignedFileReader());
-
-  pipeann::SSDIndex<T> disk_index(m, reader, new pipeann::DummyNeighbor<T>(m), true, nullptr);
-  auto &_pFlashIndex = *disk_index.load_to_mem(index_prefix_path);
+  auto mem_index = pipeann::SSDIndex<T>::load_to_mem(index_prefix_path + "_disk.index", m);
+  auto &_pFlashIndex = *mem_index;
 
   LOG(INFO) << "Num threads: " << num_threads;
   omp_set_num_threads(num_threads);
-
-  LOG(INFO) << "Use page search: " << use_page_search;
 
   std::cout.setf(std::ios_base::fixed, std::ios_base::floatfield);
   std::cout.precision(2);
@@ -140,8 +134,8 @@ int search_disk_index(int argc, char **argv) {
     float mean_latency = (float) pipeann::get_mean_stats(
         stats, query_num, [](const pipeann::QueryStats &stats) { return stats.total_us; });
 
-    float latency_999 = (float) pipeann::get_percentile_stats(
-        stats, query_num, 0.999f, [](const pipeann::QueryStats &stats) { return stats.total_us; });
+    float latency_99 = (float) pipeann::get_percentile_stats(
+        stats, query_num, 0.99f, [](const pipeann::QueryStats &stats) { return stats.total_us; });
 
     float mean_hops = (float) pipeann::get_mean_stats(stats, query_num,
                                                       [](const pipeann::QueryStats &stats) { return stats.n_hops; });
@@ -175,9 +169,9 @@ int search_disk_index(int argc, char **argv) {
     }
 
     std::cout << std::setw(6) << L << std::setw(12) << 1 << std::setw(12) << qps << std::setw(12) << mean_latency
-              << std::setw(12) << latency_999 << std::setw(12) << mean_hops << std::setw(12) << mean_ios
-              << std::setw(12) << mean_cpuus << std::setw(12) << mean_cpu1us << std::setw(12) << mean_cpu2us
-              << std::setw(12) << mean_ious << std::setw(12) << mean_io1us;
+              << std::setw(12) << latency_99 << std::setw(12) << mean_hops << std::setw(12) << mean_ios << std::setw(12)
+              << mean_cpuus << std::setw(12) << mean_cpu1us << std::setw(12) << mean_cpu2us << std::setw(12)
+              << mean_ious << std::setw(12) << mean_io1us;
     if (calc_recall_flag) {
       std::cout << std::setw(12) << recall << std::endl;
     }

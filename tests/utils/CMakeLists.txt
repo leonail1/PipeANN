@@ -1,5 +1,3 @@
-set(CMAKE_CXX_STANDARD 17)
-
 add_executable(bin_to_fvecs bin_to_fvecs.cpp)
 target_link_libraries(bin_to_fvecs ${PROJECT_NAME})
 
@@ -11,9 +9,6 @@ target_link_libraries(gen_random_slice ${PROJECT_NAME})
 
 add_executable(compute_groundtruth compute_groundtruth.cpp)
 target_link_libraries(compute_groundtruth ${PROJECT_NAME})
-
-add_executable(gen_tags gen_tags.cpp)
-target_link_libraries(gen_tags ${PROJECT_NAME})
 
 add_executable(gt_update gt_update.cpp)
 target_link_libraries(gt_update ${PROJECT_NAME} )

@@ -1,6 +1,6 @@
 #include "linux_aligned_file_reader.h"
 #include "nbr/dummy_nbr.h"
-#include "dynamic_index.h"
+#include "ssd_index.h"
 
 #include <index.h>
 #include <cstddef>
@@ -272,11 +272,8 @@ void update(const std::string &data_bin, const unsigned L_disk, const unsigned R
   aligned_dim = query_dim;
   pipeann::Metric metric = pipeann::Metric::L2;
 
-  std::shared_ptr<AlignedFileReader> reader = nullptr;
-  reader.reset(new LinuxAlignedFileReader());
-
-  pipeann::SSDIndex<T, TagT> disk_index(metric, reader, new pipeann::DummyNeighbor<T>(metric), true, nullptr);
-  auto &sync_index = *disk_index.load_to_mem(save_path);
+  std::unique_ptr<pipeann::Index<T, TagT>> mem_index(pipeann::SSDIndex<T, TagT>::load_to_mem(save_path, metric));
+  auto &sync_index = *mem_index;
 
   params.set(sync_index.range, 128, 384, 1.2);
 

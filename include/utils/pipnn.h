@@ -3,11 +3,13 @@
 #include <cstdint>
 #include <vector>
 
+#include "filter/attribute.h"
 #include "nbr/abstract_nbr.h"
-#include "filter/label.h"
 #include "utils.h"
 
 namespace pipeann {
+  // PiPNN (Pick-in-Partitions Nearest Neighbors) is a graph construction algorithm.
+  // It partitions the dataset into overlapping sub-problems and leverages dense matrix multiplication kernels.
   struct WeightedEdge {
     uint32_t u, v;
     float dist;
@@ -23,6 +25,7 @@ namespace pipeann {
     }
   };
 
+  // HashPruner deduplicates and prunes PiPNN candidate edges before materializing the final graph.
   struct HashPruner {
     float *_norm_vectors;
     float *_sketch;
@@ -33,18 +36,11 @@ namespace pipeann {
     size_t _climit;
 
     template<typename T>
-    HashPruner(int64_t num_nodes, int64_t dims, int num_hyperplanes, int climit, const T *raw_data,
-               uint32_t seed = 42);
+    HashPruner(int64_t num_nodes, int64_t dims, int num_hyperplanes, int climit, const T *raw_data, uint32_t seed = 42);
 
     ~HashPruner();
 
     void update(const std::vector<WeightedEdge> &edges);
     void to_graph(std::vector<std::vector<unsigned>> &final_graph);
   };
-
-  template<typename T, typename TagT = uint32_t>
-  bool build_pipnn_index(const char *dataPath, const char *indexFilePath, uint32_t R, uint32_t l1_fanout,
-                         uint32_t l2_fanout, uint32_t M, uint32_t num_threads, uint32_t bytes_per_nbr,
-                         pipeann::Metric _compareMetric, const char *tag_file, AbstractNeighbor<T> *nbr_handler,
-                         AbstractLabel *label);
 }  // namespace pipeann

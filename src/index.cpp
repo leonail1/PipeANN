@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <bitset>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -29,274 +30,35 @@
 #include "utils/lock_table.h"
 #include "utils/prune_neighbors.h"
 
-
 namespace pipeann {
   // Initialize an index with metric m, load the data of type T with filename
   // (bin). The index will be dynamically resized as needed.
   template<typename T, typename TagT>
-  Index<T, TagT>::Index(Metric m, const size_t dim) : _dist_metric(m), _dim(dim) {
+  Index<T, TagT>::Index(Metric m, const size_t dim, uint64_t max_points) : _dist_metric(m), _dim(dim) {
     constexpr uint64_t kLockTableEntries = 131072;  // ~1MB lock table.
     this->_locks = new pipeann::LockTable(kLockTableEntries);
     LOG(INFO) << "Getting distance function for metric: " << get_metric_str(m);
     this->_distance = get_distance_function<T>(m);
-    _width = 0;
+    range = 0;
+    if (max_points > 0) {
+      resize(max_points);
+    }
+  }
+
+  template<typename T, typename TagT>
+  Index<T, TagT>::Index(Metric m, const SSDIndexMetadata<T> &meta) : Index(m, meta.data_dim) {
+    _ep = meta.entry_point;
+    range = meta.range;
+    R_ood = meta.R_ood;
+    R_base = range - R_ood;
+    _nd = meta.npoints;
+    resize(meta.npoints);
   }
 
   template<typename T, typename TagT>
   Index<T, TagT>::~Index() {
     delete this->_distance;
     delete this->_locks;
-  }
-
-  template<typename T, typename TagT>
-  uint64_t Index<T, TagT>::save_tags(std::string tags_file) {
-    std::vector<TagT> tag_data(_nd);
-    for (uint32_t i = 0; i < _nd; i++) {
-      if (_location_to_tag.find(i) != _location_to_tag.end()) {
-        tag_data[i] = _location_to_tag[i];
-      }
-    }
-    return save_bin<TagT>(tags_file, tag_data.data(), _nd, 1);
-  }
-
-  template<typename T, typename TagT>
-  uint64_t Index<T, TagT>::save_data(std::string data_file) {
-    return save_bin<T>(data_file, _data.data(), _nd, _dim);
-  }
-
-  // save the graph index on a file as an adjacency list. For each point,
-  // first store the number of neighbors, and then the neighbor list (each as
-  // 4 byte unsigned)
-  template<typename T, typename TagT>
-  uint64_t Index<T, TagT>::save_graph(std::string graph_file) {
-    std::ofstream out;
-    open_file_to_write(out, graph_file);
-
-    out.seekp(0, out.beg);
-    uint64_t index_size = 24;
-    uint32_t max_degree = 0;
-    out.write((char *) &index_size, sizeof(uint64_t));
-    out.write((char *) &_width, sizeof(unsigned));
-    unsigned ep_u32 = _ep;
-    out.write((char *) &ep_u32, sizeof(unsigned));
-    uint64_t num_frozen_pts = 0;  // For backward compatibility
-    out.write((char *) &num_frozen_pts, sizeof(uint64_t));
-    for (unsigned i = 0; i < _nd; i++) {
-      unsigned GK = (unsigned) _final_graph[i].size();
-      out.write((char *) &GK, sizeof(unsigned));
-      out.write((char *) _final_graph[i].data(), GK * sizeof(unsigned));
-      max_degree = std::max(max_degree, (uint32_t) _final_graph[i].size());
-      index_size += (uint64_t) (sizeof(unsigned) * (GK + 1));
-    }
-    out.seekp(0, out.beg);
-    out.write((char *) &index_size, sizeof(uint64_t));
-    out.write((char *) &max_degree, sizeof(uint32_t));
-    out.close();
-    return index_size;  // number of bytes written
-  }
-
-  template<typename T, typename TagT>
-  uint64_t Index<T, TagT>::save_delete_list(const std::string &filename, uint64_t file_offset) {
-    if (_delete_set.size() == 0) {
-      return 0;
-    }
-    std::unique_ptr<uint32_t[]> delete_list = std::make_unique<uint32_t[]>(_delete_set.size());
-    uint32_t i = 0;
-    for (auto &del : _delete_set) {
-      delete_list[i++] = del;
-    }
-    return save_bin<uint32_t>(filename, delete_list.get(), _delete_set.size(), 1, file_offset);
-  }
-
-  template<typename T, typename TagT>
-  void Index<T, TagT>::save(const char *filename) {
-    // first check if no thread is inserting
-    auto start = std::chrono::high_resolution_clock::now();
-    std::unique_lock<std::shared_timed_mutex> lock(_update_lock);
-    _change_lock.lock();
-
-    std::string graph_file = std::string(filename);
-    std::string tags_file = std::string(filename) + ".tags";
-    std::string data_file = std::string(filename) + ".data";
-    std::string delete_list_file = std::string(filename) + ".del";
-
-    // Because the save_* functions use append mode, ensure that
-    // the files are deleted before save. Ideally, we should check
-    // the error code for delete_file, but will ignore now because
-    // delete should succeed if save will succeed.
-    delete_file(graph_file);
-    save_graph(graph_file);
-    delete_file(data_file);
-    save_data(data_file);
-    delete_file(tags_file);
-    save_tags(tags_file);
-    delete_file(delete_list_file);
-    save_delete_list(delete_list_file);
-
-    _change_lock.unlock();
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto timespan = std::chrono::duration_cast<std::chrono::duration<double>>(stop - start);
-    LOG(INFO) << "Time taken for save: " << timespan.count() << "s.";
-  }
-
-  template<typename T, typename TagT>
-  size_t Index<T, TagT>::load_tags(const std::string tag_filename, uint64_t file_frozen_pts, size_t offset) {
-    if (!file_exists(tag_filename)) {
-      LOG(ERROR) << "Tag file provided does not exist!";
-      crash();
-    }
-
-    size_t file_dim, file_num_points;
-    TagT *tag_data;
-    load_bin<TagT>(std::string(tag_filename), tag_data, file_num_points, file_dim, offset);
-
-    if (file_dim != 1) {
-      LOG(ERROR) << "ERROR: Loading " << file_dim << " dimensions for tags," << "but tag file must have 1 dimension.";
-      crash();
-    }
-
-    // Use file_frozen_pts for backward compatibility with old static index.
-    size_t num_data_points = file_frozen_pts > 0 ? file_num_points - 1 : file_num_points;
-    for (uint32_t i = 0; i < (uint32_t) num_data_points; i++) {
-      TagT tag = *(tag_data + i);
-      if (_delete_set.find(i) == _delete_set.end()) {
-        _location_to_tag[i] = tag;
-        _tag_to_location[tag] = (uint32_t) i;
-      }
-    }
-    LOG(INFO) << "Tags loaded.";
-    delete[] tag_data;
-    return file_num_points;
-  }
-
-  template<typename T, typename TagT>
-  size_t Index<T, TagT>::load_data(std::string filename, size_t offset) {
-    LOG(INFO) << "Loading data from " << filename << " offset " << offset;
-    if (!file_exists(filename)) {
-      LOG(ERROR) << "ERROR: data file " << filename << " does not exist.";
-      crash();
-    }
-
-    size_t file_dim, file_num_points;
-    pipeann::load_bin<T>(filename, _data, file_num_points, file_dim, offset);
-
-    // since we are loading a new dataset, _empty_slots must be cleared
-    _empty_slots.clear();
-
-    if (file_dim != _dim) {
-      LOG(ERROR) << "ERROR: Driver requests loading " << _dim << " dimension," << "but file has " << file_dim
-                 << " dimension.";
-      crash();
-    }
-
-    _final_graph.resize(file_num_points);
-    return file_num_points;
-  }
-
-  template<typename T, typename TagT>
-  size_t Index<T, TagT>::load_delete_set(const std::string &filename, size_t offset) {
-    std::unique_ptr<uint32_t[]> delete_list;
-    uint64_t npts, ndim;
-    load_bin<uint32_t>(filename, delete_list, npts, ndim, offset);
-    assert(ndim == 1);
-    for (size_t i = 0; i < npts; i++) {
-      _delete_set.insert(delete_list[i]);
-    }
-    return npts;
-  }
-
-  // load the index from file and update the width (max_degree), ep (navigating
-  // node id), and _final_graph (adjacency list)
-  template<typename T, typename TagT>
-  void Index<T, TagT>::load(const char *filename) {
-    _change_lock.lock();
-
-    size_t tags_file_num_pts = 0, graph_num_pts = 0, data_file_num_pts = 0;
-    uint64_t file_frozen_pts = 0;
-
-    std::string data_file = std::string(filename) + ".data";
-    std::string tags_file = std::string(filename) + ".tags";
-    std::string delete_set_file = std::string(filename) + ".del";
-    std::string graph_file = std::string(filename);
-    data_file_num_pts = load_data(data_file);
-    if (file_exists(delete_set_file)) {
-      load_delete_set(delete_set_file);
-    }
-    // Load graph first to get file_frozen_pts for backward compatibility.
-    graph_num_pts = load_graph(graph_file, data_file_num_pts, file_frozen_pts);
-    tags_file_num_pts = load_tags(tags_file, file_frozen_pts);
-
-    if (data_file_num_pts != graph_num_pts || data_file_num_pts != tags_file_num_pts) {
-      LOG(ERROR) << "ERROR: When loading index, loaded " << data_file_num_pts << " points from datafile, "
-                 << graph_num_pts << " from graph, and " << tags_file_num_pts << " tags, with file_frozen_pts being "
-                 << file_frozen_pts << ".";
-      crash();
-    }
-
-    // Use file_frozen_pts for _nd calculation (backward compatibility with old static index).
-    _nd = data_file_num_pts - file_frozen_pts;
-    _empty_slots.clear();
-    for (uint32_t i = _nd; i < max_points(); i++) {
-      _empty_slots.insert(i);
-    }
-
-    // For old static index with frozen point, we now just use _ep as loaded from file.
-    // The _ep already points to a valid entry point.
-
-    LOG(INFO) << "_nd: " << _nd << " _ep: " << _ep << " size(_location_to_tag): " << _location_to_tag.size()
-              << " size(_tag_to_location):" << _tag_to_location.size() << " Max points: " << max_points();
-    _change_lock.unlock();
-  }
-
-  template<typename T, typename TagT>
-  size_t Index<T, TagT>::load_graph(std::string filename, size_t expected_num_points, uint64_t &out_file_frozen_pts,
-                                    size_t offset) {
-    std::ifstream in(filename, std::ios::binary);
-    in.seekg(offset, in.beg);
-    size_t expected_file_size;
-    in.read((char *) &expected_file_size, sizeof(uint64_t));
-    in.read((char *) &_width, sizeof(unsigned));
-    in.read((char *) &_ep, sizeof(unsigned));
-    in.read((char *) &out_file_frozen_pts, sizeof(uint64_t));
-
-    // Support loading old static index (out_file_frozen_pts == 0) for backward compatibility.
-    // We just use _ep as is from the file.
-    LOG(INFO) << "Loading vamana index " << filename << " (file_frozen_pts=" << out_file_frozen_pts << ")...";
-
-    // Sanity check. In case the user gave us fewer points as max_points than
-    // the number
-    // of points in the dataset, resize the _final_graph to the larger size.
-    if (max_points() < expected_num_points) {
-      LOG(INFO) << "Number of points in data: " << expected_num_points
-                << " is more than max_points argument: " << _final_graph.size()
-                << " Setting max points to: " << expected_num_points;
-      resize(expected_num_points);
-    }
-
-    size_t bytes_read = 24;
-    size_t cc = 0;
-    unsigned nodes = 0;
-    while (bytes_read != expected_file_size) {
-      unsigned k;
-      in.read((char *) &k, sizeof(unsigned));
-      if (k == 0) {
-        LOG(ERROR) << "ERROR: Point found with no out-neighbors, point#" << nodes;
-      }
-      //      if (in.eof())
-      //        break;
-      cc += k;
-      ++nodes;
-      std::vector<unsigned> tmp(k);
-      tmp.reserve(k);
-      in.read((char *) tmp.data(), k * sizeof(unsigned));
-      _final_graph[nodes - 1].swap(tmp);
-      bytes_read += sizeof(uint32_t) * ((uint64_t) k + 1);
-      if (nodes % 10000000 == 0)
-        LOG(INFO) << "Loaded " << nodes / 1000000 << "M nodes...";
-    }
-
-    LOG(INFO) << "done. Index has " << nodes << " nodes and " << cc << " out-edges, _ep is set to " << _ep;
-    return nodes;
   }
 
   /**************************************************************
@@ -410,6 +172,7 @@ namespace pipeann {
       unsigned nk = l;
 
       if (best_L_nodes[k].flag) {
+        ++hops;
         io_timer.reset();
         best_L_nodes[k].flag = false;
         auto n = best_L_nodes[k].id;
@@ -625,58 +388,70 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   void Index<T, TagT>::build(const char *filename, const size_t num_points_to_load, IndexBuildParameters &params,
-                             const std::vector<TagT> &tags, bool normalize_cosine) {
-    if (!file_exists(filename)) {
-      LOG(ERROR) << "Data file " << filename << " does not exist!!! Exiting....";
-      crash();
+                             const std::vector<TagT> &tags, bool normalize_cosine, const std::string &train_query_path,
+                             uint32_t R_ood, uint32_t L_ood) {
+    if (filename == nullptr || !file_exists(filename)) {
+      LOG(ERROR) << "Data file " << filename << " does not exist. Exiting....";
+      return;
     }
 
     LOG(INFO) << "Building index with normalize_cosine: " << normalize_cosine;
 
     size_t file_num_points, file_dim;
-    if (filename == nullptr) {
-      LOG(INFO) << "Starting with an empty index.";
-      _nd = 0;
-    } else {
-      pipeann::load_bin<T>(filename, _data, file_num_points, file_dim);
+    pipeann::load_bin<T>(filename, _data, file_num_points, file_dim);
 
-      if (num_points_to_load > file_num_points) {
-        LOG(ERROR) << "ERROR: Driver requests loading " << num_points_to_load << " points but file has "
-                   << file_num_points << " points.";
-        crash();
-      }
-      if (file_dim != _dim) {
-        LOG(ERROR) << "ERROR: Driver requests loading " << _dim << " dimension," << "but file has " << file_dim
-                   << " dimension.";
-        crash();
-      }
+    if (num_points_to_load > file_num_points) {
+      LOG(ERROR) << "ERROR: Driver requests loading " << num_points_to_load << " points but file has "
+                 << file_num_points << " points.";
+      crash();
+    }
+    if (file_dim != _dim) {
+      LOG(ERROR) << "ERROR: Driver requests loading " << _dim << " dimension,"
+                 << "but file has " << file_dim << " dimension.";
+      crash();
+    }
 
-      _final_graph.resize(file_num_points);
+    _final_graph.resize(file_num_points);
 
-      if (normalize_cosine && _dist_metric == Metric::COSINE) {
-        for (size_t i = 0; i < file_num_points; i++) {
-          pipeann::normalize_data(_data.data() + i * _dim, _data.data() + i * _dim, _dim);
-        }
-      }
-
-      LOG(INFO) << "Loading only first " << num_points_to_load << " from file.. ";
-      _nd = num_points_to_load;
-
-      if (tags.size() != num_points_to_load) {
-        LOG(ERROR) << "ERROR: Driver requests loading " << num_points_to_load << " points from file,"
-                   << "but tags vector is of size " << tags.size() << ".";
-        crash();
-      }
-      for (size_t i = 0; i < tags.size(); ++i) {
-        _tag_to_location[tags[i]] = (unsigned) i;
-        _location_to_tag[(unsigned) i] = tags[i];
+    if (normalize_cosine && _dist_metric == Metric::COSINE) {
+      for (size_t i = 0; i < file_num_points; i++) {
+        pipeann::normalize_data(_data.data() + i * _dim, _data.data() + i * _dim, _dim);
       }
     }
 
+    LOG(INFO) << "Loading only first " << num_points_to_load << " from file.. ";
+    _nd = num_points_to_load;
+
+    if (tags.size() != num_points_to_load) {
+      LOG(ERROR) << "ERROR: Driver requests loading " << num_points_to_load << " points from file,"
+                 << "but tags vector is of size " << tags.size() << ".";
+      crash();
+    }
+    for (size_t i = 0; i < tags.size(); ++i) {
+      _tag_to_location[tags[i]] = (unsigned) i;
+      _location_to_tag[(unsigned) i] = tags[i];
+    }
+
+    R_ood = std::min(R_ood, params.R);
+    if (train_query_path.empty()) {
+      R_ood = 0;
+    }
+
+    this->R_base = params.R - R_ood;
+    this->R_ood = R_ood;
+
+    // Base build at reduced degree so refine gets R_ood slots.
+    IndexBuildParameters base_params = params;
+    base_params.R = R_base;
+
     if (params.use_pipnn) {
-      pipnn_link(params);
+      pipnn_link(base_params);
     } else {
-      link(params);
+      link(base_params);
+    }
+
+    if (R_ood > 0) {
+      ngfix_refine(train_query_path, L_ood);
     }
 
     size_t max_deg = 0, min_deg = 1 << 30, total = 0, cnt = 0;
@@ -692,7 +467,7 @@ namespace pipeann {
       LOG(INFO) << "Index built with degree: max:" << max_deg << " avg:" << (float) total / (float) (_nd)
                 << " min:" << min_deg << " count(deg<2):" << cnt;
     }
-    _width = std::max(_width, (unsigned) max_deg);
+    range = std::max(range, (uint16_t) max_deg);
 
     // Initialize empty slots for future insertions
     for (uint32_t i = _nd; i < max_points(); i++) {
@@ -702,7 +477,8 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   void Index<T, TagT>::build(const char *filename, const size_t num_points_to_load, IndexBuildParameters &params,
-                             const char *tag_filename, bool normalize_cosine) {
+                             const char *tag_filename, bool normalize_cosine, const std::string &train_query_path,
+                             uint32_t R_ood, uint32_t L_ood) {
     std::vector<TagT> tags{};
 
     if (tag_filename == nullptr) {
@@ -725,7 +501,7 @@ namespace pipeann {
       }
     }
 
-    build(filename, num_points_to_load, params, tags, normalize_cosine);
+    build(filename, num_points_to_load, params, tags, normalize_cosine, train_query_path, R_ood, L_ood);
   }
 
   template<typename T, typename TagT>
@@ -752,6 +528,10 @@ namespace pipeann {
     }
     auto retval = iterate_to_fixed_point(aligned_query, L, init_ids, expanded_nodes_info, expanded_nodes_ids,
                                          best_L_nodes, stats);
+    if (stats != nullptr) {
+      stats->n_hops = retval.first;
+      stats->n_cmps = retval.second;
+    }
 
     size_t pos = 0;
     for (auto it : best_L_nodes) {
@@ -1025,8 +805,49 @@ namespace pipeann {
   }
 
   template<typename T, typename TagT>
+  void Index<T, TagT>::save_tags(const std::string &tags_file) const {
+    std::remove(tags_file.c_str());
+    if (_location_to_tag.empty()) {
+      return;
+    }
+    std::vector<TagT> tag_data(_nd);
+    for (uint64_t i = 0; i < _nd; i++) {
+      auto it = _location_to_tag.find((unsigned) i);
+      if (it != _location_to_tag.end()) {
+        tag_data[i] = it->second;
+      }
+    }
+    pipeann::save_bin<TagT>(tags_file, tag_data.data(), _nd, 1);
+    LOG(INFO) << "Memory index tags saved to " << tags_file;
+  }
+
+  template<typename T, typename TagT>
+  void Index<T, TagT>::load_tags(const std::string &tags_file) {
+    _location_to_tag.clear();
+    _tag_to_location.clear();
+    if (file_exists(tags_file)) {
+      size_t tag_num = 0, tag_dim = 0;
+      std::vector<TagT> tag_v;
+      pipeann::load_bin<TagT>(tags_file, tag_v, tag_num, tag_dim);
+      for (size_t i = 0; i < tag_num; i++) {
+        _location_to_tag[(unsigned) i] = tag_v[i];
+        _tag_to_location[tag_v[i]] = (unsigned) i;
+      }
+    } else {
+      for (uint64_t i = 0; i < _nd; i++) {
+        _location_to_tag[(unsigned) i] = (TagT) i;
+        _tag_to_location[(TagT) i] = (unsigned) i;
+      }
+    }
+  }
+
+  template<typename T, typename TagT>
   int Index<T, TagT>::insert_point(const T *point, const IndexBuildParameters &params, const TagT tag) {
     std::shared_lock<std::shared_timed_mutex> lock(_update_lock);
+
+    // Dynamic in-memory inserts do not go through build(), so keep the
+    // persisted max out-degree in sync with the insertion configuration.
+    range = std::max<uint16_t>(range, static_cast<uint16_t>(params.R));
 
     // If tag already exists, mark old location for deletion
     {
@@ -1114,6 +935,248 @@ namespace pipeann {
     _tag_to_location.erase(tag);
 
     return 0;
+  }
+
+  // ---- NGFix refine ------------------------------------------------------
+  // Query-driven OOD edge augmentation. See SIGMOD'26 NGFix paper.
+  // Constants mirror ngfixlib/graph/hnsw_ngfix.h.
+  namespace {
+    static constexpr size_t NGFIX_MAX_NQ = 200;
+    static constexpr size_t NGFIX_MAX_S = 200;
+    static constexpr uint16_t NGFIX_EH_INF = std::numeric_limits<uint16_t>::max();
+    static constexpr float NGFIX_INF_RATIO = 0.5f;
+  }  // namespace
+
+  template<typename T, typename TagT>
+  void Index<T, TagT>::add_ngfix_neighbor(unsigned u, unsigned v, uint16_t eh) {
+    if (u == v)
+      return;
+    pipeann::LockGuard guard(_locks->wrlock(u));
+    auto &pool = _final_graph[u];
+    // dedupe against all existing (base + refine) edges
+    for (auto x : pool) {
+      if (x == v)
+        return;
+    }
+    uint16_t cnt = _ngfix_count[u];
+    if (cnt < R_ood) {
+      pool.push_back(v);
+      _ngfix_ehs[u][cnt] = eh;
+      _ngfix_count[u] = cnt + 1;
+      return;
+    }
+    // refine region is full → EH-based eviction
+    uint32_t inf_cnt = 0, min_idx = 0;
+    uint16_t min_eh = NGFIX_EH_INF;
+    for (uint32_t i = 0; i < R_ood; i++) {
+      uint16_t e = _ngfix_ehs[u][i];
+      if (e < min_eh) {
+        min_eh = e;
+        min_idx = i;
+      }
+      if (e == NGFIX_EH_INF)
+        inf_cnt++;
+    }
+    if (eh == NGFIX_EH_INF && inf_cnt >= (uint32_t) (NGFIX_INF_RATIO * R_ood))
+      return;
+    if (eh <= min_eh)
+      return;
+    _ngfix_ehs[u][min_idx] = eh;
+    pool[R_base + min_idx] = v;
+  }
+
+  // CalculateHardness: Floyd-Warshall over induced subgraph of top-S gt.
+  // H[i][j] = smallest h such that gt[i] reaches gt[j] via gt[0..h]; EH_INF if unreachable.
+  template<typename T, typename TagT>
+  void Index<T, TagT>::ngfix_calc_hardness(const unsigned *gt, size_t Nq, size_t S,
+                                           std::vector<std::vector<uint16_t>> &H) {
+    H.assign(Nq, std::vector<uint16_t>(Nq, NGFIX_EH_INF));
+    std::unordered_map<unsigned, uint16_t> p2rank;
+    p2rank.reserve(S);
+    for (size_t i = 0; i < S; i++)
+      p2rank[gt[i]] = (uint16_t) i;
+
+    std::vector<std::bitset<NGFIX_MAX_S>> f(S);
+    for (size_t h = 0; h < S; h++) {
+      f[h][h] = 1;
+      if (h < Nq)
+        H[h][h] = (uint16_t) h;
+    }
+
+    // Induced subgraph on gt[0..S): iterate each u = gt[i] once, take its current neighbors.
+    for (size_t i = 0; i < S; i++) {
+      unsigned u = gt[i];
+      std::vector<unsigned> nbrs;
+      {
+        pipeann::LockGuard guard(_locks->rdlock(u));
+        nbrs = _final_graph[u];
+      }
+      for (unsigned v : nbrs) {
+        auto it = p2rank.find(v);
+        if (it == p2rank.end())
+          continue;
+        size_t j = it->second;
+        f[i][j] = 1;
+        if (i < Nq && j < Nq)
+          H[i][j] = (uint16_t) std::max(i, j);
+      }
+    }
+
+    // Floyd-Warshall with bitset
+    for (size_t h = 0; h < S; h++) {
+      for (size_t i = 0; i < S; i++) {
+        if (!f[i][h])
+          continue;
+        auto last = f[i];
+        f[i] |= f[h];
+        last ^= f[i];
+        if (i < Nq && last.any()) {
+          for (size_t j = 0; j < Nq; j++) {
+            if (last[j])
+              H[i][j] = (uint16_t) std::max(std::max(i, j), h);
+          }
+        }
+      }
+    }
+  }
+
+  // getDefectsFixingEdges: sort unreachable (i,j) pairs by dist, greedily add minimum set.
+  template<typename T, typename TagT>
+  void Index<T, TagT>::ngfix_pass(const T *query, const unsigned *gt, size_t Nq, size_t Kh) {
+    if (Nq > NGFIX_MAX_NQ)
+      return;
+    std::vector<std::vector<uint16_t>> H;
+    size_t S = std::min(NGFIX_MAX_S, 2 * Nq);
+    ngfix_calc_hardness(gt, Nq, S, H);
+
+    std::vector<std::bitset<NGFIX_MAX_NQ>> f(Nq);
+    for (size_t i = 0; i < Nq; i++)
+      for (size_t j = 0; j < Nq; j++)
+        if (H[i][j] <= Kh)
+          f[i][j] = 1;
+
+    // Collect candidate edges (i,j) where f[i][j] == 0, sorted by distance.
+    struct Cand {
+      float d;
+      uint16_t i, j;
+    };
+    std::vector<Cand> vs;
+    vs.reserve(Nq * Nq);
+    for (size_t i = 0; i < Nq; i++) {
+      for (size_t j = 0; j < Nq; j++) {
+        if (f[i][j])
+          continue;
+        float d = _distance->compare(_data.data() + _dim * (size_t) gt[i], _data.data() + _dim * (size_t) gt[j], _dim);
+        vs.push_back({d, (uint16_t) i, (uint16_t) j});
+      }
+    }
+    std::sort(vs.begin(), vs.end(), [](const Cand &a, const Cand &b) { return a.d < b.d; });
+
+    std::unordered_map<unsigned, std::vector<std::pair<unsigned, uint16_t>>> new_edges;
+    for (const auto &c : vs) {
+      if (f[c.i][c.j])
+        continue;
+      unsigned u = gt[c.i];
+      unsigned v = gt[c.j];
+      new_edges[u].push_back({v, H[c.i][c.j]});
+      f[c.i][c.j] = 1;
+      for (size_t k = 0; k < Nq; k++) {
+        if (f[k][c.i])
+          f[k] |= f[c.j];
+      }
+    }
+
+    for (auto &kv : new_edges) {
+      for (auto &ve : kv.second)
+        add_ngfix_neighbor(kv.first, ve.first, ve.second);
+    }
+  }
+
+  // RFix: single round. If ANN can't reach gt[Nq-1], add heuristic-pruned closer points as refine edges.
+  template<typename T, typename TagT>
+  void Index<T, TagT>::rfix_pass(const T *query, const unsigned *gt, size_t Nq, uint32_t L_ood) {
+    std::vector<unsigned> ids(L_ood);
+    std::vector<float> dists(L_ood);
+    search(query, 1, Nq, ids.data(), dists.data());
+    float d2 = _distance->compare(_data.data() + _dim * (size_t) gt[Nq - 1], query, _dim);
+    if (dists[0] <= d2)
+      return;
+
+    unsigned ANN = ids[0];
+    search(query, L_ood, L_ood, ids.data(), dists.data());
+    std::vector<unsigned> res;
+    for (size_t i = 0; i < L_ood; i++) {
+      if (dists[i] < d2)
+        res.push_back(ids[i]);
+    }
+
+    std::vector<Neighbor> pool;
+    pool.reserve(res.size());
+    for (unsigned v : res) {
+      float d = _distance->compare(_data.data() + _dim * (size_t) ANN, _data.data() + _dim * (size_t) v, _dim);
+      pool.emplace_back(Neighbor(v, d, true));
+    }
+
+    IndexBuildParameters rfix_params;
+    rfix_params.R = 6;  // default in NGFix.
+    rfix_params.C = pool.size();
+    rfix_params.alpha = 1.0f;
+    rfix_params.saturate_graph = false;
+
+    std::vector<unsigned> picked;
+    pipeann::prune_neighbors(pool, picked, rfix_params, _dist_metric, [this](uint32_t a, uint32_t b) {
+      return _distance->compare(_data.data() + _dim * a, _data.data() + _dim * b, _dim);
+    });
+
+    // RFix edges use EH=MAX_S+1 (just above ordinary hardness range, below EH_INF).
+    const uint16_t rfix_eh = (uint16_t) (NGFIX_MAX_S + 1);
+    for (unsigned p : picked)
+      add_ngfix_neighbor(ANN, p, rfix_eh);
+  }
+
+  template<typename T, typename TagT>
+  void Index<T, TagT>::ngfix_refine(const std::string &train_query_path, uint32_t L_ood) {
+    // Too small L_ood won't find enough neighbors for refine.
+    L_ood = std::max<uint32_t>(L_ood, NGFIX_MAX_S);
+    
+    // Load training queries.
+    std::vector<T> train_data;
+    size_t train_n = 0, train_dim = 0;
+    pipeann::load_bin<T>(train_query_path, train_data, train_n, train_dim);
+    if (train_dim != _dim) {
+      LOG(ERROR) << "Train query dim " << train_dim << " != index dim " << _dim;
+      crash();
+    }
+    LOG(INFO) << "NGFix refine: " << train_n << " train queries, R_base=" << R_base << " R_ood=" << R_ood
+              << " L_ood=" << L_ood;
+
+    // Allocate sidecars.
+    _ngfix_count.assign(_nd, 0);
+    _ngfix_ehs.assign(_nd, std::vector<uint16_t>(R_ood, 0));
+
+    pipeann::Timer refine_timer;
+#pragma omp parallel for schedule(dynamic)
+    for (size_t i = 0; i < train_n; i++) {
+      const T *q = train_data.data() + i * _dim;
+      // AKNN ground truth (top-500 via beam L_ood, NGFix default)
+      std::vector<unsigned> ids(std::min<size_t>(500, L_ood));
+      search(q, ids.size(), L_ood, ids.data());
+      // Coarse + fine NGFix passes, then RFix.
+      // use this->R_base and this->R_ood.
+      ngfix_pass(q, ids.data(), /*Nq=*/100, /*Kh=*/100);
+      ngfix_pass(q, ids.data(), /*Nq=*/10, /*Kh=*/10);
+      rfix_pass(q, ids.data(), /*Nq=*/10, L_ood);
+
+      if (i % 100000 == 0) {
+        LOG(INFO) << "NGFix refine: processed " << i << "/" << train_n;
+      }
+    }
+    LOG(INFO) << "NGFix refine done in " << (refine_timer.elapsed() / 1e6) << "s";
+    // Sidecars no longer needed.
+    _ngfix_count.clear();
+    _ngfix_count.shrink_to_fit();
+    _ngfix_ehs.clear();
+    _ngfix_ehs.shrink_to_fit();
   }
 
   /*  Internals of the library */

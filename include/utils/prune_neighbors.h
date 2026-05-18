@@ -2,10 +2,13 @@
 #define PRUNE_NEIGHBORS_H_
 
 #include <algorithm>
+#include <cstdint>
 #include <limits>
+#include <random>
 #include <set>
 #include <vector>
 #include "utils.h"
+#include "utils/tsl/robin_set.h"
 
 namespace pipeann {
   // Use alpha-RNG triangle inequality to prune neighbors.
@@ -219,6 +222,49 @@ namespace pipeann {
     finish();
   }
 
+  // ============================================================================
+  // Sample 2-hop neighbors of `center`, shuffled, up to `nnbrs_dense` results.
+  // ============================================================================
+  // `get_nbrs(id)` returns `id`'s 1-hop neighbor list as a (uint32_t *, uint32_t) pair.
+  // The pointer only needs to stay valid until the next call to get_nbrs: the
+  // helper copies `center`'s 1-hop into an internal thread-local buffer before
+  // expanding further, so callers can reuse one scratch region across calls.
+  template<typename GetNbrs>
+  inline uint32_t sample_two_hop_nbrs(uint32_t center, uint32_t nnbrs_dense, uint32_t *buffer,
+                                      GetNbrs &&get_nbrs) {
+    if (nnbrs_dense == 0)
+      return 0;
+
+    // Thread-local RNG shared by the 2-hop sampler below.
+    thread_local std::mt19937 rng{std::random_device{}()};
+    thread_local tsl::robin_set<uint32_t> seen;
+    thread_local std::vector<uint32_t> cands;
+    seen.clear();
+    cands.clear();
+
+    auto [one_hop_start, one_hop_n] = get_nbrs(center);
+    seen.insert(center);
+    for (uint32_t i = 0; i < one_hop_n; i++) {
+      seen.insert(one_hop_start[i]);
+    }
+
+    for (uint32_t i = 0; i < one_hop_n; i++) {
+      auto [two_hop_start, two_hop_n] = get_nbrs(one_hop_start[i]);
+      for (uint32_t j = 0; j < two_hop_n; j++) {
+        uint32_t id = two_hop_start[j];
+        if (seen.insert(id).second) {
+          cands.push_back(id);
+        }
+      }
+    }
+
+    std::shuffle(cands.begin(), cands.end(), rng);
+    uint32_t n_take = std::min<uint32_t>(nnbrs_dense, cands.size());
+    for (uint32_t i = 0; i < n_take; i++) {
+      buffer[i] = cands[i];
+    }
+    return n_take;
+  }
 }  // namespace pipeann
 
 #endif  // PRUNE_NEIGHBORS_H_

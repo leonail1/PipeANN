@@ -23,12 +23,13 @@
 
 namespace pipeann {
   template<typename T, typename TagT>
-  void SSDIndex<T, TagT>::merge_deletes(const std::string &in_path_prefix, const std::string &out_path_prefix,
-                                        const std::vector<TagT> &deleted_nodes,
-                                        const tsl::robin_set<TagT> &deleted_nodes_set, uint32_t nthreads,
-                                        const uint32_t &n_sampled_nbrs) {
+  libcuckoo::cuckoohash_map<uint32_t, uint32_t> SSDIndex<T, TagT>::merge_deletes(
+      const std::string &in_path_prefix, const std::string &out_path_prefix, const std::vector<TagT> &deleted_nodes,
+      const tsl::robin_set<TagT> &deleted_nodes_set, uint32_t nthreads) {
+    const uint32_t n_sampled_nbrs = this->params.sampled_nbrs_for_delete;
     if (nthreads == 0) {
-      nthreads = this->max_nthreads;
+      LOG(INFO) << "nthreads for merge unspecified, using max threads: " << omp_get_max_threads();
+      nthreads = omp_get_max_threads();
     }
 
     void *ctx = reader->get_ctx();
@@ -55,9 +56,8 @@ namespace pipeann {
                                      : LOC_PER_MERGE * DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN);
     uint64_t buf_size_per_batch = sectors_per_batch * SECTOR_LEN;
 
-    char *rbuf = nullptr, *wbuf = nullptr;
-    alloc_aligned((void **) &rbuf, buf_size_per_batch, SECTOR_LEN);
-    alloc_aligned((void **) &wbuf, 2 * buf_size_per_batch, SECTOR_LEN);  // sliding window buffer.
+    char *rbuf = (char *) reader->alloc_io_buf(buf_size_per_batch, SECTOR_LEN);
+    char *wbuf = (char *) reader->alloc_io_buf(2 * buf_size_per_batch, SECTOR_LEN);  // sliding window buffer.
     LOG(INFO) << "Cur loc: " << cur_loc.load() << ", cur ID: " << cur_id
               << ", nnodes_per_sector: " << meta_.nnodes_per_sector
               << ", buf_size_per_batch: " << buf_size_per_batch / 1024 / 1024 << "MB";
@@ -77,7 +77,7 @@ namespace pipeann {
 
       std::vector<IORequest> read_reqs;
       read_reqs.push_back(IORequest(st_sector * SECTOR_LEN, n_sectors_to_read * SECTOR_LEN, rbuf, 0, 0));
-      reader->read(read_reqs, ctx, false);
+      reader->read(read_reqs, ctx);
 
 #pragma omp parallel for num_threads(populate_nthreads)
       for (uint64_t loc = loc_st; loc < loc_ed; ++loc) {
@@ -116,7 +116,8 @@ namespace pipeann {
       }
     }
     LOG(INFO) << "Finished populating neighborhoods, totally elapsed: " << delete_timer.elapsed() / 1e3
-              << "ms, new npoints: " << new_npoints.load() << " " << "id_map size: " << id_map.size();
+              << "ms, new npoints: " << new_npoints.load() << " "
+              << "id_map size: " << id_map.size();
     LOG(INFO) << "Deleted nodes size: " << deleted_nodes.size() << ", deleted_nhoods size: " << deleted_nhoods.size();
 
     // Step 2: prune neighbors, populate PQ and tags.
@@ -159,7 +160,7 @@ namespace pipeann {
 
       std::vector<IORequest> read_reqs;
       read_reqs.push_back(IORequest(st_sector * SECTOR_LEN, n_sectors_to_read * SECTOR_LEN, rbuf, 0, 0));
-      reader->read(read_reqs, ctx, false);  // read in fd
+      reader->read(read_reqs, ctx);  // read in fd
 
 #pragma omp parallel for num_threads(nthreads)
       for (uint64_t loc = loc_st; loc < loc_ed; ++loc) {
@@ -232,6 +233,10 @@ namespace pipeann {
         w_node.nnbrs = nhood.size();
         *(w_node.nbrs - 1) = w_node.nnbrs;
         memcpy(w_node.nbrs, nhood.data(), w_node.nnbrs * sizeof(uint32_t));
+        // Keep embedded attrs so exact filter verification still works after save+reload.
+        if (meta_.attr_size > 0) {
+          memcpy(w_node.attrs, node.attrs, meta_.attr_size);
+        }
         ++n_used_id;
         // copy tags.
         new_tags[new_id] = id2tag(id);
@@ -259,9 +264,9 @@ namespace pipeann {
     }
     close(fd);
     // free buf
-    aligned_free((void *) rbuf);
-    aligned_free((void *) wbuf);
-
+    reader->free_io_buf(rbuf);
+    reader->free_io_buf(wbuf);
+    
     // set metadata, PQ and tags.
     merge_lock.lock();  // unlock in reload().
     // metadata.
@@ -284,6 +289,8 @@ namespace pipeann {
 
     this->write_metadata_and_pq(in_path_prefix, out_path_prefix, &new_tags);
     LOG(INFO) << "Write metadata and PQ finished, totally elapsed " << delete_timer.elapsed() / 1e3 << "ms.";
+
+    return id_map;
   }
 
   template<typename T, typename TagT>
@@ -308,11 +315,10 @@ namespace pipeann {
   }
 
   template<typename T, typename TagT>
-  void SSDIndex<T, TagT>::reload(const char *index_prefix, uint32_t num_threads) {
+  void SSDIndex<T, TagT>::reload(const char *index_prefix) {
     std::string iprefix = std::string(index_prefix);
     std::string disk_index_file = iprefix + "_disk.index";
     this->disk_index_file = disk_index_file;
-    this->max_nthreads = num_threads;
 
     reader->close();
     reader->open(disk_index_file, true, false);

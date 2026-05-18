@@ -1,0 +1,31 @@
+{
+    "base": [
+        {
+            "key": 0,
+            "type": "label",
+            "file": "/mnt/nvme4/indices/laion/100M.label.0"
+        },
+        {
+            "key": 1,
+            "type": "range",
+            "file": "/mnt/nvme4/indices/laion/100M.label.1"
+        }
+    ],
+    "query": {
+        "type": "or",
+        "children": [
+            {
+                "key": 0,
+                "base_key": 0,
+                "type": "label",
+                "file": "/mnt/nvme/data/laion/metadata_query_cleaned_10k.spmat"
+            },
+            {
+                "key": 1,
+                "base_key": 1,
+                "type": "range",
+                "file": "/mnt/nvme/data/laion/metadata_width_query_10k.spmat"
+            }
+        ]
+    }
+}

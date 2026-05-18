@@ -59,7 +59,6 @@ namespace pipeann {
     }
 
     void wrlock(const K &key) {
-      auto st = std::chrono::high_resolution_clock::now();
       while (trywrlock(key) != 0) {
         thread_pause();
       }
@@ -242,7 +241,7 @@ namespace pipeann {
   // Why use this? Resize is very rare, but a single shared_mutex incurs cache ping-pong.
   struct ReaderOptSharedMutex {
     static constexpr int N = 128;
-    struct CachelineAlignedMutex {
+    struct alignas(128) CachelineAlignedMutex {
       std::shared_mutex mutex;
       char padding[128 - sizeof(std::shared_mutex)];
     } locks_[N];

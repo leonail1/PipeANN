@@ -20,7 +20,7 @@ namespace pipeann {
     }
 
     virtual ~AbstractNeighbor() = default;
-    
+
     // max size of context needed for a single query.
     virtual uint64_t query_ctx_size() {
       return 0;
@@ -47,10 +47,10 @@ namespace pipeann {
                                          uint64_t new_npoints, uint32_t nthreads) {
       return this;
     }
-    virtual void initialize_query(const T *query, QueryBuffer<T> *query_buf) {
+    virtual void initialize_query(const T *query, QueryBuffer *query_buf) {
     }
     // Compute dists using assymetric distance computation.
-    virtual void compute_dists(QueryBuffer<T> *query_buf, const uint32_t *ids, const uint64_t n_ids) {
+    virtual void compute_dists(QueryBuffer *query_buf, const uint32_t *ids, const uint64_t n_ids) {
     }
     // Compute dists using PQ all-to-all.
     virtual void compute_dists(const uint32_t query_id, const uint32_t *ids, const uint64_t n_ids, float *dists_out,

@@ -11,9 +11,8 @@
 #include <cblas.h>
 #include <omp.h>
 
-#include "pipnn.h"
+#include "utils/pipnn.h"
 #include "index.h"
-#include "utils/index_build_utils.h"
 #include "utils/timer.h"
 
 namespace pipeann {
@@ -126,8 +125,7 @@ namespace pipeann {
       node_ids.push_back(i);
     }
 
-    LOG(INFO) << "Using PiPNN builder";
-    LOG(INFO) << "Threads:" << omp_get_max_threads();
+    LOG(INFO) << "Using PiPNN builder, Threads: " << omp_get_max_threads();
     auto &pc = params.pipnn_config;
     HashPruner pruner(total_node, _dim, pc.num_hyperplanes, pc.climit, _data.data(), pc.seed);
 
@@ -423,8 +421,7 @@ namespace pipeann {
   }
 
   template<typename T, typename TagT>
-  std::vector<WeightedEdge> Index<T, TagT>::pipnn_build_leaf_nodes(
-      const std::vector<uint32_t> &nodes, int k) {
+  std::vector<WeightedEdge> Index<T, TagT>::pipnn_build_leaf_nodes(const std::vector<uint32_t> &nodes, int k) {
     std::vector<WeightedEdge> edges;
 
     size_t n = nodes.size();
@@ -463,89 +460,8 @@ namespace pipeann {
     return edges;
   }
 
-  // --- build_pipnn_index ---
-
-  template<typename T, typename TagT>
-  bool build_pipnn_index(const char *dataPath, const char *indexFilePath, uint32_t R, uint32_t l1_fanout,
-                         uint32_t l2_fanout, uint32_t M, uint32_t num_threads, uint32_t bytes_per_nbr,
-                         pipeann::Metric _compareMetric, const char *tag_file, AbstractNeighbor<T> *nbr_handler,
-                         AbstractLabel *label) {
-    std::string dataFilePath(dataPath);
-    std::string index_prefix_path(indexFilePath);
-    std::string mem_index_path = index_prefix_path + "_mem.index";
-    std::string disk_index_path = index_prefix_path + "_disk.index";
-
-    if (num_threads != 0) {
-      omp_set_num_threads(num_threads);
-    }
-
-    LOG(INFO) << "Starting PiPNN index build: R=" << R << " L1Fanout=" << l1_fanout << " L2Fanout=" << l2_fanout
-              << " Build RAM budget: " << M << "GB T: " << num_threads << " bytes per neighbor: " << bytes_per_nbr;
-
-    std::string normalized_file_path = dataFilePath;
-    if (_compareMetric == pipeann::Metric::COSINE) {
-      normalized_file_path = std::string(indexFilePath) + "_data.normalized.bin";
-      normalize_data_file<T>(dataFilePath, normalized_file_path);
-    }
-
-    auto s = std::chrono::high_resolution_clock::now();
-    nbr_handler->build(index_prefix_path, normalized_file_path, bytes_per_nbr);
-
-    size_t base_num, base_dim;
-    pipeann::get_bin_metadata(normalized_file_path, base_num, base_dim);
-
-    pipeann::IndexBuildParameters paras;
-    paras.set(R, 0, 750, 1.2, 0, true);
-    paras.pipnn_set(2048, 256, 0.01f, 1000, l1_fanout, l2_fanout, 2, 12, 128);
-
-    auto start = std::chrono::high_resolution_clock::now();
-    auto _pIndex = std::make_unique<pipeann::Index<T>>(_compareMetric, base_dim);
-    _pIndex->build(normalized_file_path.c_str(), base_num, paras, tag_file, false);
-    _pIndex->save(mem_index_path.c_str());
-    auto end = std::chrono::high_resolution_clock::now();
-    LOG(INFO) << "PiPNN index built in: " << std::chrono::duration<double>(end - start).count() << "s.";
-
-    if (tag_file == nullptr) {
-      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, "", disk_index_path, label);
-    } else {
-      std::string tag_filename = std::string(tag_file);
-      pipeann::create_disk_layout<T, TagT>(mem_index_path, normalized_file_path, tag_filename, disk_index_path, label);
-    }
-
-    LOG(INFO) << "Deleting memory index file: " << mem_index_path;
-    std::remove(mem_index_path.c_str());
-    std::remove((mem_index_path + ".data").c_str());
-    if (normalized_file_path != dataFilePath) {
-      LOG(INFO) << "Deleting normalized vector file: " << normalized_file_path;
-      std::remove(normalized_file_path.c_str());
-    }
-
-    auto e = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> diff = e - s;
-    LOG(INFO) << "Indexing time: " << diff.count();
-    return true;
-  }
-
   // Explicit template instantiations for Index pipnn methods
-  template void Index<float, uint32_t>::pipnn_link(IndexBuildParameters &);
-  template void Index<int8_t, uint32_t>::pipnn_link(IndexBuildParameters &);
-  template void Index<uint8_t, uint32_t>::pipnn_link(IndexBuildParameters &);
-
-  template std::vector<std::vector<uint32_t>> Index<float, uint32_t>::pipnn_partition(const std::vector<uint32_t> &, IndexBuildParameters &);
-  template std::vector<std::vector<uint32_t>> Index<int8_t, uint32_t>::pipnn_partition(const std::vector<uint32_t> &, IndexBuildParameters &);
-  template std::vector<std::vector<uint32_t>> Index<uint8_t, uint32_t>::pipnn_partition(const std::vector<uint32_t> &, IndexBuildParameters &);
-
-  template std::vector<WeightedEdge> Index<float, uint32_t>::pipnn_build_leaf_nodes(const std::vector<uint32_t> &, int);
-  template std::vector<WeightedEdge> Index<int8_t, uint32_t>::pipnn_build_leaf_nodes(const std::vector<uint32_t> &, int);
-  template std::vector<WeightedEdge> Index<uint8_t, uint32_t>::pipnn_build_leaf_nodes(const std::vector<uint32_t> &, int);
-
-  template bool build_pipnn_index<int8_t, uint32_t>(const char *, const char *, uint32_t, uint32_t, uint32_t, uint32_t,
-                                                     uint32_t, uint32_t, pipeann::Metric, const char *,
-                                                     AbstractNeighbor<int8_t> *, AbstractLabel *);
-  template bool build_pipnn_index<uint8_t, uint32_t>(const char *, const char *, uint32_t, uint32_t, uint32_t, uint32_t,
-                                                      uint32_t, uint32_t, pipeann::Metric, const char *,
-                                                      AbstractNeighbor<uint8_t> *, AbstractLabel *);
-  template bool build_pipnn_index<float, uint32_t>(const char *, const char *, uint32_t, uint32_t, uint32_t, uint32_t,
-                                                    uint32_t, uint32_t, pipeann::Metric, const char *,
-                                                    AbstractNeighbor<float> *, AbstractLabel *);
+  template class Index<float, uint32_t>;
+  template class Index<int8_t, uint32_t>;
+  template class Index<uint8_t, uint32_t>;
 }  // namespace pipeann

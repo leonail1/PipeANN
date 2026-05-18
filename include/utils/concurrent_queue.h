@@ -109,4 +109,85 @@ namespace pipeann {
       this->pop_cv.notify_all();
     }
   };
+
+  // Lock-free SPSC queue (single-producer, single-consumer)
+  template<typename T>
+  struct SPSCQueue {
+    alignas(128) std::atomic<int> sq_head{0};
+    alignas(128) std::atomic<int> sq_tail{0};
+
+    int cap;
+    T *sq_data;
+
+    SPSCQueue(int cap) : cap(cap) { sq_data = new T[cap];  }
+    ~SPSCQueue() { delete[] sq_data; }
+
+    bool push(const T &x) {
+      int t = sq_tail.load(std::memory_order_relaxed);
+      int next = (t + 1) % cap;
+      if (next == sq_head.load(std::memory_order_acquire)) return false;
+      sq_data[t] = x;
+      sq_tail.store(next, std::memory_order_release);
+      return true;
+    }
+
+    bool pop(T &x) {
+      int h = sq_head.load(std::memory_order_relaxed);
+      int t = sq_tail.load(std::memory_order_acquire);
+      if (h == t) return false;
+      x = sq_data[h];
+      sq_head.store((h + 1) % cap, std::memory_order_release);
+      return true;
+    }
+
+    template<typename Func>
+    void pop_all_fn(Func &&func, int producer_id) {
+      int h = sq_head.load(std::memory_order_relaxed);
+      int t = sq_tail.load(std::memory_order_acquire);
+      if (h == t) return;
+      while (h != t) {
+        func(sq_data[h], producer_id);
+        h = (h + 1) % cap;
+      }
+      sq_head.store(h, std::memory_order_release);
+    }
+  };
+
+  // MPSC queue: one SPSC per producer, consumer round-robins
+  template<typename T>
+  struct MPSCQueue {
+    int n_producers;
+    int cur = 0;
+    std::vector<SPSCQueue<T> *> qp;
+    
+    MPSCQueue(int n_producers, int cap_per_producer) : n_producers(n_producers) {
+      for (int i = 0; i < n_producers; i++) {
+        qp.push_back(new SPSCQueue<T>(cap_per_producer + 1));
+      }
+    }
+  
+    ~MPSCQueue() { for (auto *q : qp) delete q; }
+
+    bool push(const T &x, int producer_id) {
+      return qp[producer_id]->push(x);
+    }
+
+    bool pop(T &x) {
+      for (int i = 0; i < n_producers; i++) {
+        int t = cur;
+        cur = (cur + 1) % n_producers;
+        if (qp[t]->pop(x)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    template<typename Func>
+    void pop_all_fn(Func &&func) {
+      for (int i = 0; i < n_producers; i++) {
+        qp[i]->pop_all_fn(func, i);
+      }
+    }
+  };
 }  // namespace pipeann

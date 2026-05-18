@@ -272,7 +272,7 @@ namespace rabitqlib::quant::rabitq_impl {
       constexpr long kConstNum = 100;
 
       RowMajorArray<double> rand = random_gaussian_matrix<double>(kConstNum, dim);
-      rand = rand.rowwise().normalized().abs();
+      rand = (rand.colwise() / rand.square().rowwise().sum().sqrt()).abs();
 
       double sum = 0;
       for (long j = 0; j < kConstNum; ++j) {
@@ -315,7 +315,7 @@ namespace rabitqlib::quant::rabitq_impl {
       ConstRowMajorArrayMap<T> res_arr(residual, 1, dim);
 
       // get normalized abs residual for plus code
-      RowMajorArray<T> abs_res = res_arr.rowwise().normalized().abs();
+      RowMajorArray<T> abs_res = (res_arr / std::sqrt(res_arr.square().sum())).abs();
 
       // quantize data
       T ipnorm_inv = 1;

@@ -4,8 +4,7 @@
 #include <iomanip>
 
 #include "utils/log.h"
-#include "filter/selector.h"
-#include "filter/label.h"
+#include "filter/attribute.h"
 #include "nbr/nbr.h"
 #include "utils/timer.h"
 #include "utils.h"
@@ -29,16 +28,14 @@ int search_disk_index(int argc, char **argv) {
   uint64_t recall_at = std::atoi(argv[index++]);
   std::string dist_metric(argv[index++]);
   std::string nbr_type = argv[index++];
-  std::string selector_type = argv[index++];
-  std::string query_label_file = argv[index++];
-  uint64_t relaxed_monotonicity_lmax = std::atoi(argv[index++]);
+  std::string label_config_file(argv[index++]);
   uint32_t mem_L = std::atoi(argv[index++]);
 
   pipeann::Metric m = pipeann::get_metric(dist_metric);
 
   for (int ctr = index; ctr < argc; ctr++) {
     uint64_t curL = std::atoi(argv[ctr]);
-    if (relaxed_monotonicity_lmax >= recall_at || curL >= recall_at)
+    if (curL >= recall_at)
       Lvec.push_back(curL);
   }
 
@@ -62,24 +59,15 @@ int search_disk_index(int argc, char **argv) {
     calc_recall_flag = true;
   }
 
-  // Load query labels from spmat file
-  pipeann::SpmatLabel query_labels(query_label_file);
-  LOG(INFO) << "Loaded query labels: " << query_labels.labels_.size() << " queries";
-
-  // Get selector based on selector_type
-  pipeann::AbstractSelector *selector = pipeann::get_selector<T>(selector_type);
-  if (selector == nullptr) {
-    LOG(ERROR) << "Unknown selector type: " << selector_type;
-    return -1;
-  }
-  LOG(INFO) << "Using selector: " << selector_type;
-
   // Initialize index
   std::shared_ptr<AlignedFileReader> reader(new LinuxAlignedFileReader());
   pipeann::AbstractNeighbor<T> *nbr_handler = pipeann::get_nbr_handler<T>(m, nbr_type);
-  std::unique_ptr<pipeann::SSDIndex<T>> _pFlashIndex(new pipeann::SSDIndex<T>(m, reader, nbr_handler, true));
+  pipeann::IndexBuildParameters idx_params;
+  idx_params.max_nthreads = num_threads; // limit the number of allocated buffers.
+  std::unique_ptr<pipeann::SSDIndex<T>> _pFlashIndex(
+      new pipeann::SSDIndex<T>(m, reader, nbr_handler, true, &idx_params));
 
-  if (_pFlashIndex->load(index_prefix_path.c_str(), num_threads, false) != 0) {
+  if (_pFlashIndex->load(index_prefix_path.c_str(), false) != 0) {
     return -1;
   }
 
@@ -89,15 +77,10 @@ int search_disk_index(int argc, char **argv) {
     _pFlashIndex->load_mem_index(mem_index_path);
   }
 
-  omp_set_num_threads(num_threads);
+  auto base_stores = pipeann::load_base_attr_from_config(label_config_file, _pFlashIndex->meta_.npoints);
+  auto ret = pipeann::load_selector_from_config(label_config_file, base_stores);
 
-  // Prepare filter data buffers (one per query)
-  size_t max_filter_size = query_labels.label_size();
-  std::vector<std::vector<char>> filter_buffers(query_num);
-  for (size_t i = 0; i < query_num; i++) {
-    filter_buffers[i].resize(max_filter_size, 0);
-    query_labels.write(i, filter_buffers[i].data());
-  }
+  omp_set_num_threads(num_threads);
 
   std::vector<std::vector<uint32_t>> query_result_tags(Lvec.size());
   std::vector<std::vector<float>> query_result_dists(Lvec.size());
@@ -110,25 +93,12 @@ int search_disk_index(int argc, char **argv) {
     query_result_dists[test_id].resize(recall_at * query_num);
 
     auto s = std::chrono::high_resolution_clock::now();
-
-    if (relaxed_monotonicity_lmax == 0) {
 #pragma omp parallel for schedule(dynamic, 1)
-      for (int64_t i = 0; i < (int64_t) query_num; i++) {
-        _pFlashIndex->pipe_search(query + (i * query_dim), (uint64_t) recall_at, mem_L, (uint64_t) L,
-                                  query_result_tags[test_id].data() + (i * recall_at),
-                                  query_result_dists[test_id].data() + (i * recall_at), (uint64_t) beamwidth, stats + i,
-                                  selector, filter_buffers[i].data(), 0);
-      }
-    } else {
-      // Here, we use relaxed_monotonicity_lmax as the maximum candidate pool length.
-      // When there are L search results after converge, the search terminates.
-#pragma omp parallel for schedule(dynamic, 1)
-      for (int64_t i = 0; i < (int64_t) query_num; i++) {
-        _pFlashIndex->pipe_search(query + (i * query_dim), (uint64_t) recall_at, mem_L, relaxed_monotonicity_lmax,
-                                  query_result_tags[test_id].data() + (i * recall_at),
-                                  query_result_dists[test_id].data() + (i * recall_at), (uint64_t) beamwidth, stats + i,
-                                  selector, filter_buffers[i].data(), (uint64_t) L);
-      }
+    for (int64_t i = 0; i < (int64_t) query_num; i++) {
+      _pFlashIndex->spec_filter_search(query + (i * query_dim), recall_at, L, ret.first, ret.second[i],
+                                       query_result_tags[test_id].data() + (i * recall_at),
+                                       query_result_dists[test_id].data() + (i * recall_at), (uint64_t) beamwidth,
+                                       stats + i);
     }
 
     auto e = std::chrono::high_resolution_clock::now();
@@ -137,11 +107,43 @@ int search_disk_index(int argc, char **argv) {
 
     float mean_latency =
         pipeann::get_mean_stats(stats, query_num, [](const pipeann::QueryStats &s) { return s.total_us; });
-    float latency_999 = pipeann::get_percentile_stats(stats, query_num, 0.999f,
-                                                      [](const pipeann::QueryStats &s) { return s.total_us; });
+    float latency_99 =
+        pipeann::get_percentile_stats(stats, query_num, 0.99f, [](const pipeann::QueryStats &s) { return s.total_us; });
     float mean_hops = pipeann::get_mean_stats(stats, query_num, [](const pipeann::QueryStats &s) { return s.n_hops; });
     float mean_ios = pipeann::get_mean_stats(stats, query_num, [](const pipeann::QueryStats &s) { return s.n_ios; });
 
+    float filter_ratio[pipeann::N_FILTER_TYPES] = {0};
+    for (int i = 0; i < pipeann::N_FILTER_TYPES; i++) {
+      filter_ratio[i] =
+          pipeann::get_mean_stats(stats, query_num, [i](const pipeann::QueryStats &s) { return s.n_filter[i]; });
+    }
+
+    struct FilterStats {
+      double n_est_filter_reads[pipeann::N_FILTER_TYPES] = {0};
+      double n_est_filter_cmps[pipeann::N_FILTER_TYPES] = {0};
+      double n_filter_reads[pipeann::N_FILTER_TYPES] = {0};
+      double n_filter_accessed_vectors[pipeann::N_FILTER_TYPES] = {0};
+      double n_filter_false_positives[pipeann::N_FILTER_TYPES] = {0};
+    };
+    FilterStats filter_stats;
+
+    for (int i = 0; i < pipeann::N_FILTER_TYPES; i++) {
+      filter_stats.n_est_filter_reads[i] =
+          pipeann::get_mean_stats(stats, query_num * filter_ratio[i], query_num,
+                                  [i](const pipeann::QueryStats &s) { return s.n_est_filter_reads[i]; });
+      filter_stats.n_filter_reads[i] =
+          pipeann::get_mean_stats(stats, query_num * filter_ratio[i], query_num,
+                                  [i](const pipeann::QueryStats &s) { return s.n_filter_reads[i]; });
+      filter_stats.n_filter_accessed_vectors[i] =
+          pipeann::get_mean_stats(stats, query_num * filter_ratio[i], query_num,
+                                  [i](const pipeann::QueryStats &s) { return s.n_filter_accessed_vectors[i]; });
+      filter_stats.n_filter_false_positives[i] =
+          pipeann::get_mean_stats(stats, query_num * filter_ratio[i], query_num,
+                                  [i](const pipeann::QueryStats &s) { return s.n_filter_false_positives[i]; });
+      filter_stats.n_est_filter_cmps[i] =
+          pipeann::get_mean_stats(stats, query_num * filter_ratio[i], query_num,
+                                  [i](const pipeann::QueryStats &s) { return s.n_est_filter_cmps[i]; });
+    }
     delete[] stats;
 
     if (output) {
@@ -152,11 +154,27 @@ int search_disk_index(int argc, char **argv) {
                                       query_result_tags[test_id].data(), (uint32_t) recall_at, (uint32_t) recall_at);
       }
 
-      std::cout << std::setw(6) << L << std::setw(12) << beamwidth << std::setw(12) << qps << std::setw(12)
-                << mean_latency << std::setw(12) << latency_999 << std::setw(12) << mean_hops << std::setw(12)
-                << mean_ios;
+      std::cout << std::setw(4) << L << std::setw(4) << beamwidth << std::setw(10) << qps << std::setw(8)
+                << mean_latency << std::setw(10) << query_num * filter_ratio[pipeann::PRE_FILTER] << std::setw(8)
+                << filter_stats.n_est_filter_reads[pipeann::PRE_FILTER] << std::setw(8)
+                << filter_stats.n_filter_reads[pipeann::PRE_FILTER] << std::setw(8)
+                << filter_stats.n_filter_accessed_vectors[pipeann::PRE_FILTER] << std::setw(6)
+                << filter_stats.n_filter_false_positives[pipeann::PRE_FILTER] << std::setw(8)
+                << filter_stats.n_est_filter_cmps[pipeann::PRE_FILTER] << std::setw(10)
+                << query_num * filter_ratio[pipeann::IN_FILTER] << std::setw(8)
+                << filter_stats.n_est_filter_reads[pipeann::IN_FILTER] << std::setw(8)
+                << filter_stats.n_filter_reads[pipeann::IN_FILTER] << std::setw(8)
+                << filter_stats.n_filter_accessed_vectors[pipeann::IN_FILTER] << std::setw(6)
+                << filter_stats.n_filter_false_positives[pipeann::IN_FILTER] << std::setw(8)
+                << filter_stats.n_est_filter_cmps[pipeann::IN_FILTER] << std::setw(10)
+                << query_num * filter_ratio[pipeann::POST_FILTER] << std::setw(8)
+                << filter_stats.n_est_filter_reads[pipeann::POST_FILTER] << std::setw(8)
+                << filter_stats.n_filter_reads[pipeann::POST_FILTER] << std::setw(8)
+                << filter_stats.n_filter_accessed_vectors[pipeann::POST_FILTER] << std::setw(6)
+                << filter_stats.n_filter_false_positives[pipeann::POST_FILTER] << std::setw(8)
+                << filter_stats.n_est_filter_cmps[pipeann::POST_FILTER] << std::setw(8) << mean_ios;
       if (calc_recall_flag) {
-        std::cout << std::setw(12) << recall;
+        std::cout << std::setw(10) << recall;
       }
       std::cout << std::endl;
     }
@@ -164,14 +182,18 @@ int search_disk_index(int argc, char **argv) {
 
   // Print header
   std::cout.setf(std::ios_base::fixed, std::ios_base::floatfield);
-  std::cout.precision(2);
+  std::cout.precision(1);
 
   std::string recall_string = "Recall@" + std::to_string(recall_at);
-  std::cout << std::setw(6) << "L" << std::setw(12) << "I/O Width" << std::setw(12) << "QPS" << std::setw(12)
-            << "AvgLat(us)" << std::setw(12) << "P99 Lat" << std::setw(12) << "Mean Hops" << std::setw(12)
-            << "Mean IOs";
+  std::cout << std::setw(4) << "L" << std::setw(4) << "BW" << std::setw(10) << "QPS" << std::setw(8)
+            << "Avg(us)" << std::setw(10) << "#Pre" << std::setw(8) << "EstIO" << std::setw(8) << "IO"
+            << std::setw(8) << "#Vec" << std::setw(6) << "FP" << std::setw(8) << "EstCmp" << std::setw(10)
+            << "#In" << std::setw(8) << "EstIO" << std::setw(8) << "IO" << std::setw(8) << "#Vec"
+            << std::setw(6) << "#FP" << std::setw(8) << "EstCmp" << std::setw(10) << "#Post" << std::setw(8)
+            << "EstIO" << std::setw(8) << "IO" << std::setw(8) << "#Vec" << std::setw(6) << "#FP" << std::setw(8)
+            << "EstCmp" << std::setw(8) << "AvgIO";
   if (calc_recall_flag) {
-    std::cout << std::setw(12) << recall_string;
+    std::cout << std::setw(10) << recall_string;
   }
   std::cout << std::endl;
   std::cout << std::string(90, '=') << std::endl;
@@ -180,12 +202,15 @@ int search_disk_index(int argc, char **argv) {
     run_tests(test_id, true);
   }
 
-  delete selector;
+  delete ret.first;
+  for (auto &[key, store] : base_stores) {
+    delete store;
+  }
   return 0;
 }
 
 int main(int argc, char **argv) {
-  if (argc < 14) {
+  if (argc < 12) {
     std::cout << "Usage: " << argv[0] << " <index_type (float/int8/uint8)>"
               << " <index_prefix_path>"
               << " <num_threads>"
@@ -195,9 +220,7 @@ int main(int argc, char **argv) {
               << " <K>"
               << " <similarity (cosine/l2/mips)>"
               << " <nbr_type (pq/rabitq)>"
-              << " <selector_type (range/intersect/subset)>"
-              << " <query_label.spmat>"
-              << " <relaxed_monotonicity_lmax (0 means disabled)>"
+              << " <label_config_file.json>"
               << " <mem_L (0 means no mem index)>"
               << " <L1> [L2] ..." << std::endl;
     return -1;

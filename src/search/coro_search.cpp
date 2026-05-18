@@ -35,7 +35,7 @@ namespace pipeann {
       T data_buf[ROUND_UP(kMaxVectorDim, 256)];
       uint64_t sector_idx;
 
-      QueryBuffer<T> query_buf;
+      QueryBuffer query_buf;
       // search state.
       std::vector<Neighbor> full_retset;
       std::vector<Neighbor> retset;
@@ -104,12 +104,12 @@ namespace pipeann {
           for (uint64_t i = 0; i < frontier.size(); i++) {
             uint32_t loc = frontier[i];
             uint64_t offset = parent->loc_sector_no(loc) * SECTOR_LEN;
-            auto sector_buf = sectors + sector_idx * parent->size_per_io;
+            auto sector_buf = sectors + sector_idx * parent->io_size;
             fnhood_t fnhood = std::make_tuple(loc, loc, sector_buf);
             sector_idx++;
             frontier_nhoods.push_back(fnhood);
 
-            frontier_read_reqs.emplace_back(IORequest(offset, parent->size_per_io, sector_buf, 0, 0));
+            frontier_read_reqs.emplace_back(IORequest(offset, parent->io_size, sector_buf, 0, 0));
           }
           parent->reader->send_io(frontier_read_reqs, ctx, false);
         }
@@ -203,7 +203,7 @@ namespace pipeann {
     }
 
     // do not use the thread data's buf.
-    QueryBuffer<T> *thread_data = pop_query_buf(queries[0]);
+    QueryBuffer *thread_data = pop_query_buf(queries[0]);
     void *ctx = reader->get_ctx();
     // lambda to batch compute query<-> node distances in PQ space
 
