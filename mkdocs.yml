@@ -1,5 +1,6 @@
 site_name: PipeANN
 site_description: Low-latency, billion-scale, updatable graph-based vector store on SSD
+site_url: https://thustorage.github.io/PipeANN/
 repo_url: https://github.com/thustorage/PipeANN
 repo_name: thustorage/PipeANN
 edit_uri: edit/main/docs/
