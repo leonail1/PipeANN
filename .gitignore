@@ -21,6 +21,8 @@ experiments/**/*.log
 experiments/**/*.meta
 experiments/**/*.spmat
 experiments/**/*.tags
+experiments/**/tmp/*tau_calibration*.json
+experiments/**/tmp/*tau_calibration*.jsonl
 
 # Bulky generated scan/detail JSONL files; keep compact summaries/results instead.
 experiments/**/single_label_label_stats.jsonl

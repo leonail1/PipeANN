@@ -19,7 +19,7 @@
 - PASS: The sweep covers both `intersect` and `range`, all 10 selectivity buckets, and foreground query threads 1-16.
 - PASS: `search_disk_index_hybrid` emits `avg`, `p90`, `p95`, and `p99` latency fields.
 - PASS: The runner writes `manifest.json`, `queue_state.json`, per-job logs, per-job JSON outputs, `table.csv`, and summary plots.
-- WATCH: The source index prefix is `/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_query_thread_budget/tmp/direct_1m`. It is a completed r116/PQ32 build from the interrupted exp6 run and is referenced explicitly in the manifest.
+- PASS: The source index prefix is `/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m` under this experiment directory. Large generated index/truth files are intentionally ignored by git, and their local provenance is recorded in `input_hashes.json`.
 - WATCH: The 10ms acceptance in the user's latest instruction is average latency. Percentiles are plotted and reported, but p99 is expected to be stricter and may exceed 10ms.
 - WATCH: Original ARIS GPU queue manager is not used because node6 has no `nvidia-smi` and this is a CPU/SSD benchmark.
 
@@ -27,22 +27,24 @@
 
 - Average latency budget: `PASS`; failed rows above 10ms = `0`.
 - p90 latency budget: `WARN`; failed rows above 10ms = `19`.
-- p95 latency budget: `WARN`; failed rows above 10ms = `23`.
-- p99 latency budget: `WARN`; failed rows above 10ms = `86`.
-- Minimum recall@10: `98.8400`.
+- p95 latency budget: `WARN`; failed rows above 10ms = `22`.
+- p99 latency budget: `WARN`; failed rows above 10ms = `80`.
+- Minimum recall@10: `98.9500`.
 - Recall@10 rows below 98%: `0`.
-- Max avg latency: `9.064 ms`.
-- Max p90 latency: `10.584 ms`.
-- Max p95 latency: `10.786 ms`.
-- Max p99 latency: `38.309 ms`.
+- Max avg latency: `8.898 ms`.
+- Max p90 latency: `10.552 ms`.
+- Max p95 latency: `10.753 ms`.
+- Max p99 latency: `29.922 ms`.
 
 ## Artifacts
 
 - Manifest: `manifest.json`
+- Input hashes: `input_hashes.json`
 - Queue state: `queue_state.json`
+- Canonical measure ledger: `measure_driver.jsonl`
 - Full table: `table.csv`
 - Thread summary: `thread_summary.csv`
+- Per-job raw measure outputs: `raw_measure/*.jsonl` (self-describing rows with `aris_job_id`)
 - L overrides: `l_overrides.json`
-- U75 recalibration log: `recalibration_u75.jsonl`
 - Worst-case plot: `latency_percentiles_worstcase_highres.png`
 - Selector plot: `latency_percentiles_by_selector_highres.png`

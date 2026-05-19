@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import shutil
@@ -84,6 +85,13 @@ def append_jsonl(path: Path, row: dict[str, Any]) -> None:
         writer.write(json.dumps(row, sort_keys=True) + "\n")
 
 
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as writer:
+        for row in rows:
+            writer.write(json.dumps(row, sort_keys=True) + "\n")
+
+
 def run_command(command: list[str], cwd: Path, log_path: Path, env: dict[str, str] | None = None) -> float:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     start = time.time()
@@ -111,6 +119,73 @@ def read_last_jsonl(path: Path, before_count: int) -> dict[str, Any]:
     return rows[-1]
 
 
+def sha256_file(path: Path, chunk_size: int = 1024 * 1024 * 8) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as reader:
+        while True:
+            chunk = reader.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def file_record(path: Path, role: str) -> dict[str, Any]:
+    stat = path.stat()
+    return {
+        "role": role,
+        "path": str(path),
+        "size_bytes": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+        "sha256": sha256_file(path),
+    }
+
+
+def write_input_hashes(repo: Path, args: argparse.Namespace, index_prefix: Path, jobs: list[dict[str, Any]]) -> None:
+    records: list[dict[str, Any]] = []
+    missing: list[dict[str, str]] = []
+    seen: set[Path] = set()
+
+    def add(role: str, path: Path) -> None:
+        resolved = path.resolve()
+        if resolved in seen:
+            return
+        seen.add(resolved)
+        if resolved.exists() and resolved.is_file():
+            records.append(file_record(resolved, role))
+        else:
+            missing.append({"role": role, "path": str(resolved)})
+
+    for source_path in [
+        repo / "experiments/r116_suite/data/sift_base_1m.bin",
+        repo / "experiments/r116_suite/data/sift_query_1000.bin",
+        repo / "experiments/r116_suite/labels/base_1m.spmat",
+        repo / "experiments/r116_suite/exp4_intersect_range_selectivity/table.csv",
+        args.out_dir / "l_overrides.json",
+    ]:
+        add("source", source_path)
+
+    if index_prefix.parent.exists():
+        for index_file in sorted(index_prefix.parent.glob(index_prefix.name + "*")):
+            if index_file.is_file():
+                add("index", index_file)
+    else:
+        missing.append({"role": "index_prefix_dir", "path": str(index_prefix.parent.resolve())})
+
+    for job in jobs:
+        add("truth", Path(job["truth"]))
+        add("query_label", Path(job["query_label_file"]))
+
+    payload = {
+        "created_at": now(),
+        "hash_algorithm": "sha256",
+        "index_prefix": str(index_prefix),
+        "files": records,
+        "missing": missing,
+    }
+    (args.out_dir / "input_hashes.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def file_prefix_exists(prefix: Path) -> bool:
     return Path(str(prefix) + "_disk.index").exists()
 
@@ -118,6 +193,10 @@ def file_prefix_exists(prefix: Path) -> bool:
 def build_index_if_needed(repo: Path, prefix: Path, args: argparse.Namespace) -> None:
     if file_prefix_exists(prefix):
         return
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    for stale_file in sorted(prefix.parent.glob(prefix.name + "*")):
+        if stale_file.is_file():
+            stale_file.unlink()
     command = [
         str(repo / "build/tests/build_disk_index"),
         "float",
@@ -224,6 +303,7 @@ def build_jobs(repo: Path, args: argparse.Namespace, index_prefix: Path) -> list
                 job_id = f"{selector}_{bucket}_t{threads:02d}"
                 truth = repo / "experiments/r116_suite/exp4_intersect_range_selectivity/truth" / f"gt_1m_{selector}_{bucket}.bin"
                 query_label = query_label_path(repo, selector, bucket)
+                raw_measure_output = args.out_dir / "raw_measure" / f"{job_id}.jsonl"
                 command = [
                     str(repo / "build/tests/search_disk_index_hybrid"),
                     "float",
@@ -242,7 +322,7 @@ def build_jobs(repo: Path, args: argparse.Namespace, index_prefix: Path) -> list
                     "0",
                     str(setting["chosen_L"]),
                     "--jsonl-output",
-                    str(args.out_dir / "measure_driver.jsonl"),
+                    str(raw_measure_output),
                 ]
                 jobs.append({
                     "id": job_id,
@@ -254,6 +334,7 @@ def build_jobs(repo: Path, args: argparse.Namespace, index_prefix: Path) -> list
                     "selected_route": setting["selected_route"],
                     "chosen_L": setting["chosen_L"],
                     "expected_output": str(args.out_dir / "jobs" / f"{job_id}.json"),
+                    "raw_measure_output": str(raw_measure_output),
                     "truth": str(truth),
                     "query_label_file": str(query_label),
                     "cmd": command,
@@ -264,7 +345,7 @@ def build_jobs(repo: Path, args: argparse.Namespace, index_prefix: Path) -> list
 
 def write_manifest(repo: Path, args: argparse.Namespace, index_prefix: Path, jobs: list[dict[str, Any]]) -> dict[str, Any]:
     manifest = {
-        "project": "pipeann_r116_exp6_aris_cpu",
+        "project": "pipeann_r116_exp6_aris_cpu_clean",
         "created_at": now(),
         "aris_repo": args.aris_repo,
         "aris_commit": args.aris_commit,
@@ -277,6 +358,10 @@ def write_manifest(repo: Path, args: argparse.Namespace, index_prefix: Path, job
         "ssh": "node6",
         "resource": "cpu",
         "max_parallel": 1,
+        "manifest_path": str(args.out_dir / "manifest.json"),
+        "input_hashes_path": str(args.out_dir / "input_hashes.json"),
+        "result_ledger_path": str(args.out_dir / "results.jsonl"),
+        "measure_ledger_path": str(args.out_dir / "measure_driver.jsonl"),
         "latency_budget_ms": args.latency_budget_ms,
         "query_count": 1000,
         "thread_sweep": args.thread_sweep,
@@ -311,7 +396,7 @@ def initial_state(manifest: dict[str, Any]) -> dict[str, Any]:
         "meta": {
             "project": manifest["project"],
             "started": now(),
-            "manifest_path": str(Path(manifest["cwd"]) / "experiments/r116_suite/exp6_aris_cpu/manifest.json"),
+            "manifest_path": manifest["manifest_path"],
         },
         "phases": [{"name": "sweep", "depends_on": [], "status": "pending"}],
         "jobs": jobs,
@@ -339,6 +424,31 @@ def completed_output(job: dict[str, Any]) -> dict[str, Any] | None:
     return json.loads(output.read_text(encoding="utf-8"))
 
 
+def clear_run_outputs(args: argparse.Namespace) -> None:
+    for dirname in ["jobs", "raw_measure", "logs/jobs", "logs/truth"]:
+        path = args.out_dir / dirname
+        if path.exists():
+            shutil.rmtree(path)
+    for filename in [
+        "results.jsonl",
+        "measure_driver.jsonl",
+        "queue_state.json",
+        "table.csv",
+        "thread_summary.csv",
+        "summary.json",
+        "manifest.json",
+        "input_hashes.json",
+        "latency_percentiles_worstcase_highres.png",
+        "latency_percentiles_worstcase_highres.pdf",
+        "latency_percentiles_by_selector_highres.png",
+        "latency_percentiles_by_selector_highres.pdf",
+        "ARIS_EXPERIMENT_REVIEW.md",
+    ]:
+        path = args.out_dir / filename
+        if path.exists():
+            path.unlink()
+
+
 def run_jobs(repo: Path, args: argparse.Namespace, manifest: dict[str, Any], state: dict[str, Any]) -> None:
     jobs_by_id = {job["id"]: job for phase in manifest["phases"] for job in phase["jobs"]}
     state_by_id = {job["id"]: job for job in state["jobs"]}
@@ -354,15 +464,18 @@ def run_jobs(repo: Path, args: argparse.Namespace, manifest: dict[str, Any], sta
         selector = job["selector_type"]
         bucket = job["bucket"]
         compute_truth_if_needed(repo, selector, bucket, args)
+        raw_measure_path = Path(job["raw_measure_output"])
+        raw_measure_path.parent.mkdir(parents=True, exist_ok=True)
+        if raw_measure_path.exists():
+            raw_measure_path.unlink()
 
         state_job.update({"status": "running", "attempts": int(state_job.get("attempts") or 0) + 1, "started": now(), "error": None})
         state["phases"][0]["status"] = "running"
         save_state(args, state)
-        before_count = len(read_jsonl(args.out_dir / "measure_driver.jsonl"))
         started = now()
         try:
             elapsed = run_command(job["cmd"], repo, args.out_dir / "logs/jobs" / f"{job_id}.log")
-            measured = read_last_jsonl(args.out_dir / "measure_driver.jsonl", before_count)
+            measured = read_last_jsonl(raw_measure_path, 0)
             if "recall" in measured and "recall@10" not in measured:
                 measured["recall@10"] = measured["recall"]
             measured.update({
@@ -389,7 +502,9 @@ def run_jobs(repo: Path, args: argparse.Namespace, manifest: dict[str, Any], sta
             output_path = Path(job["expected_output"])
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            write_jsonl(raw_measure_path, [measured])
             append_jsonl(args.out_dir / "results.jsonl", measured)
+            append_jsonl(args.out_dir / "measure_driver.jsonl", measured)
             state_job.update({"status": "completed", "completed": measured["completed_at"]})
             save_state(args, state)
         except Exception as exc:
@@ -568,7 +683,7 @@ def write_review(args: argparse.Namespace, manifest: dict[str, Any], summary: di
 - PASS: The sweep covers both `intersect` and `range`, all 10 selectivity buckets, and foreground query threads 1-16.
 - PASS: `search_disk_index_hybrid` emits `avg`, `p90`, `p95`, and `p99` latency fields.
 - PASS: The runner writes `manifest.json`, `queue_state.json`, per-job logs, per-job JSON outputs, `table.csv`, and summary plots.
-- WATCH: The source index prefix is `{manifest.get('index_prefix')}`. It is a completed r116/PQ32 build from the interrupted exp6 run and is referenced explicitly in the manifest.
+- PASS: The source index prefix is `{manifest.get('index_prefix')}` under this experiment directory. Large generated index/truth files are intentionally ignored by git, and their local provenance is recorded in `input_hashes.json`.
 - WATCH: The 10ms acceptance in the user's latest instruction is average latency. Percentiles are plotted and reported, but p99 is expected to be stricter and may exceed 10ms.
 - WATCH: Original ARIS GPU queue manager is not used because node6 has no `nvidia-smi` and this is a CPU/SSD benchmark.
 
@@ -588,11 +703,13 @@ def write_review(args: argparse.Namespace, manifest: dict[str, Any], summary: di
 ## Artifacts
 
 - Manifest: `manifest.json`
+- Input hashes: `input_hashes.json`
 - Queue state: `queue_state.json`
+- Canonical measure ledger: `measure_driver.jsonl`
 - Full table: `table.csv`
 - Thread summary: `thread_summary.csv`
+- Per-job raw measure outputs: `raw_measure/*.jsonl` (self-describing rows with `aris_job_id`)
 - L overrides: `l_overrides.json`
-- U75 recalibration log: `recalibration_u75.jsonl`
 - Worst-case plot: `latency_percentiles_worstcase_highres.png`
 - Selector plot: `latency_percentiles_by_selector_highres.png`
 """
@@ -602,8 +719,8 @@ def write_review(args: argparse.Namespace, manifest: dict[str, Any], summary: di
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", type=Path, default=Path("/mnt/bak3/lzg/PipeANN-github"))
-    parser.add_argument("--out-dir", type=Path, default=Path("experiments/r116_suite/exp6_aris_cpu"))
-    parser.add_argument("--index-prefix", type=Path, default=Path("experiments/r116_suite/exp6_query_thread_budget/tmp/direct_1m"))
+    parser.add_argument("--out-dir", type=Path, default=Path("experiments/r116_suite/exp6_aris_cpu_clean"))
+    parser.add_argument("--index-prefix", type=Path, default=Path("experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m"))
     parser.add_argument("--thread-sweep", type=parse_threads, default=parse_threads("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16"))
     parser.add_argument("--latency-budget-ms", type=float, default=10.0)
     parser.add_argument("--build-r", type=int, default=116)
@@ -629,6 +746,8 @@ def main() -> int:
         if not needed.exists():
             raise FileNotFoundError(str(needed))
 
+    if args.rerun and not args.plot_only:
+        clear_run_outputs(args)
     jobs = build_jobs(repo, args, args.index_prefix)
     manifest = write_manifest(repo, args, args.index_prefix, jobs)
     if args.rerun_filter:
@@ -644,10 +763,13 @@ def main() -> int:
         state = load_or_init_state(args, manifest)
         run_jobs(repo, args, manifest, state)
     rows = collect_results(args, manifest)
+    write_jsonl(args.out_dir / "results.jsonl", rows)
+    write_jsonl(args.out_dir / "measure_driver.jsonl", rows)
     write_csv(args.out_dir / "table.csv", rows)
     summary, summary_rows = summarize(rows, args.latency_budget_ms)
     write_csv(args.out_dir / "thread_summary.csv", summary_rows)
     (args.out_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_input_hashes(repo, args, args.index_prefix, jobs)
     if rows:
         plot(args, rows, summary_rows)
     write_review(args, manifest, summary)

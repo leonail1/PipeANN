@@ -1,0 +1,379 @@
+{
+  "created_at": "2026-05-19T10:02:10.686903Z",
+  "files": [
+    {
+      "mtime_ns": 1779178795503835342,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/data/sift_base_1m.bin",
+      "role": "source",
+      "sha256": "8c7b3d999ba3133f865af72df078f77c2d248fdb80571d7ea1f1bb8e1750658e",
+      "size_bytes": 512000008
+    },
+    {
+      "mtime_ns": 1779178796355835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/data/sift_query_1000.bin",
+      "role": "source",
+      "sha256": "a571a066869de8cdb6f0c21c6a4c45004963e7e34ba46209a3f1aaedbb102428",
+      "size_bytes": 512008
+    },
+    {
+      "mtime_ns": 1779178796319835204,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/base_1m.spmat",
+      "role": "source",
+      "sha256": "db05e82d09eaac2458cc04c86b2b45699d7e54e3e2f860857561f9b3dab5c8ad",
+      "size_bytes": 31712032
+    },
+    {
+      "mtime_ns": 1778663295046589636,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/table.csv",
+      "role": "source",
+      "sha256": "08a91b2743fcd6431af84014c4f3192d86fb4a4171f375b7a08a851b3f0dc2fd",
+      "size_bytes": 9914
+    },
+    {
+      "mtime_ns": 1779181001292505763,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/l_overrides.json",
+      "role": "source",
+      "sha256": "7378f58f9dc1cfae814ab61285bdc8e7f9b73cb3a7a2d1086ff5655a777f0b55",
+      "size_bytes": 574
+    },
+    {
+      "mtime_ns": 1779184023726724812,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m_disk.index",
+      "role": "index",
+      "sha256": "c0be2ff9469ea6d39c3264787b8499b9c2ef0d32a6804ca1a594d152ada3ec0d",
+      "size_bytes": 1024004096
+    },
+    {
+      "mtime_ns": 1779184080302999782,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m_hybrid.meta",
+      "role": "index",
+      "sha256": "a46dbf5cdde0d1c70f04006f3bec23c13bddde0e873bb3785f37cff9e1282a71",
+      "size_bytes": 1856
+    },
+    {
+      "mtime_ns": 1779184023906725724,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m_labels.densebit",
+      "role": "index",
+      "sha256": "17254f9ae6cf4cd1eac51e6c58a3e6df7024ec7e82dd76b4c3f41aea59054b54",
+      "size_bytes": 931416
+    },
+    {
+      "mtime_ns": 1779184022102716581,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m_mem.index.tags",
+      "role": "index",
+      "sha256": "a4809ec3ff79675c83525f57a1331da7fed34b46972969a0c7daa4048a865464",
+      "size_bytes": 4000008
+    },
+    {
+      "mtime_ns": 1779183911286105151,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m_pq_compressed.bin",
+      "role": "index",
+      "sha256": "8ef1d6b0586be707e86ec4ccfb533d2f43e2eab235252d2090422da432faf68a",
+      "size_bytes": 32000008
+    },
+    {
+      "mtime_ns": 1779183908594088982,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m_pq_pivots.bin",
+      "role": "index",
+      "sha256": "f6bac239a7ff33cefb486cbb7915b6110ef29b841f620d98360642dcf95a7371",
+      "size_bytes": 136356
+    },
+    {
+      "mtime_ns": 1779184080302999782,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m_tau_calibration.json",
+      "role": "index",
+      "sha256": "0011c94dece709d331c92a0d589ecb909d97e32f16518500ec9ab3c338be6024",
+      "size_bytes": 37775
+    },
+    {
+      "mtime_ns": 1779184078334990587,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m_tau_calibration.points.jsonl",
+      "role": "index",
+      "sha256": "c04790d626da59ae188f6b0adbc0dde4a8067f8efb80c445664bc1eae3b0e22c",
+      "size_bytes": 25970
+    },
+    {
+      "mtime_ns": 1779178976151797548,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_intersect_u1e-03.bin",
+      "role": "truth",
+      "sha256": "df12abd8984b59b8a42fcb7a2fc9ce83b369a1b39cc781f971feeb0b20a3f661",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u1e-03.spmat",
+      "role": "query_label",
+      "sha256": "15a401562c8486ac13d8f24ec4baf663f67c9997386f64164e50642e39278e45",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779178988487794495,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_intersect_u3e-03.bin",
+      "role": "truth",
+      "sha256": "141d6ec9353eb15bed4616b99b20d876ea2ffb2e1d7d76fe32636aba4f4fc7e1",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u3e-03.spmat",
+      "role": "query_label",
+      "sha256": "93743af3cdd97b7a30fdbb75c8f727e4c76ab2313ed3947ada24ca10fc93929d",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779179005559790184,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_intersect_u1e-02.bin",
+      "role": "truth",
+      "sha256": "6654846834a65bee84f2abb88e6f1fd38ab46a75e7341f45160026c14a270579",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u1e-02.spmat",
+      "role": "query_label",
+      "sha256": "04d40b09c3fd0f57d2d5e72d0c85f4cbc38f5fe1b0982bc2071910370b23e681",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779179023167785635,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_intersect_u5e-02.bin",
+      "role": "truth",
+      "sha256": "678d8eee5f6cb67be0550e9464b020bd011a7d529a63dd82ccab4471fb19e3ba",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u5e-02.spmat",
+      "role": "query_label",
+      "sha256": "9e89c651353ec3474505f528bea5d28fd4fbcc3ff0dfdc8b7da5a64753c48692",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779179042703780472,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_intersect_u1e-01.bin",
+      "role": "truth",
+      "sha256": "d33d070a7934f2535a90ee40ad1f92443e31db119e6c1cc9ae60db4a32de7a4e",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u1e-01.spmat",
+      "role": "query_label",
+      "sha256": "bc23a3135ca7e0facb1b7b8b8c1a64fa0f1ee1ec57033191eb03c22c8921fcfc",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779179078567770687,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_intersect_u25.bin",
+      "role": "truth",
+      "sha256": "b8f3aaf6fdf76f4cdf1af7f2dd2e98358af677f420f3e4615491711bd41c3b4c",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u25.spmat",
+      "role": "query_label",
+      "sha256": "9b8dfe7d69d0bdacfb1ab400e3b62399cb7e77d2d7a7a33c58a44276c94769bb",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779179129631756118,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_intersect_u30.bin",
+      "role": "truth",
+      "sha256": "ad4fe4f7e5c3e557988722f64e10959d6685b2969e41170f0e41408b2e3e744d",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u30.spmat",
+      "role": "query_label",
+      "sha256": "a53979783ae8adaf5e53ab5e9fe6ef3341aa26af9b335db424124117f09d85aa",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779179927337023011,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_intersect_u50.bin",
+      "role": "truth",
+      "sha256": "eddb1c7b9c17474d72e7f4cf900cbf2ce2fb6c0e18b645662fac1e6b9167e798",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u50.spmat",
+      "role": "query_label",
+      "sha256": "4064b6753391a2db0a40213d56bcf6d1cc0aca4a7df7e64ec291b7d2f6092773",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779180004869959043,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_intersect_u75.bin",
+      "role": "truth",
+      "sha256": "a3a0cf67ec1f3a6c8627f3f77dea7e0a228b43cfa37676ffa8c74325c8aab949",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u75.spmat",
+      "role": "query_label",
+      "sha256": "0a965dc40d1bdcca19a8197448f78ceb14d3ea7918ee804d7c045a464df1835a",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779180101422984751,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_intersect_u100.bin",
+      "role": "truth",
+      "sha256": "d15d435712b52f7031324018985dd4b944e45c51c2135d80cfcd43997e7042c5",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u100.spmat",
+      "role": "query_label",
+      "sha256": "69166383b6ccda6655aa66c2eb80e3dbf80ec89e8e32bf79ae717fd2980fb9d1",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779180111131080273,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_range_u1e-03.bin",
+      "role": "truth",
+      "sha256": "df12abd8984b59b8a42fcb7a2fc9ce83b369a1b39cc781f971feeb0b20a3f661",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_range_u1e-03.spmat",
+      "role": "query_label",
+      "sha256": "15a401562c8486ac13d8f24ec4baf663f67c9997386f64164e50642e39278e45",
+      "size_bytes": 16032
+    },
+    {
+      "mtime_ns": 1779180116127128928,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_range_u3e-03.bin",
+      "role": "truth",
+      "sha256": "141d6ec9353eb15bed4616b99b20d876ea2ffb2e1d7d76fe32636aba4f4fc7e1",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_range_u3e-03.spmat",
+      "role": "query_label",
+      "sha256": "47518625a58c733cfc0fea0c6a74587d9b515a2084836f210b1373c375f169a6",
+      "size_bytes": 24032
+    },
+    {
+      "mtime_ns": 1779180121991185607,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_range_u1e-02.bin",
+      "role": "truth",
+      "sha256": "6654846834a65bee84f2abb88e6f1fd38ab46a75e7341f45160026c14a270579",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_range_u1e-02.spmat",
+      "role": "query_label",
+      "sha256": "3341706fbe01d9fd49ec50b07d429dca6fd659216689aed394c634baa9c4bfc7",
+      "size_bytes": 24032
+    },
+    {
+      "mtime_ns": 1779180130811269989,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_range_u5e-02.bin",
+      "role": "truth",
+      "sha256": "678d8eee5f6cb67be0550e9464b020bd011a7d529a63dd82ccab4471fb19e3ba",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_range_u5e-02.spmat",
+      "role": "query_label",
+      "sha256": "5337d8e069d002e9cfabb9178f4f9c0d3030420fce6d61073c5e93758febddfb",
+      "size_bytes": 24032
+    },
+    {
+      "mtime_ns": 1779180147843430060,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_range_u1e-01.bin",
+      "role": "truth",
+      "sha256": "d33d070a7934f2535a90ee40ad1f92443e31db119e6c1cc9ae60db4a32de7a4e",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_range_u1e-01.spmat",
+      "role": "query_label",
+      "sha256": "7f949a8b908c53218e170346d6a0e434076866ef9c5490f0dae5d09e00d29601",
+      "size_bytes": 24032
+    },
+    {
+      "mtime_ns": 1779180181647736947,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_range_u25.bin",
+      "role": "truth",
+      "sha256": "b8f3aaf6fdf76f4cdf1af7f2dd2e98358af677f420f3e4615491711bd41c3b4c",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_range_u25.spmat",
+      "role": "query_label",
+      "sha256": "e439f3f427ba3c6f98973fd2da601c27197c98f48c26335550f1dabc3de4fc34",
+      "size_bytes": 24032
+    },
+    {
+      "mtime_ns": 1779180231760167105,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_range_u30.bin",
+      "role": "truth",
+      "sha256": "ad4fe4f7e5c3e557988722f64e10959d6685b2969e41170f0e41408b2e3e744d",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796359835198,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_range_u30.spmat",
+      "role": "query_label",
+      "sha256": "5ad8a634fea85a3797b3d630ccac8defb27ffb00f834257a1ec0daffb5b02122",
+      "size_bytes": 24032
+    },
+    {
+      "mtime_ns": 1779180302412728086,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_range_u50.bin",
+      "role": "truth",
+      "sha256": "eddb1c7b9c17474d72e7f4cf900cbf2ce2fb6c0e18b645662fac1e6b9167e798",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796363835197,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_range_u50.spmat",
+      "role": "query_label",
+      "sha256": "9c64990d80448cb7d659abef0303f451ca515196419e1aa7a38107545e121921",
+      "size_bytes": 24032
+    },
+    {
+      "mtime_ns": 1779180380541293963,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_range_u75.bin",
+      "role": "truth",
+      "sha256": "a3a0cf67ec1f3a6c8627f3f77dea7e0a228b43cfa37676ffa8c74325c8aab949",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796363835197,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_range_u75.spmat",
+      "role": "query_label",
+      "sha256": "ff8fbb1c71c4f7f38356446961c1396999b31419d62483fa95d234d1c7b6d7d5",
+      "size_bytes": 24032
+    },
+    {
+      "mtime_ns": 1779180477393927744,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp4_intersect_range_selectivity/truth/gt_1m_range_u100.bin",
+      "role": "truth",
+      "sha256": "d15d435712b52f7031324018985dd4b944e45c51c2135d80cfcd43997e7042c5",
+      "size_bytes": 120008
+    },
+    {
+      "mtime_ns": 1779178796363835197,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_range_u100.spmat",
+      "role": "query_label",
+      "sha256": "9e1634d2f47c0c7c553d1ebffeac9a042894f1ebc678a8e5b1eedb352aa88589",
+      "size_bytes": 24032
+    }
+  ],
+  "hash_algorithm": "sha256",
+  "index_prefix": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/tmp/direct_1m",
+  "missing": []
+}
