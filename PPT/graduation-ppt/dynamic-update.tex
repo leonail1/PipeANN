@@ -133,7 +133,7 @@
             \node[font=\bfseries\scriptsize] at (4.95,3.92) {支持的过滤方式};
 
             \node[panel] at (1.55,2.72) {};
-            \node[font=\bfseries\tiny] at (1.55,3.40) {intersect};
+            \node[font=\bfseries\tiny] at (1.55,3.40) {equality};
             \node[anchor=east, font=\tiny] at (0.50,2.96) {$q_F$};
             \node[item] at (0.83,2.96) {1};
             \node[hit] at (1.23,2.96) {\textcolor{red!85!black}{3}};
@@ -334,7 +334,15 @@
     \end{minipage}
     \vfill
 
-    \includegraphics[width=0.96\linewidth,height=0.66\textheight,keepaspectratio]{../../experiments/r116_suite/exp6_aris_cpu_clean/latency_percentiles_by_selector_highres.png}
+    \begin{columns}[c,onlytextwidth]
+        \column{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth,height=0.50\textheight,keepaspectratio]{../../experiments/r116_suite/exp6_aris_cpu_clean/latency_percentiles_worstcase_highres.png}
+
+        \column{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth,height=0.50\textheight,keepaspectratio]{../../experiments/r116_suite/exp6_aris_cpu_clean/latency_percentiles_by_selector_highres.png}
+    \end{columns}
 \end{frame}
 
 \begin{frame}[c]{需求 4：单查询 RSS}

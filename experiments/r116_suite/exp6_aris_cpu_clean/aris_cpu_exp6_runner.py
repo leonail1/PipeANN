@@ -609,7 +609,7 @@ def plot(args: argparse.Namespace, rows: list[dict[str, Any]], summary_rows: lis
     ax.axhline(args.latency_budget_ms, linestyle=":", color="#111827", linewidth=1.8, label=f"{args.latency_budget_ms:g} ms")
     ax.set_xlabel("Foreground query threads")
     ax.set_ylabel("Worst-case latency across all selectivities (ms)")
-    ax.set_title("r116 ARIS CPU sweep: max avg/p90/p95/p99 latency over intersect+range workloads")
+    ax.set_title("r116 ARIS CPU sweep: max avg/p90/p95/p99 latency over equality+range workloads")
     ax.set_xticks(threads)
     ax.grid(axis="y", alpha=0.25)
     ax.legend(ncol=5, loc="upper left", frameon=False)
@@ -618,6 +618,7 @@ def plot(args: argparse.Namespace, rows: list[dict[str, Any]], summary_rows: lis
     plt.close(fig)
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6.8), sharey=True, constrained_layout=True)
+    selector_labels = {"intersect": "equality", "range": "range"}
     for ax, selector in zip(axes, ["intersect", "range"]):
         selector_rows = [row for row in rows if row.get("selector_type") == selector]
         by_thread: dict[int, list[dict[str, Any]]] = {}
@@ -639,13 +640,13 @@ def plot(args: argparse.Namespace, rows: list[dict[str, Any]], summary_rows: lis
                 label=label,
             )
         ax.axhline(args.latency_budget_ms, linestyle=":", color="#111827", linewidth=1.6)
-        ax.set_title(selector)
+        ax.set_title(selector_labels.get(selector, selector))
         ax.set_xlabel("Foreground query threads")
         ax.set_xticks(selector_threads)
         ax.grid(axis="y", alpha=0.25)
-    axes[0].set_ylabel("Worst-case latency by selector (ms)")
+    axes[0].set_ylabel("Worst-case latency by query type (ms)")
     axes[1].legend(ncol=4, loc="upper left", frameon=False)
-    fig.suptitle("r116 ARIS CPU sweep by selector")
+    fig.suptitle("r116 ARIS CPU sweep by query type")
     fig.savefig(args.out_dir / "latency_percentiles_by_selector_highres.png", bbox_inches="tight")
     fig.savefig(args.out_dir / "latency_percentiles_by_selector_highres.pdf", bbox_inches="tight")
     plt.close(fig)
