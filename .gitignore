@@ -55,9 +55,15 @@ docs/**/.*
 assets/
 .codex
 
-# PPT outputs: keep only LaTeX source and compiled PDFs under the PPT directory.
+# PPT outputs: keep LaTeX source, compiled PDFs, and checked-in template assets.
 PPT/**/*
 !PPT/
 !PPT/**/
 !PPT/**/*.tex
 !PPT/**/*.pdf
+!PPT/**/*.md
+!PPT/**/*.cls
+!PPT/**/*.ttf
+!PPT/**/*.jpg
+!PPT/**/*.jpeg
+!PPT/**/*.png

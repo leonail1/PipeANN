@@ -323,6 +323,20 @@
     \includegraphics[width=0.94\linewidth,height=0.66\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_intersect_range_selectivity/intersect_range_latency_qps.png}
 \end{frame}
 
+\begin{frame}[c]{需求 3：1--16 线程延迟分位数}
+    \centering
+    \begin{minipage}{0.94\textwidth}
+        \centering
+        \scriptsize
+        在 r116/PQ32 直接构建的 1M 索引上，对等值查询和范围查询覆盖全部 10 个选择性，并扫描前台查询线程数 1--16；图中每个点取对应线程数下所有选择性中的最坏延迟。
+
+        \textcolor{red}{结论：全部 320 个组合 recall@10 $\geq$ 98，平均延迟均低于 10ms。}
+    \end{minipage}
+    \vfill
+
+    \includegraphics[width=0.96\linewidth,height=0.66\textheight,keepaspectratio]{../../experiments/r116_suite/exp6_aris_cpu_clean/latency_percentiles_by_selector_highres.png}
+\end{frame}
+
 \begin{frame}[c]{需求 4：单查询 RSS}
     \centering
     \begin{columns}[c,onlytextwidth]
