@@ -442,6 +442,8 @@ def clear_run_outputs(args: argparse.Namespace) -> None:
         "latency_percentiles_worstcase_highres.pdf",
         "latency_percentiles_by_selector_highres.png",
         "latency_percentiles_by_selector_highres.pdf",
+        "latency_percentiles_equality_highres.png",
+        "latency_percentiles_equality_highres.pdf",
         "ARIS_EXPERIMENT_REVIEW.md",
     ]:
         path = args.out_dir / filename
@@ -607,9 +609,9 @@ def plot(args: argparse.Namespace, rows: list[dict[str, Any]], summary_rows: lis
     for key, label, color in metrics:
         ax.plot(threads, [float(row[key]) for row in summary_rows], marker="o", linewidth=2.2, color=color, label=label)
     ax.axhline(args.latency_budget_ms, linestyle=":", color="#111827", linewidth=1.8, label=f"{args.latency_budget_ms:g} ms")
-    ax.set_xlabel("Foreground query threads")
-    ax.set_ylabel("Worst-case latency across all selectivities (ms)")
-    ax.set_title("r116 ARIS CPU sweep: max avg/p90/p95/p99 latency over equality+range workloads")
+    ax.set_xlabel("Threads")
+    ax.set_ylabel("Worst latency over selectivities (ms)")
+    ax.set_title("1-16 threads: worst latency")
     ax.set_xticks(threads)
     ax.grid(axis="y", alpha=0.25)
     ax.legend(ncol=5, loc="upper left", frameon=False)
@@ -641,14 +643,45 @@ def plot(args: argparse.Namespace, rows: list[dict[str, Any]], summary_rows: lis
             )
         ax.axhline(args.latency_budget_ms, linestyle=":", color="#111827", linewidth=1.6)
         ax.set_title(selector_labels.get(selector, selector))
-        ax.set_xlabel("Foreground query threads")
+        ax.set_xlabel("Threads")
         ax.set_xticks(selector_threads)
         ax.grid(axis="y", alpha=0.25)
-    axes[0].set_ylabel("Worst-case latency by query type (ms)")
+    axes[0].set_ylabel("Worst latency (ms)")
     axes[1].legend(ncol=4, loc="upper left", frameon=False)
-    fig.suptitle("r116 ARIS CPU sweep by query type")
+    fig.suptitle("Latency by query type")
     fig.savefig(args.out_dir / "latency_percentiles_by_selector_highres.png", bbox_inches="tight")
     fig.savefig(args.out_dir / "latency_percentiles_by_selector_highres.pdf", bbox_inches="tight")
+    plt.close(fig)
+
+    equality_rows = [row for row in rows if row.get("selector_type") == "intersect"]
+    by_thread: dict[int, list[dict[str, Any]]] = {}
+    for row in equality_rows:
+        by_thread.setdefault(int(row["threads"]), []).append(row)
+    equality_threads = sorted(by_thread)
+    fig, ax = plt.subplots(figsize=(10.8, 6.0), constrained_layout=True)
+    for source_key, label, color in [
+        ("avg_latency_us", "avg", "#2563eb"),
+        ("p90_latency_us", "p90", "#16a34a"),
+        ("p95_latency_us", "p95", "#f59e0b"),
+        ("p99_latency_us", "p99", "#dc2626"),
+    ]:
+        ax.plot(
+            equality_threads,
+            [max(float(row.get(source_key) or 0.0) for row in by_thread[t]) / 1000.0 for t in equality_threads],
+            marker="o",
+            linewidth=2.1,
+            color=color,
+            label=label,
+        )
+    ax.axhline(args.latency_budget_ms, linestyle=":", color="#111827", linewidth=1.7, label=f"{args.latency_budget_ms:g} ms")
+    ax.set_title("Equality latency, 1-16 threads")
+    ax.set_xlabel("Threads")
+    ax.set_ylabel("Worst latency over selectivities (ms)")
+    ax.set_xticks(equality_threads)
+    ax.grid(axis="y", alpha=0.25)
+    ax.legend(ncol=5, loc="upper left", frameon=False)
+    fig.savefig(args.out_dir / "latency_percentiles_equality_highres.png", bbox_inches="tight")
+    fig.savefig(args.out_dir / "latency_percentiles_equality_highres.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -713,6 +746,7 @@ def write_review(args: argparse.Namespace, manifest: dict[str, Any], summary: di
 - L overrides: `l_overrides.json`
 - Worst-case plot: `latency_percentiles_worstcase_highres.png`
 - Selector plot: `latency_percentiles_by_selector_highres.png`
+- Equality-only plot: `latency_percentiles_equality_highres.png`
 """
     (args.out_dir / "ARIS_EXPERIMENT_REVIEW.md").write_text(text, encoding="utf-8")
 

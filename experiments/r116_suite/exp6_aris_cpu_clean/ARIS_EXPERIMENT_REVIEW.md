@@ -48,3 +48,4 @@
 - L overrides: `l_overrides.json`
 - Worst-case plot: `latency_percentiles_worstcase_highres.png`
 - Selector plot: `latency_percentiles_by_selector_highres.png`
+- Equality-only plot: `latency_percentiles_equality_highres.png`
