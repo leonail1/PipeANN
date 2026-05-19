@@ -534,6 +534,8 @@ int search_disk_index(int argc, char **argv) {
         pipeann::get_mean_stats(stats, query_num, [](const pipeann::QueryStats &s) { return s.total_us; }));
     const float latency_50 = static_cast<float>(pipeann::get_percentile_stats(
         stats, query_num, 0.50f, [](const pipeann::QueryStats &s) { return s.total_us; }));
+    const float latency_90 = static_cast<float>(pipeann::get_percentile_stats(
+        stats, query_num, 0.90f, [](const pipeann::QueryStats &s) { return s.total_us; }));
     const float latency_95 = static_cast<float>(pipeann::get_percentile_stats(
         stats, query_num, 0.95f, [](const pipeann::QueryStats &s) { return s.total_us; }));
     const float latency_99 = static_cast<float>(pipeann::get_percentile_stats(
@@ -643,6 +645,7 @@ int search_disk_index(int argc, char **argv) {
         "\"qps\":" + std::to_string(qps) + ","
         "\"avg_latency_us\":" + std::to_string(mean_latency) + ","
         "\"p50_latency_us\":" + std::to_string(latency_50) + ","
+        "\"p90_latency_us\":" + std::to_string(latency_90) + ","
         "\"p95_latency_us\":" + std::to_string(latency_95) + ","
         "\"p99_latency_us\":" + std::to_string(latency_99) + ","
         "\"p999_latency_us\":" + std::to_string(latency_999) + ","

@@ -8,6 +8,7 @@ experiments/**
 !experiments/**/*.png
 !experiments/**/*.md
 !experiments/**/*.sh
+!experiments/**/aris_cpu_exp6_runner.py
 experiments/*_backup*/
 experiments/*_backup*/**
 

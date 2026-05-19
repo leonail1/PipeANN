@@ -1,0 +1,3217 @@
+{
+  "jobs": [
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:41.586794Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t01.json",
+      "id": "intersect_u1e-03_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:41.390164Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:41.758193Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t02.json",
+      "id": "intersect_u1e-03_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:41.596888Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:41.914967Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t03.json",
+      "id": "intersect_u1e-03_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:41.768345Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:42.077595Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t04.json",
+      "id": "intersect_u1e-03_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:41.925154Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:42.224771Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t05.json",
+      "id": "intersect_u1e-03_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:42.087706Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:42.369931Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t06.json",
+      "id": "intersect_u1e-03_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:42.234908Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:42.556098Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t07.json",
+      "id": "intersect_u1e-03_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:42.380833Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:42.736546Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t08.json",
+      "id": "intersect_u1e-03_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:42.566239Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:42.946353Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t09.json",
+      "id": "intersect_u1e-03_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:42.746792Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:43.152754Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t10.json",
+      "id": "intersect_u1e-03_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:42.956338Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:43.365942Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t11.json",
+      "id": "intersect_u1e-03_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:43.162854Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:43.572273Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t12.json",
+      "id": "intersect_u1e-03_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:43.376136Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:43.776367Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t13.json",
+      "id": "intersect_u1e-03_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:43.582465Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:43.976974Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t14.json",
+      "id": "intersect_u1e-03_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:43.786813Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:44.180592Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t15.json",
+      "id": "intersect_u1e-03_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:43.987123Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:44.381810Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-03_t16.json",
+      "id": "intersect_u1e-03_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:44.190900Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:44.667229Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t01.json",
+      "id": "intersect_u3e-03_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:44.391956Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:44.877134Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t02.json",
+      "id": "intersect_u3e-03_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:44.678109Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:45.065516Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t03.json",
+      "id": "intersect_u3e-03_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:44.887258Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:45.241549Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t04.json",
+      "id": "intersect_u3e-03_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:45.075689Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:45.419299Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t05.json",
+      "id": "intersect_u3e-03_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:45.252227Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:45.571090Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t06.json",
+      "id": "intersect_u3e-03_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:45.429485Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:45.719733Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t07.json",
+      "id": "intersect_u3e-03_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:45.581283Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:45.901080Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t08.json",
+      "id": "intersect_u3e-03_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:45.729928Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:46.110261Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t09.json",
+      "id": "intersect_u3e-03_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:45.911262Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:46.325854Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t10.json",
+      "id": "intersect_u3e-03_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:46.120187Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:46.540015Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t11.json",
+      "id": "intersect_u3e-03_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:46.336118Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:46.750468Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t12.json",
+      "id": "intersect_u3e-03_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:46.550196Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:46.962107Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t13.json",
+      "id": "intersect_u3e-03_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:46.760362Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:47.183892Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t14.json",
+      "id": "intersect_u3e-03_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:46.972055Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:47.399556Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t15.json",
+      "id": "intersect_u3e-03_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:47.193995Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:47.605555Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u3e-03_t16.json",
+      "id": "intersect_u3e-03_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:47.409803Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:48.184195Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t01.json",
+      "id": "intersect_u1e-02_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:47.615721Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:48.530593Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t02.json",
+      "id": "intersect_u1e-02_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:48.194446Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:48.800514Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t03.json",
+      "id": "intersect_u1e-02_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:48.540760Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:49.030984Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t04.json",
+      "id": "intersect_u1e-02_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:48.810775Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:49.237858Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t05.json",
+      "id": "intersect_u1e-02_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:49.041673Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:49.435571Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t06.json",
+      "id": "intersect_u1e-02_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:49.248109Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:49.625259Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t07.json",
+      "id": "intersect_u1e-02_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:49.445484Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:49.853068Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t08.json",
+      "id": "intersect_u1e-02_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:49.635543Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:50.095137Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t09.json",
+      "id": "intersect_u1e-02_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:49.863264Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:50.350000Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t10.json",
+      "id": "intersect_u1e-02_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:50.105188Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:50.610040Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t11.json",
+      "id": "intersect_u1e-02_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:50.360528Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:50.865325Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t12.json",
+      "id": "intersect_u1e-02_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:50.620379Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:51.123007Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t13.json",
+      "id": "intersect_u1e-02_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:50.875386Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:51.381022Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t14.json",
+      "id": "intersect_u1e-02_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:51.133167Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:51.628214Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t15.json",
+      "id": "intersect_u1e-02_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:51.391299Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:51.883389Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-02_t16.json",
+      "id": "intersect_u1e-02_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:51.638037Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:53.777083Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t01.json",
+      "id": "intersect_u5e-02_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:51.893677Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:54.825075Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t02.json",
+      "id": "intersect_u5e-02_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:53.787220Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:55.587661Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t03.json",
+      "id": "intersect_u5e-02_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:54.835324Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:56.184777Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t04.json",
+      "id": "intersect_u5e-02_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:55.597955Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:56.683186Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t05.json",
+      "id": "intersect_u5e-02_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:56.194839Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:57.119187Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t06.json",
+      "id": "intersect_u5e-02_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:56.693032Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:57.511455Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t07.json",
+      "id": "intersect_u5e-02_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:57.129008Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:57.881591Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t08.json",
+      "id": "intersect_u5e-02_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:57.521688Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:58.241392Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t09.json",
+      "id": "intersect_u5e-02_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:57.891858Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:58.576638Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t10.json",
+      "id": "intersect_u5e-02_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:58.251698Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:58.919251Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t11.json",
+      "id": "intersect_u5e-02_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:58.586935Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:59.248684Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t12.json",
+      "id": "intersect_u5e-02_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:58.929442Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:59.572782Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t13.json",
+      "id": "intersect_u5e-02_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:59.258983Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:56:59.897991Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t14.json",
+      "id": "intersect_u5e-02_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:59.582705Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:00.223607Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t15.json",
+      "id": "intersect_u5e-02_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:56:59.907899Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:00.543878Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u5e-02_t16.json",
+      "id": "intersect_u5e-02_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:00.233713Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:03.651047Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t01.json",
+      "id": "intersect_u1e-01_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:00.554107Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:05.101021Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t02.json",
+      "id": "intersect_u1e-01_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:03.661140Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:06.365745Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t03.json",
+      "id": "intersect_u1e-01_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:05.111005Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:07.222768Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t04.json",
+      "id": "intersect_u1e-01_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:06.376377Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:07.903595Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t05.json",
+      "id": "intersect_u1e-01_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:07.232787Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:08.518099Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t06.json",
+      "id": "intersect_u1e-01_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:07.913689Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:09.052653Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t07.json",
+      "id": "intersect_u1e-01_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:08.528148Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:09.537177Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t08.json",
+      "id": "intersect_u1e-01_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:09.062724Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:09.977259Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t09.json",
+      "id": "intersect_u1e-01_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:09.546902Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:10.392957Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t10.json",
+      "id": "intersect_u1e-01_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:09.987286Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:10.782759Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t11.json",
+      "id": "intersect_u1e-01_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:10.403089Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:11.156364Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t12.json",
+      "id": "intersect_u1e-01_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:10.792594Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:11.505364Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t13.json",
+      "id": "intersect_u1e-01_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:11.166402Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:11.837352Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t14.json",
+      "id": "intersect_u1e-01_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:11.514997Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:12.154252Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t15.json",
+      "id": "intersect_u1e-01_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:11.846922Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:12.457984Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u1e-01_t16.json",
+      "id": "intersect_u1e-01_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:12.164277Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:18.301538Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t01.json",
+      "id": "intersect_u25_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:12.467517Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:21.386766Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t02.json",
+      "id": "intersect_u25_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:18.311517Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:23.789958Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t03.json",
+      "id": "intersect_u25_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:21.396439Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:25.477328Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t04.json",
+      "id": "intersect_u25_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:23.800132Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:26.864424Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t05.json",
+      "id": "intersect_u25_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:25.486681Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:28.059341Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t06.json",
+      "id": "intersect_u25_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:26.874555Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:29.111016Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t07.json",
+      "id": "intersect_u25_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:28.069509Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:30.084511Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t08.json",
+      "id": "intersect_u25_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:29.121084Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:30.982565Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t09.json",
+      "id": "intersect_u25_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:30.094099Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:31.803590Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t10.json",
+      "id": "intersect_u25_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:30.992194Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:32.573963Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t11.json",
+      "id": "intersect_u25_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:31.813990Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:33.303811Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t12.json",
+      "id": "intersect_u25_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:32.583611Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:33.984510Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t13.json",
+      "id": "intersect_u25_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:33.313448Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:34.620635Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t14.json",
+      "id": "intersect_u25_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:33.993908Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:35.228605Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t15.json",
+      "id": "intersect_u25_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:34.630714Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:35.814110Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u25_t16.json",
+      "id": "intersect_u25_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:35.238661Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:42.136170Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t01.json",
+      "id": "intersect_u30_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:35.823373Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:46.077256Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t02.json",
+      "id": "intersect_u30_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:42.146311Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:48.636508Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t03.json",
+      "id": "intersect_u30_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:46.087063Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:50.512574Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t04.json",
+      "id": "intersect_u30_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:48.646493Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:52.076642Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t05.json",
+      "id": "intersect_u30_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:50.522408Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:53.539939Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t06.json",
+      "id": "intersect_u30_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:52.086740Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:54.779388Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t07.json",
+      "id": "intersect_u30_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:53.549132Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:55.920616Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t08.json",
+      "id": "intersect_u30_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:54.788677Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:56.984937Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t09.json",
+      "id": "intersect_u30_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:55.930746Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:57.962528Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t10.json",
+      "id": "intersect_u30_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:56.995318Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:58.852717Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t11.json",
+      "id": "intersect_u30_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:57.971953Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:57:59.705371Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t12.json",
+      "id": "intersect_u30_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:58.862658Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:00.506863Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t13.json",
+      "id": "intersect_u30_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:57:59.715526Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:01.244311Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t14.json",
+      "id": "intersect_u30_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:00.516389Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:01.949176Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t15.json",
+      "id": "intersect_u30_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:01.254228Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:02.641583Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u30_t16.json",
+      "id": "intersect_u30_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:01.959288Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:05.110822Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t01.json",
+      "id": "intersect_u50_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:02.651672Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:06.370119Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t02.json",
+      "id": "intersect_u50_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:05.120853Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:07.299216Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t03.json",
+      "id": "intersect_u50_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:06.379699Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:08.040431Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t04.json",
+      "id": "intersect_u50_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:07.309430Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:08.703460Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t05.json",
+      "id": "intersect_u50_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:08.050629Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:09.267830Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t06.json",
+      "id": "intersect_u50_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:08.713946Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:09.791912Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t07.json",
+      "id": "intersect_u50_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:09.277863Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:10.271033Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t08.json",
+      "id": "intersect_u50_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:09.801523Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:10.752604Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t09.json",
+      "id": "intersect_u50_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:10.281129Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:11.189572Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t10.json",
+      "id": "intersect_u50_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:10.761847Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:11.597317Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t11.json",
+      "id": "intersect_u50_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:11.193141Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:11.990011Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t12.json",
+      "id": "intersect_u50_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:11.606537Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:12.360083Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t13.json",
+      "id": "intersect_u50_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:11.999300Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:12.717657Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t14.json",
+      "id": "intersect_u50_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:12.369485Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:13.062619Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t15.json",
+      "id": "intersect_u50_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:12.727969Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:13.397106Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u50_t16.json",
+      "id": "intersect_u50_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:13.072558Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:15.208030Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t01.json",
+      "id": "intersect_u75_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:13.400693Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:16.225690Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t02.json",
+      "id": "intersect_u75_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:15.217260Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:16.980706Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t03.json",
+      "id": "intersect_u75_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:16.235099Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:17.589810Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t04.json",
+      "id": "intersect_u75_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:16.990914Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:18.096360Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t05.json",
+      "id": "intersect_u75_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:17.600010Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:18.551291Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t06.json",
+      "id": "intersect_u75_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:18.106655Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:18.965252Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t07.json",
+      "id": "intersect_u75_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:18.561019Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:19.353411Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t08.json",
+      "id": "intersect_u75_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:18.975039Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:19.716947Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t09.json",
+      "id": "intersect_u75_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:19.363644Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:20.089542Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t10.json",
+      "id": "intersect_u75_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:19.727083Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:20.466542Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t11.json",
+      "id": "intersect_u75_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:20.099852Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:20.829091Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t12.json",
+      "id": "intersect_u75_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:20.476723Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:21.141643Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t13.json",
+      "id": "intersect_u75_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:20.839191Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:21.463410Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t14.json",
+      "id": "intersect_u75_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:21.150749Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:21.763314Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t15.json",
+      "id": "intersect_u75_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:21.474574Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:22.033771Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u75_t16.json",
+      "id": "intersect_u75_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:21.766904Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:23.486135Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t01.json",
+      "id": "intersect_u100_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:22.043298Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:24.336546Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t02.json",
+      "id": "intersect_u100_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:23.495462Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:24.952664Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t03.json",
+      "id": "intersect_u100_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:24.346109Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:25.424600Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t04.json",
+      "id": "intersect_u100_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:24.962497Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:25.839782Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t05.json",
+      "id": "intersect_u100_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:25.428948Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:26.220144Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t06.json",
+      "id": "intersect_u100_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:25.843710Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:26.576794Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t07.json",
+      "id": "intersect_u100_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:26.230299Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:26.918781Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t08.json",
+      "id": "intersect_u100_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:26.586757Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:27.238090Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t09.json",
+      "id": "intersect_u100_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:26.929212Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:27.547688Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t10.json",
+      "id": "intersect_u100_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:27.248055Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:27.831784Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t11.json",
+      "id": "intersect_u100_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:27.557389Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:28.168360Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t12.json",
+      "id": "intersect_u100_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:27.841548Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:28.458621Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t13.json",
+      "id": "intersect_u100_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:28.178822Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:28.738053Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t14.json",
+      "id": "intersect_u100_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:28.467867Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:29.014745Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t15.json",
+      "id": "intersect_u100_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:28.748362Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:29.244230Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/intersect_u100_t16.json",
+      "id": "intersect_u100_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:29.018690Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:29.509697Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t01.json",
+      "id": "range_u1e-03_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:29.248379Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:29.727409Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t02.json",
+      "id": "range_u1e-03_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:29.519875Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:29.908282Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t03.json",
+      "id": "range_u1e-03_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:29.736849Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:30.073526Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t04.json",
+      "id": "range_u1e-03_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:29.917578Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:30.240225Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t05.json",
+      "id": "range_u1e-03_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:30.083152Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:30.402525Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t06.json",
+      "id": "range_u1e-03_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:30.250150Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:30.563630Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t07.json",
+      "id": "range_u1e-03_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:30.412339Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:30.774779Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t08.json",
+      "id": "range_u1e-03_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:30.573575Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:30.980045Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t09.json",
+      "id": "range_u1e-03_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:30.785239Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:31.194294Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t10.json",
+      "id": "range_u1e-03_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:30.989717Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:31.416898Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t11.json",
+      "id": "range_u1e-03_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:31.203851Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:31.636382Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t12.json",
+      "id": "range_u1e-03_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:31.426094Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:31.855173Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t13.json",
+      "id": "range_u1e-03_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:31.646687Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:32.072220Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t14.json",
+      "id": "range_u1e-03_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:31.864317Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:32.287612Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t15.json",
+      "id": "range_u1e-03_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:32.082243Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:32.508947Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-03_t16.json",
+      "id": "range_u1e-03_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:32.297165Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:32.883450Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t01.json",
+      "id": "range_u3e-03_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:32.519111Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:33.137785Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t02.json",
+      "id": "range_u3e-03_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:32.893659Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:33.346473Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t03.json",
+      "id": "range_u3e-03_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:33.147824Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:33.534056Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t04.json",
+      "id": "range_u3e-03_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:33.355588Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:33.706126Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t05.json",
+      "id": "range_u3e-03_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:33.543971Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:33.882238Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t06.json",
+      "id": "range_u3e-03_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:33.715758Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:34.059197Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t07.json",
+      "id": "range_u3e-03_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:33.890935Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:34.274316Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t08.json",
+      "id": "range_u3e-03_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:34.069486Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:34.487071Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t09.json",
+      "id": "range_u3e-03_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:34.283839Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:34.712382Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t10.json",
+      "id": "range_u3e-03_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:34.498324Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:34.937256Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t11.json",
+      "id": "range_u3e-03_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:34.721406Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:35.156949Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t12.json",
+      "id": "range_u3e-03_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:34.946148Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:35.373382Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t13.json",
+      "id": "range_u3e-03_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:35.165985Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:35.599445Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t14.json",
+      "id": "range_u3e-03_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:35.383739Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:35.828879Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t15.json",
+      "id": "range_u3e-03_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:35.609625Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:36.050348Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u3e-03_t16.json",
+      "id": "range_u3e-03_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:35.837880Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:36.724676Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t01.json",
+      "id": "range_u1e-02_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:36.058997Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:37.121297Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t02.json",
+      "id": "range_u1e-02_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:36.734679Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:37.419146Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t03.json",
+      "id": "range_u1e-02_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:37.130910Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:37.678474Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t04.json",
+      "id": "range_u1e-02_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:37.428142Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:37.916350Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t05.json",
+      "id": "range_u1e-02_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:37.688154Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:38.132767Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t06.json",
+      "id": "range_u1e-02_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:37.925526Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:38.350399Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t07.json",
+      "id": "range_u1e-02_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:38.142758Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:38.582235Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t08.json",
+      "id": "range_u1e-02_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:38.359374Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:38.833231Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t09.json",
+      "id": "range_u1e-02_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:38.591777Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:39.094133Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t10.json",
+      "id": "range_u1e-02_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:38.843349Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:39.369985Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t11.json",
+      "id": "range_u1e-02_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:39.103554Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:39.642721Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t12.json",
+      "id": "range_u1e-02_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:39.380345Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:39.908885Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t13.json",
+      "id": "range_u1e-02_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:39.651467Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:40.182740Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t14.json",
+      "id": "range_u1e-02_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:39.919438Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:40.454361Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t15.json",
+      "id": "range_u1e-02_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:40.193178Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:40.718782Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-02_t16.json",
+      "id": "range_u1e-02_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:40.463729Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:42.711618Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t01.json",
+      "id": "range_u5e-02_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:40.728229Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:43.814637Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t02.json",
+      "id": "range_u5e-02_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:42.721228Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:44.598004Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t03.json",
+      "id": "range_u5e-02_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:43.824234Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:45.208400Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t04.json",
+      "id": "range_u5e-02_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:44.607677Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:45.717399Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t05.json",
+      "id": "range_u5e-02_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:45.217451Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:46.179829Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t06.json",
+      "id": "range_u5e-02_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:45.726250Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:46.598017Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t07.json",
+      "id": "range_u5e-02_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:46.190256Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:46.994294Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t08.json",
+      "id": "range_u5e-02_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:46.607595Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:47.375868Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t09.json",
+      "id": "range_u5e-02_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:47.004252Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:47.737321Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t10.json",
+      "id": "range_u5e-02_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:47.384296Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:48.085199Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t11.json",
+      "id": "range_u5e-02_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:47.747035Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:48.434139Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t12.json",
+      "id": "range_u5e-02_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:48.094031Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:48.772219Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t13.json",
+      "id": "range_u5e-02_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:48.443906Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:49.107876Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t14.json",
+      "id": "range_u5e-02_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:48.781768Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:49.451540Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t15.json",
+      "id": "range_u5e-02_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:49.117464Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:49.782843Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u5e-02_t16.json",
+      "id": "range_u5e-02_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:49.461533Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:53.019392Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t01.json",
+      "id": "range_u1e-01_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:49.791473Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:54.529047Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t02.json",
+      "id": "range_u1e-01_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:53.028888Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:55.755195Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t03.json",
+      "id": "range_u1e-01_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:54.538017Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:56.621889Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t04.json",
+      "id": "range_u1e-01_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:55.763668Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:57.331949Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t05.json",
+      "id": "range_u1e-01_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:56.631991Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:57.957368Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t06.json",
+      "id": "range_u1e-01_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:57.340711Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:58.521344Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t07.json",
+      "id": "range_u1e-01_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:57.967338Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:59.027133Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t08.json",
+      "id": "range_u1e-01_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:58.529981Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:59.483942Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t09.json",
+      "id": "range_u1e-01_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:59.035234Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:58:59.919114Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t10.json",
+      "id": "range_u1e-01_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:59.493081Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:00.325168Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t11.json",
+      "id": "range_u1e-01_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:58:59.928821Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:00.713035Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t12.json",
+      "id": "range_u1e-01_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:00.334089Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:01.075596Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t13.json",
+      "id": "range_u1e-01_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:00.723141Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:01.424746Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t14.json",
+      "id": "range_u1e-01_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:01.083822Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:01.756672Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t15.json",
+      "id": "range_u1e-01_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:01.433555Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:02.075216Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u1e-01_t16.json",
+      "id": "range_u1e-01_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:01.765531Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:07.514889Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t01.json",
+      "id": "range_u25_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:02.084507Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:10.616067Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t02.json",
+      "id": "range_u25_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:07.522884Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:12.741921Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t03.json",
+      "id": "range_u25_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:10.625240Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:14.377702Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t04.json",
+      "id": "range_u25_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:12.751591Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:15.737475Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t05.json",
+      "id": "range_u25_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:14.386248Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:16.955133Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t06.json",
+      "id": "range_u25_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:15.746247Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:18.040397Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t07.json",
+      "id": "range_u25_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:16.964300Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:19.070319Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t08.json",
+      "id": "range_u25_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:18.050122Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:19.980434Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t09.json",
+      "id": "range_u25_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:19.079402Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:20.823181Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t10.json",
+      "id": "range_u25_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:19.988457Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:21.610763Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t11.json",
+      "id": "range_u25_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:20.832393Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:22.346345Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t12.json",
+      "id": "range_u25_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:21.618917Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:23.037979Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t13.json",
+      "id": "range_u25_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:22.355321Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:23.699591Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t14.json",
+      "id": "range_u25_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:23.047228Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:24.325268Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t15.json",
+      "id": "range_u25_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:23.708240Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:24.915334Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u25_t16.json",
+      "id": "range_u25_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:24.334664Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:31.349152Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t01.json",
+      "id": "range_u30_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:24.924755Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:34.753860Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t02.json",
+      "id": "range_u30_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:31.357936Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:37.107462Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t03.json",
+      "id": "range_u30_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:34.763806Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:39.003725Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t04.json",
+      "id": "range_u30_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:37.115597Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:40.519880Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t05.json",
+      "id": "range_u30_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:39.012781Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:41.891527Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t06.json",
+      "id": "range_u30_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:40.528072Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:43.148926Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t07.json",
+      "id": "range_u30_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:41.899585Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:44.278234Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t08.json",
+      "id": "range_u30_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:43.157452Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:45.295808Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t09.json",
+      "id": "range_u30_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:44.287933Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:46.250429Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t10.json",
+      "id": "range_u30_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:45.304374Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:47.143881Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t11.json",
+      "id": "range_u30_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:46.259834Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:47.983799Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t12.json",
+      "id": "range_u30_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:47.152970Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:48.768567Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t13.json",
+      "id": "range_u30_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:47.992504Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:49.532741Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t14.json",
+      "id": "range_u30_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:48.777901Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:50.259844Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t15.json",
+      "id": "range_u30_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:49.541971Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:50.951890Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u30_t16.json",
+      "id": "range_u30_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:50.268022Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:53.398840Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t01.json",
+      "id": "range_u50_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:50.960277Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:54.706465Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t02.json",
+      "id": "range_u50_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:53.408051Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:55.634672Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t03.json",
+      "id": "range_u50_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:54.709170Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:56.398085Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t04.json",
+      "id": "range_u50_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:55.643608Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:57.051210Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t05.json",
+      "id": "range_u50_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:56.406858Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:57.633143Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t06.json",
+      "id": "range_u50_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:57.060823Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:58.205996Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t07.json",
+      "id": "range_u50_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:57.641510Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:58.714975Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t08.json",
+      "id": "range_u50_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:58.215052Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:59.191146Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t09.json",
+      "id": "range_u50_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:58.724036Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T08:59:59.644224Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t10.json",
+      "id": "range_u50_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:59.199390Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:00.051890Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t11.json",
+      "id": "range_u50_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T08:59:59.653084Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:00.436412Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t12.json",
+      "id": "range_u50_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:00.060993Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:00.810457Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t13.json",
+      "id": "range_u50_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:00.445009Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:01.168061Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t14.json",
+      "id": "range_u50_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:00.818709Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:01.531337Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t15.json",
+      "id": "range_u50_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:01.177311Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:01.888981Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u50_t16.json",
+      "id": "range_u50_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:01.539853Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:03.816675Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t01.json",
+      "id": "range_u75_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:01.898487Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:04.895618Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t02.json",
+      "id": "range_u75_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:03.825420Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:05.684951Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t03.json",
+      "id": "range_u75_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:04.904346Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:06.317178Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t04.json",
+      "id": "range_u75_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:05.692981Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:06.853502Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t05.json",
+      "id": "range_u75_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:06.324688Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:07.321186Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t06.json",
+      "id": "range_u75_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:06.861159Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:07.747483Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t07.json",
+      "id": "range_u75_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:07.329361Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:08.162133Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t08.json",
+      "id": "range_u75_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:07.756436Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:08.544460Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t09.json",
+      "id": "range_u75_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:08.170862Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:08.902314Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t10.json",
+      "id": "range_u75_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:08.552945Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:09.254827Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t11.json",
+      "id": "range_u75_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:08.911174Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:09.600329Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t12.json",
+      "id": "range_u75_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:09.263866Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:09.922810Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t13.json",
+      "id": "range_u75_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:09.609100Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:10.227584Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t14.json",
+      "id": "range_u75_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:09.926440Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:10.549311Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t15.json",
+      "id": "range_u75_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:10.236078Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:10.879143Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u75_t16.json",
+      "id": "range_u75_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:10.557846Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:12.608759Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t01.json",
+      "id": "range_u100_t01",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:10.883083Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:13.553657Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t02.json",
+      "id": "range_u100_t02",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:12.616710Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:14.226482Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t03.json",
+      "id": "range_u100_t03",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:13.562119Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:14.787766Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t04.json",
+      "id": "range_u100_t04",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:14.235299Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:15.259365Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t05.json",
+      "id": "range_u100_t05",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:14.796334Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:15.674494Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t06.json",
+      "id": "range_u100_t06",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:15.267848Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:16.093939Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t07.json",
+      "id": "range_u100_t07",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:15.682320Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:16.457860Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t08.json",
+      "id": "range_u100_t08",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:16.102921Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:16.818172Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t09.json",
+      "id": "range_u100_t09",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:16.466835Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:17.134021Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t10.json",
+      "id": "range_u100_t10",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:16.826563Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:17.444155Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t11.json",
+      "id": "range_u100_t11",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:17.142207Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:17.762273Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t12.json",
+      "id": "range_u100_t12",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:17.453291Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:18.065169Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t13.json",
+      "id": "range_u100_t13",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:17.770809Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:18.357963Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t14.json",
+      "id": "range_u100_t14",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:18.073596Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:18.636219Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t15.json",
+      "id": "range_u100_t15",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:18.366612Z",
+      "status": "completed"
+    },
+    {
+      "attempts": 1,
+      "completed": "2026-05-19T09:00:18.907758Z",
+      "error": null,
+      "expected_output": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu_clean/jobs/range_u100_t16.json",
+      "id": "range_u100_t16",
+      "phase": "sweep",
+      "started": "2026-05-19T09:00:18.640116Z",
+      "status": "completed"
+    }
+  ],
+  "meta": {
+    "completed": "2026-05-19T09:00:18.915784Z",
+    "manifest_path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/exp6_aris_cpu/manifest.json",
+    "project": "pipeann_r116_exp6_aris_cpu",
+    "started": "2026-05-19T08:56:41.390001Z"
+  },
+  "phases": [
+    {
+      "depends_on": [],
+      "name": "sweep",
+      "status": "completed"
+    }
+  ]
+}
