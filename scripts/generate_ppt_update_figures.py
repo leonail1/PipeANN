@@ -285,10 +285,83 @@ def write_demand1_plots() -> None:
     plt.close(fig)
 
 
+def write_exp6_worst_graph_plot() -> None:
+    PPT_UPDATES.mkdir(parents=True, exist_ok=True)
+    rows = [
+        row
+        for row in load_exp6_rows()
+        if row["selector_type"] == "intersect"
+        and row["bucket"] == "u50"
+        and (row.get("selected_route") or row.get("route")) == "graph"
+        and row.get("chosen_L") == "300"
+    ]
+    rows = sorted(rows, key=lambda row: row["threads_i"])
+    with (PPT_UPDATES / "exp6_worst_graph_thread_latency.csv").open("w", newline="", encoding="utf-8") as f:
+        fieldnames = [
+            "threads",
+            "avg_latency_ms",
+            "p50_query_latency_ms",
+            "p95_query_latency_ms",
+            "p99_query_latency_ms",
+            "recall@10",
+            "selector_type",
+            "bucket",
+            "selected_route",
+            "chosen_L",
+        ]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    "threads": row["threads_i"],
+                    "avg_latency_ms": row["avg_ms"],
+                    "p50_query_latency_ms": float(row["p50_latency_us"]) / 1000.0,
+                    "p95_query_latency_ms": float(row["p95_latency_us"]) / 1000.0,
+                    "p99_query_latency_ms": float(row["p99_latency_us"]) / 1000.0,
+                    "recall@10": row.get("recall@10"),
+                    "selector_type": row["selector_type"],
+                    "bucket": row["bucket"],
+                    "selected_route": row.get("selected_route") or row.get("route"),
+                    "chosen_L": row.get("chosen_L"),
+                }
+            )
+
+    threads = [row["threads_i"] for row in rows]
+    fig, ax = plt.subplots(figsize=(8.4, 4.6), constrained_layout=True)
+    series = [
+        ("avg", [row["avg_ms"] for row in rows], "#dc2626", "o"),
+        ("query p50", [float(row["p50_latency_us"]) / 1000.0 for row in rows], "#2563eb", "s"),
+        ("query p95", [float(row["p95_latency_us"]) / 1000.0 for row in rows], "#f59e0b", "^"),
+    ]
+    for label, values, color, marker in series:
+        ax.plot(threads, values, marker=marker, linewidth=2.0, color=color, label=label)
+    ax.axhline(10.0, color="#111827", linestyle="--", linewidth=1.1, label="10 ms budget")
+    ax.set_xticks(threads)
+    ax.set_xlabel("Query threads")
+    ax.set_ylabel("Latency (ms)")
+    ax.set_title("Exp6 worst graph workload: intersect-u50, graph L=300")
+    ax.set_ylim(4.5, 12.0)
+    ax.grid(axis="y", alpha=0.28)
+    ax.legend(ncol=3, loc="upper left")
+    ax.annotate(
+        "conservative budget: 14 threads",
+        xy=(14, next(row["avg_ms"] for row in rows if row["threads_i"] == 14)),
+        xytext=(-96, 18),
+        textcoords="offset points",
+        arrowprops={"arrowstyle": "->", "lw": 0.8, "color": "#374151"},
+        fontsize=8,
+    )
+    fig.savefig(PPT_UPDATES / "exp6_worst_graph_thread_latency.png", dpi=240)
+    fig.savefig(PPT_UPDATES / "exp6_worst_graph_thread_latency.pdf")
+    plt.close(fig)
+
+
 def main() -> None:
     write_exp6_plots()
     write_yfcc_label_plot()
     write_demand1_plots()
+    write_exp6_worst_graph_plot()
     print("wrote updated exp6 and YFCC label-space plots")
 
 

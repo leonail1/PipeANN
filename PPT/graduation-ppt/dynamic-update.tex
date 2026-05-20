@@ -226,7 +226,7 @@
         \end{tikzpicture}
         }
         \vspace{0.08em}
-        \includegraphics[width=1.00\linewidth,height=0.36\textheight,keepaspectratio]{\pqexp/exp6_query_thread_budget/latency_percentiles_equality_highres.png}
+        \includegraphics[width=1.00\linewidth,height=0.36\textheight,keepaspectratio]{\pqexp/ppt_updates/exp6_worst_graph_thread_latency.png}
 
         \column{0.40\textwidth}
         \begin{minipage}{0.98\linewidth}
@@ -251,8 +251,8 @@
             \textbf{16 线程依据}
             \vspace{0.12em}
             \begin{itemize}
-                \item 已重新完整执行 1--16 线程 sweep，旧图中 16 线程异常下降的问题不再出现。
-                \item 生产侧采用保守线程预算：高并发图搜索点接近 10ms 时跳过在线标定，避免与前台查询争用。
+                \item 图中只取图搜索最差点：intersect-u50，graph，$L=300$。
+                \item 14 线程仍在 10ms 预算内；15/16 线程超过预算，因此高并发时跳过在线标定。
             \end{itemize}
         \end{minipage}
     \end{columns}
