@@ -226,7 +226,7 @@
         \end{tikzpicture}
         }
         \vspace{0.08em}
-        \includegraphics[width=1.00\linewidth,height=0.36\textheight,keepaspectratio]{\pqexp/ppt_updates/exp6_worst_graph_thread_latency.png}
+        \includegraphics[width=1.00\linewidth,height=0.36\textheight,keepaspectratio]{\pqexp/ppt_updates/exp6_l200_graph_thread_latency.png}
 
         \column{0.40\textwidth}
         \begin{minipage}{0.98\linewidth}
@@ -251,8 +251,8 @@
             \textbf{16 线程依据}
             \vspace{0.12em}
             \begin{itemize}
-                \item 图中只取图搜索最差点：intersect-u50，graph，$L=300$。
-                \item 14 线程仍在 10ms 预算内；15/16 线程超过预算，因此高并发时跳过在线标定。
+                \item 图中取 $L=200$ 下最慢 graph 点：range-u75，recall@10 为 98.60。
+                \item 仅展示 avg、p95 与 10ms budget；1--16 线程均低于预算。
             \end{itemize}
         \end{minipage}
     \end{columns}
