@@ -112,6 +112,16 @@ See [Application Integrations](docs/application-integrations.md) for integration
 If you use PipeANN in your research, please cite our papers:
 
 ```bibtex
+@misc{arxiv26pipeannfilter,
+      title={PipeANN-Filter: An Efficient Filtered Vector Search System on SSD}, 
+      author={Hao Guo and Jiwu Shu and Youyou Lu},
+      year={2026},
+      eprint={2605.17992},
+      archivePrefix={arXiv},
+      primaryClass={cs.OS},
+      url={https://arxiv.org/abs/2605.17992}, 
+}
+
 @inproceedings{fast26odinann,
   author    = {Hao Guo and Youyou Lu},
   title     = {OdinANN: Direct Insert for Consistently Stable Performance 
