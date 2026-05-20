@@ -42,6 +42,7 @@
 \newcommand{\ok}{\textcolor{green!45!black}{通过}}
 \newcommand{\warn}{\textcolor{orange!85!black}{部分通过}}
 \newcommand{\bad}{\textcolor{red!75!black}{未达标}}
+\newcommand{\pqexp}{../../experiments/r116_suite_pq16_aris_20260520_072453}
 
 \begin{document}
 
@@ -61,11 +62,11 @@
         \textbf{需求点} & \textbf{状态} & \textbf{备注} \\
         \midrule
         动态增量混合索引 & 完成 & 10k 以内走纯内存精确近邻搜索，超过阈值后落盘为磁盘图。 \\
-        查询 10@10 召回率稳定 $>$98\% & 完成 &  \\
+        查询 10@10 召回率稳定 $>$98\% & 部分完成 & PPT 口径 per-bucket calibration 全部 $\geq$98；固定 $L=100$ 诊断中有低于 98 的点。 \\
         标量等值与范围查询 & 完成 &  \\
-        联合向量近似查询时延 $<$10ms & 完成 &  \\
-        内存限制 30M 左右 & 完成 &  \\
-        索引膨胀率不能高于原始向量 1 倍 & 部分完成 & 目前 R=116 情况下索引膨胀率略超；也可以使用 R=75，但插入删除会对图质量有比较大的影响。 \\
+        联合向量近似查询时延 $<$10ms & 部分完成 & 单线程 calibrated exp4 全部 $<$6.0ms；线程 sweep 为 319/320，intersect-u50 的 15 线程点为 10.33ms。 \\
+        内存限制 30M 左右 & 部分完成 & PQ16 常驻内存 adjusted RSS 为 27.98--32.41MiB；mmap/no-cache 更低但延迟代价较大。 \\
+        索引膨胀率不能高于原始向量 1 倍 & 部分完成 & R=116/PQ16 下 1M 额外索引约为原始向量 2.03 倍；主要来自磁盘图。 \\
         \bottomrule
     \end{tabular}
 \end{frame}
@@ -225,7 +226,7 @@
         \end{tikzpicture}
         }
         \vspace{0.08em}
-        \includegraphics[width=1.00\linewidth,height=0.36\textheight,keepaspectratio]{../../experiments/r116_suite/exp6_aris_cpu_clean/latency_percentiles_equality_highres.png}
+        \includegraphics[width=1.00\linewidth,height=0.36\textheight,keepaspectratio]{\pqexp/exp6_query_thread_budget/latency_percentiles_equality_highres.png}
 
         \column{0.40\textwidth}
         \begin{minipage}{0.98\linewidth}
@@ -244,14 +245,14 @@
             \begin{itemize}
                 \item 采样选择性点，测 prefilter / graph 在 recall@10 $\geq$ 98 下的延迟。
                 \item 取两路延迟相近处为 $\tau_m$，写入索引元数据。
-                \item 前台搜索线程数低于 16 才启动标定查询；标定期间暂停插入/删除。
+                \item 当前采用保守界线：前台搜索线程数不超过 14 时启动标定查询；标定期间暂停插入/删除。
             \end{itemize}
             \vspace{0.12em}
             \textbf{16 线程依据}
             \vspace{0.12em}
             \begin{itemize}
-                \item r116 的 1--16 线程实验中，16 线程全选择性最大 avg latency 为 8.90ms，未超过 10ms。
-                \item 因此采用“前台搜索线程数低于 16 才启动标定”的界线。
+                \item r116/PQ16 的线程实验测得 319/320 个点；intersect-u50 在 15 线程为 10.33ms，超过 10ms。
+                \item 已测 16 线程点为 19/20，最大 avg latency 为 8.75ms；缺失点不用于支持完整 16 线程 claim。
             \end{itemize}
         \end{minipage}
     \end{columns}
@@ -345,26 +346,26 @@
     \begin{columns}[T,onlytextwidth]
         \column{0.49\textwidth}
         \scriptsize
-        \textbf{左图：直接构建 vs 增量插入。} 分别直接构建 250k、500k、750k、1M 索引，并与从不同初始规模索引插入到相同规模后的索引比较；两类索引在同一个 $L$ 下执行搜索，用于衡量直接构建和增量插入得到的图质量差距。实验中召回率差距在 0.5\% 以内，基本没有影响。
+        \textbf{左图：直接构建 vs 增量插入。} 分别直接构建 250k、500k、750k、1M 索引，并与从不同初始规模索引插入到相同规模后的索引比较；两类索引在固定 $L=100$ 下执行搜索。PQ16/R116 下召回随规模增长下降，1M 直接构建约 97.07，增量插入约 95.09。
 
         \column{0.49\textwidth}
         \scriptsize
-        \textbf{右图：删除 / 重插入后的图质量。} 先构建 1M 索引，删除 250k 向量得到 750k 索引，再插入 250k 向量回到 1M，对三个索引状态分别运行搜索测试。结果显示选择性超过 50\% 后 recall 差异缩小到 1\% 以内。
+        \textbf{右图：删除 / 重插入后的图质量。} 先构建 1M 索引，删除 250k 向量得到 750k 索引，再插入 250k 向量回到 1M。per-bucket calibrated route/L 的 30 行主结果全部 $\geq$98；固定 graph $L=100$ 仅作为诊断，最低 recall 为 82.48。
     \end{columns}
     \vspace{0.4em}
 
     \scriptsize
-    \textcolor{red}{结论：删除和插入操作对图质量影响较小。}
+    \textcolor{red}{结论：PQ16/R116 需要依赖 per-bucket calibration 保证 recall；固定 $L=100$ 不能作为 98 recall 的充分依据。}
     \vspace{0.2em}
 
     \begin{columns}[c,onlytextwidth]
         \column{0.50\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.52\textheight,keepaspectratio]{../../experiments/r116_suite/exp2_stage_recall_build_vs_insert/seed_sweep_recall.png}
+        \includegraphics[width=0.98\linewidth,height=0.52\textheight,keepaspectratio]{\pqexp/exp2_stage_recall_build_vs_insert/seed_sweep_recall.png}
 
         \column{0.50\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.52\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_delete_reinsert_selectivity/fixed_graph_recall_high_selectivity.png}
+        \includegraphics[width=0.98\linewidth,height=0.52\textheight,keepaspectratio]{\pqexp/exp4_delete_reinsert_selectivity/fixed_graph_recall_high_selectivity.png}
     \end{columns}
 \end{frame}
 
@@ -375,11 +376,11 @@
         \small
         在初始 1M 索引上插入向量的同时执行前台搜索，测量搜索延迟与 QPS，结果如下图。
 
-        \textcolor{red}{结论：在插入线程数小于 4 时，向量插入并不会对前台搜索性能产生显著影响。}
+        \textcolor{red}{结论：1--2 个插入线程下影响较小；4 个插入线程会带来更明显的尾延迟波动。}
     \end{minipage}
     \vfill
 
-    \includegraphics[width=0.94\linewidth,height=0.64\textheight,keepaspectratio]{../../experiments/r116_suite/exp3_search_during_insert/search_during_insert_selectivity.png}
+    \includegraphics[width=0.94\linewidth,height=0.64\textheight,keepaspectratio]{\pqexp/exp3_search_during_insert/search_during_insert_selectivity.png}
 \end{frame}
 
 \begin{frame}[c]{需求 3：选择性查询延迟/QPS}
@@ -387,21 +388,21 @@
     \begin{minipage}{0.94\textwidth}
         \centering
         \scriptsize
-        1M 索引；等值 / 范围查询；所有点 recall@10 $\geq$ 98。
+        1M 索引；等值 / 范围查询；PQ16 常驻内存；per-bucket 选择满足 recall@10 $\geq$98 的最快 route/L。
 
-        \textcolor{red}{结论：全部选择性 avg latency $<$ 10ms。}
+        \textcolor{red}{结论：20 个选择性点全部 recall@10 $\geq$98，最大 avg latency 为 6.00ms。}
     \end{minipage}
     \vfill
 
-    \includegraphics[width=0.98\linewidth,height=0.62\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_intersect_range_selectivity/intersect_range_latency_qps.png}
+    \includegraphics[width=0.98\linewidth,height=0.62\textheight,keepaspectratio]{\pqexp/exp4_intersect_range_selectivity/intersect_range_latency_qps.png}
 \end{frame}
 
-\begin{frame}[c]{需求 4：单查询 RSS}
+\begin{frame}[c]{需求 4：单查询 adjusted RSS}
     \centering
     \begin{columns}[c,onlytextwidth]
         \column{0.66\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{../../experiments/r116_suite/exp4_intersect_range_selectivity/rss_by_selectivity.png}
+        \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{\pqexp/pq16_pq_memory_adjusted_rss_vs_selectivity.png}
 
         \column{0.32\textwidth}
         \centering
@@ -411,25 +412,49 @@
             \textbf{测量方法}
 
             \vspace{0.25em}
-            只加载必要文件到内存，完成单个查询的搜索流程并返回结果；不加载 query file、groundtruth 等其他文件。
+            使用 \texttt{/usr/bin/time} 记录搜索进程峰值 RSS，并按实际文件大小扣除 query bin 与 GT。
 
             \vspace{0.25em}
             \textbf{实测结果}
 
             \vspace{0.25em}
-            20 个点范围为 \textbf{12.39--18.15 MiB}；等值查询峰值 17.17 MiB，范围查询峰值 18.15 MiB。
+            PQ16 + PQ code 常驻内存时，20 个点 adjusted RSS 为 \textbf{27.98--32.41 MiB}；标签、sidecar、PQ code resident pages 与运行 buffer 均计入。
 
             \vspace{0.25em}
-            \textcolor{red}{结论：满足 30MB 内存要求。}
+            \textcolor{red}{结论：接近 30MiB 目标，但不能严格表述为低于 30MiB。}
         \end{minipage}
     \end{columns}
+\end{frame}
+
+\begin{frame}[c]{PQ code 驻留方式对照}
+    \centering
+    \begin{columns}[c,onlytextwidth]
+        \column{0.50\textwidth}
+        \centering
+        {\tiny \textbf{PQ code 常驻内存：延迟}}\par
+        \includegraphics[width=0.98\linewidth,height=0.30\textheight,keepaspectratio]{\pqexp/pq16_pq_memory_latency_vs_selectivity.png}
+        \vspace{0.15em}
+        {\tiny \textbf{PQ code 常驻内存：adjusted RSS}}\par
+        \includegraphics[width=0.98\linewidth,height=0.30\textheight,keepaspectratio]{\pqexp/pq16_pq_memory_adjusted_rss_vs_selectivity.png}
+
+        \column{0.50\textwidth}
+        \centering
+        {\tiny \textbf{PQ mmap/drop-cache：延迟}}\par
+        \includegraphics[width=0.98\linewidth,height=0.30\textheight,keepaspectratio]{\pqexp/pq16_pq_disk_no_cache_latency_vs_selectivity.png}
+        \vspace{0.15em}
+        {\tiny \textbf{PQ mmap/drop-cache：adjusted RSS}}\par
+        \includegraphics[width=0.98\linewidth,height=0.30\textheight,keepaspectratio]{\pqexp/pq16_pq_disk_no_cache_adjusted_rss_vs_selectivity.png}
+    \end{columns}
+    \vspace{0.25em}
+
+    {\scriptsize \textcolor{red}{结论：PPT 主口径采用 PQ code 常驻内存；mmap/drop-cache 将 RSS 降到 12.74--18.71MiB，但最高延迟达到 53.54ms，仅作为低内存对照。}}
 \end{frame}
 
 \begin{frame}[c]{需求 5：索引空间组成}
     \centering
     \begin{minipage}{0.92\textwidth}
         \small
-        R=116 下，额外索引文件主要来自磁盘图；1M 数据规模下额外空间约为原始向量的 2.06 倍。
+        R=116/PQ16 下，额外索引文件主要来自磁盘图；1M 数据规模下额外空间约为原始向量的 2.03 倍。
         \vspace{0.5em}
 
         \centering
@@ -439,10 +464,10 @@
             \toprule
             \textbf{规模} & \textcolor{red}{\textbf{原始向量}} & \textbf{磁盘图} & \textbf{PQ 压缩向量} & \textbf{PQ 码本} & \textbf{标签位图} & \textcolor{red}{\textbf{额外合计}} & \textcolor{red}{\textbf{额外/原始}} \\
             \midrule
-            250k & \textcolor{red}{122.07} & 244.14 & 7.63 & 0.13 & 0.30 & \textcolor{red}{252.20} & \textcolor{red}{2.07x} \\
-            500k & \textcolor{red}{244.14} & 488.29 & 15.26 & 0.13 & 0.60 & \textcolor{red}{504.27} & \textcolor{red}{2.07x} \\
-            750k & \textcolor{red}{366.21} & 732.43 & 22.89 & 0.13 & 0.89 & \textcolor{red}{756.34} & \textcolor{red}{2.07x} \\
-            1M & \textcolor{red}{488.28} & 976.57 & 30.52 & 0.13 & 1.19 & \textcolor{red}{1008.41} & \textcolor{red}{2.06x} \\
+            250k & \textcolor{red}{122.07} & 244.14 & 3.81 & 0.13 & 0.22 & \textcolor{red}{248.31} & \textcolor{red}{2.03x} \\
+            500k & \textcolor{red}{244.14} & 488.29 & 7.63 & 0.13 & 0.44 & \textcolor{red}{496.49} & \textcolor{red}{2.03x} \\
+            750k & \textcolor{red}{366.21} & 732.43 & 11.44 & 0.13 & 0.67 & \textcolor{red}{744.67} & \textcolor{red}{2.03x} \\
+            1M & \textcolor{red}{488.28} & 976.57 & 15.26 & 0.13 & 0.89 & \textcolor{red}{992.85} & \textcolor{red}{2.03x} \\
             \bottomrule
         \end{tabular}
 
