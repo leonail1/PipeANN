@@ -306,7 +306,7 @@
 
         \column{0.48\textwidth}
         \centering
-        \includegraphics[width=\linewidth,height=0.36\textheight,keepaspectratio]{../../experiments/label_space_ratio/yfcc_label_space_comparison.png}
+        \includegraphics[width=\linewidth,height=0.36\textheight,keepaspectratio]{../../experiments/label_space_ratio/sift1m_label_space_comparison.png}
         \vspace{0.2em}
         \begin{minipage}{0.96\linewidth}
             \tiny
@@ -314,9 +314,9 @@
             \textbf{实验结果}
             \vspace{0.12em}
             \begin{itemize}
-                \item YFCC10M 原始 spmat 标签文件为 901.87 MiB。
-                \item 构建后的混合标签 sidecar 为 343.41 MiB，约为原始 spmat 的 38.08\%。
-                \item 对比口径只保留 YFCC 原始 spmat 与构建后混合标签。
+                \item SIFT1M/r116 原始 spmat 标签文件为 30.24 MiB。
+                \item 构建后的混合标签 sidecar 为 0.89 MiB，约为原始 spmat 的 2.94\%。
+                \item 对比口径只保留 SIFT1M/r116 原始 spmat 与构建后混合标签。
             \end{itemize}
             \vspace{0.08em}
             \textcolor{red}{结论：混合标签预处理在保持标签语义的同时，带来明确的磁盘空间收益。}

@@ -153,18 +153,19 @@ def write_exp6_plots() -> None:
     plt.close(fig)
 
 
-def write_yfcc_label_plot() -> None:
+def write_sift1m_label_plot() -> None:
     table = Path("experiments/label_space_ratio/table.csv")
     rows = list(csv.DictReader(table.open(newline="", encoding="utf-8")))
-    yfcc = next(row for row in rows if row["dataset"] == "YFCC10M")
+    sift = next(row for row in rows if row["dataset"] == "SIFT1M/r116")
     values = [
-        float(yfcc["original_mib"]),
-        float(yfcc["processed_mib"]),
+        float(sift["original_mib"]),
+        float(sift["processed_mib"]),
     ]
-    labels = ["YFCC original spmat", "PipeANN hybrid labels"]
+    labels = ["SIFT1M/r116 original spmat", "PipeANN hybrid labels"]
     colors = ["#64748b", "#0f766e"]
     fig, ax = plt.subplots(figsize=(7.2, 4.4), constrained_layout=True)
     bars = ax.bar(labels, values, color=colors, width=0.58)
+    ax.set_ylim(0, max(values) * 1.24)
     for bar, value in zip(bars, values):
         ax.annotate(
             f"{value:.2f} MiB",
@@ -176,12 +177,12 @@ def write_yfcc_label_plot() -> None:
             fontsize=10,
         )
     ax.set_ylabel("Disk space (MiB)")
-    ax.set_title("YFCC10M label storage: original spmat vs hybrid sidecar")
+    ax.set_title("SIFT1M/r116 label storage: original spmat vs hybrid sidecar")
     ax.grid(axis="y", alpha=0.25)
-    ratio = float(yfcc["processed_over_original_percent"])
-    ax.text(0.5, 0.88, f"Hybrid = {ratio:.2f}% of original", transform=ax.transAxes, ha="center", fontsize=11)
-    fig.savefig("experiments/label_space_ratio/yfcc_label_space_comparison.png", dpi=240)
-    fig.savefig("experiments/label_space_ratio/yfcc_label_space_comparison.pdf")
+    ratio = float(sift["processed_over_original_percent"])
+    ax.text(0.5, 0.82, f"Hybrid = {ratio:.2f}% of original", transform=ax.transAxes, ha="center", fontsize=11)
+    fig.savefig("experiments/label_space_ratio/sift1m_label_space_comparison.png", dpi=240)
+    fig.savefig("experiments/label_space_ratio/sift1m_label_space_comparison.pdf")
     plt.close(fig)
 
 
@@ -354,10 +355,10 @@ def write_exp6_l200_graph_plot() -> None:
 
 def main() -> None:
     write_exp6_plots()
-    write_yfcc_label_plot()
+    write_sift1m_label_plot()
     write_demand1_plots()
     write_exp6_l200_graph_plot()
-    print("wrote updated exp6 and YFCC label-space plots")
+    print("wrote updated exp6 and SIFT1M label-space plots")
 
 
 if __name__ == "__main__":
