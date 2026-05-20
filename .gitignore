@@ -9,6 +9,7 @@ experiments/**
 !experiments/**/*.md
 !experiments/**/*.sh
 !experiments/**/aris_cpu_exp6_runner.py
+!experiments/**/measure_label_space.py
 experiments/*_backup*/
 experiments/*_backup*/**
 

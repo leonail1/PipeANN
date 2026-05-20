@@ -194,7 +194,7 @@
 \begin{frame}[c]{$\tau_m$ 标定与重新标定}
     \centering
     \begin{columns}[c,onlytextwidth]
-        \column{0.58\textwidth}
+        \column{0.55\textwidth}
         \centering
         \resizebox{0.98\linewidth}{!}{%
         \begin{tikzpicture}[
@@ -223,44 +223,89 @@
         \end{tikzpicture}
         }
 
-        \column{0.38\textwidth}
+        \column{0.41\textwidth}
         \begin{minipage}{0.98\linewidth}
             \tiny
             \raggedright
             \textbf{曲线含义}
-            \vspace{0.2em}
+            \vspace{0.12em}
             \begin{itemize}
                 \item 先过滤：选择性越高，候选越多，延迟上升。
                 \item 图搜索：选择性越高，有效点越密，搜索范围缩小。
                 \item $\tau_m$：两条曲线附近的切换点。
             \end{itemize}
+            \vspace{0.12em}
+            \textbf{标定方式}
+            \vspace{0.12em}
+            \begin{itemize}
+                \item 采样选择性点，测 prefilter / graph 在 recall@10 $\geq$ 98 下的延迟。
+                \item 取两路延迟相近处为 $\tau_m$，写入索引元数据。
+                \item 前台搜索线程数低于 16 才启动标定查询；标定期间暂停插入/删除。
+            \end{itemize}
         \end{minipage}
     \end{columns}
 \end{frame}
 
-\begin{frame}[c]{$\tau_m$ 标定与重新标定}
+\begin{frame}[c]{混合标签方案}
     \centering
     \begin{columns}[c,onlytextwidth]
-        \column{0.39\textwidth}
-        \begin{minipage}{0.98\linewidth}
+        \column{0.50\textwidth}
+        \centering
+        \resizebox{0.98\linewidth}{!}{%
+        \begin{tikzpicture}[
+            font=\scriptsize,
+            box/.style={draw, rounded corners=2pt, align=center, minimum height=0.72cm, text width=1.85cm, fill=gray!8},
+            smallbox/.style={draw, rounded corners=2pt, align=center, minimum height=0.68cm, text width=1.92cm},
+            arrow/.style={-{Stealth[length=1.8mm]}, line width=0.48pt}
+        ]
+            \node[box, fill=blue!8] (spmat) at (0,2.05) {原始标签\\spmat};
+            \node[box, fill=yellow!14] (count) at (2.55,2.05) {统计每个\\标签候选数};
+            \node[smallbox, fill=green!12] (posting) at (5.12,2.82) {低选择性\\posting list};
+            \node[smallbox, fill=purple!10] (bitmap) at (5.12,1.28) {高选择性\\bitmap};
+            \node[box, fill=red!7] (sidecar) at (7.72,2.05) {混合标签\\sidecar};
+            \node[box, fill=gray!5] (query) at (10.18,2.05) {查询时\\快速求交};
+
+            \draw[arrow] (spmat) -- (count);
+            \draw[arrow] (count) -- node[above, sloped, font=\tiny] {候选少} (posting);
+            \draw[arrow] (count) -- node[below, sloped, font=\tiny] {候选多} (bitmap);
+            \draw[arrow] (posting) -- (sidecar);
+            \draw[arrow] (bitmap) -- (sidecar);
+            \draw[arrow] (sidecar) -- (query);
+
+            \node[font=\tiny, align=center, text width=9.2cm, red!75!black] at (5.08,0.28)
+                {按标签选择性选择表示：小集合用 posting list 省空间，大集合用 bitmap 保持稳定求交速度。};
+        \end{tikzpicture}
+        }
+        \vspace{0.35em}
+        \begin{minipage}{0.96\linewidth}
             \tiny
             \raggedright
-            \textbf{标定方式}
-            \vspace{0.2em}
+            \textbf{设计要点}
+            \vspace{0.12em}
             \begin{itemize}
-                \item 采样选择性点，测 prefilter / graph route 在 recall@10 $\geq$ 98 下的延迟。
-                \item 取两路延迟相近处为 $\tau_m$，写入索引元数据。
-                \item 插入/删除改变规模或标签分布后，后台重新标定。
-                \item 标定查询启动前检查负载；前台搜索线程数低于 16 才执行。
-                \item 标定期间暂停插入/删除。
+                \item sidecar 从原始 spmat 构建，不改变图索引结构。
+                \item 查询先估计候选规模，再在 prefilter / graph route 间切换。
+                \item posting 与 bitmap 统一在同一个标签接口中求交。
             \end{itemize}
-            \vspace{0.15em}
-            \textcolor{red}{1--16 线程 equality 查询：全部选择性 avg $<$ 10ms。}
         \end{minipage}
 
-        \column{0.59\textwidth}
+        \column{0.48\textwidth}
         \centering
-        \includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{../../experiments/r116_suite/exp6_aris_cpu_clean/latency_percentiles_equality_highres.png}
+        \includegraphics[width=\linewidth,height=0.36\textheight,keepaspectratio]{../../experiments/label_space_ratio/label_space_ratio.png}
+        \vspace{0.2em}
+        \begin{minipage}{0.96\linewidth}
+            \tiny
+            \raggedright
+            \textbf{实验结果}
+            \vspace{0.12em}
+            \begin{itemize}
+                \item 5 个数据集 processed/original label size：2.94\%--38.08\%。
+                \item 等值 / 范围全选择性：recall@10 $\geq$ 98，avg latency $\leq$ 8.60ms。
+                \item 1--16 线程搜索：320 组实验全部 avg latency $\leq$ 8.90ms。
+            \end{itemize}
+            \vspace{0.08em}
+            \textcolor{red}{结论：混合表示没有造成标签空间膨胀，并保持 10ms 平均延迟目标。}
+        \end{minipage}
     \end{columns}
 \end{frame}
 
