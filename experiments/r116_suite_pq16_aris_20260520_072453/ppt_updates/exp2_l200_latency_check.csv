@@ -1,0 +1,4 @@
+metric,value
+max_avg_latency_ms,9.338945
+min_recall@10,98.382000
+fixed_L,200

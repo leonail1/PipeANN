@@ -1327,8 +1327,8 @@ def run_exp6(repo: Path, args: argparse.Namespace, assets: dict, total_n: int, m
                 })
                 rows.append(measured)
                 append_jsonl(out / "results.jsonl", measured)
-                if status == "ok" and not within_budget:
-                    break
+                # Keep the configured thread sweep complete; threshold rows below
+                # identify the first point beyond budget without truncating data.
 
     summary, threshold_rows = summarize_exp6_rows(rows, args.exp6_latency_budget_ms)
     write_csv(out / "table.csv", rows)
