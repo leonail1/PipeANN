@@ -1,0 +1,6 @@
+claim,status,evidence
+PQ16 lowers PQ-resident adjusted RSS to around 30 MiB,WARN,pq_memory max adjusted RSS = 32.41 MiB
+PQ16 mmap/drop-cache lowers adjusted RSS materially,PASS,pq_disk_no_cache max adjusted RSS = 18.71 MiB
+PPT calibrated route/L reaches recall@10 >= 98 in exp4,PASS,"exp4 rows=20, failed_recall_rows=0, min recall=98.550003"
+Exp6 covers full 1..16 thread sweep,FAIL,exp6 rows=319 expected=320
+16-thread avg latency remains below 10 ms,PASS,thread16 max avg latency = 8.751 ms

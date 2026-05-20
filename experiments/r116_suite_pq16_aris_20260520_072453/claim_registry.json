@@ -1,0 +1,17 @@
+{
+  "claims": [
+    "PQ16 adjusted RSS under PQ resident memory",
+    "PQ16 adjusted RSS under PQ mmap + drop-cache/no-cache",
+    "Latency cost of PQ mmap + drop-cache/no-cache",
+    "PPT calibrated route/L recall@10 >= 98 across selectivities"
+  ],
+  "evidence": [
+    "pq16_pq_residency_compare.csv",
+    "selected_route_l.csv",
+    "calibration_results.csv",
+    "pq16_pq_residency_metadata.json",
+    "pq16_pq_residency_input_inventory.csv",
+    "raw/*.jsonl",
+    "logs/*.json"
+  ]
+}

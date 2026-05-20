@@ -1,0 +1,115 @@
+{
+  "K": 10,
+  "L_candidates": [
+    10,
+    20,
+    30,
+    40,
+    50,
+    75,
+    100,
+    125,
+    150,
+    200,
+    300,
+    400,
+    600,
+    800,
+    1000,
+    1500,
+    2000
+  ],
+  "R": 116,
+  "beamwidth": 4,
+  "buckets": [
+    {
+      "bucket": "u1e-03",
+      "selectivity": 0.001
+    },
+    {
+      "bucket": "u3e-03",
+      "selectivity": 0.003
+    },
+    {
+      "bucket": "u1e-02",
+      "selectivity": 0.01
+    },
+    {
+      "bucket": "u5e-02",
+      "selectivity": 0.05
+    },
+    {
+      "bucket": "u1e-01",
+      "selectivity": 0.1
+    },
+    {
+      "bucket": "u25",
+      "selectivity": 0.25
+    },
+    {
+      "bucket": "u30",
+      "selectivity": 0.3
+    },
+    {
+      "bucket": "u50",
+      "selectivity": 0.5
+    },
+    {
+      "bucket": "u75",
+      "selectivity": 0.75
+    },
+    {
+      "bucket": "u100",
+      "selectivity": 1.0
+    }
+  ],
+  "build_L": 220,
+  "build_command": [
+    "/mnt/bak3/lzg/PipeANN-github/build/tests/build_disk_index",
+    "float",
+    "/mnt/bak3/lzg/PipeANN-github/data/sift1m/sift_base.bin",
+    "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite_pq16_aris_20260520_072453/tmp/direct_1m_pq16",
+    "116",
+    "220",
+    "16",
+    "64",
+    "32",
+    "l2",
+    "pq",
+    "spmat",
+    "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/base_1m.spmat"
+  ],
+  "created_at": "2026-05-20T07:27:34.311929+00:00",
+  "git_head": "fc07195c82d749a452f77cbf771fadab0cd7e2c0",
+  "index_prefix": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite_pq16_aris_20260520_072453/tmp/direct_1m_pq16",
+  "label_memory_counted": true,
+  "mem_L": 0,
+  "modes": {
+    "pq_disk_no_cache": {
+      "env": {
+        "PIPEANN_PQ_MMAP": "1",
+        "PIPEANN_PQ_MMAP_DROP_CACHE": "1"
+      },
+      "label": "PQ code on disk, no memory cache"
+    },
+    "pq_memory": {
+      "env": {
+        "PIPEANN_PQ_MMAP": "0",
+        "PIPEANN_PQ_MMAP_DROP_CACHE": "0"
+      },
+      "label": "PQ code resident in memory"
+    }
+  },
+  "out_dir": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite_pq16_aris_20260520_072453",
+  "pq_bytes": 16,
+  "pq_header": {
+    "nchunks": 16,
+    "npoints": 1000000
+  },
+  "repo": "/mnt/bak3/lzg/PipeANN-github",
+  "rss_formula": "measured_peak_rss_kb - ceil(query_file_bytes/1024) - ceil(gt_file_bytes/1024)",
+  "selectors": [
+    "intersect",
+    "range"
+  ]
+}
