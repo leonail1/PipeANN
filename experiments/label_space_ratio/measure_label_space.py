@@ -174,7 +174,12 @@ def write_summary(rows: list[dict[str, Any]]) -> None:
     summary = {
         "evaluation_type": "file_size_accounting",
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "scope": "Original .spmat label files versus processed mixed densebit sidecar files.",
+        "scope": "Original .spmat base-label files versus processed mixed densebit sidecar files.",
+        "selector_scope_note": (
+            "The sidecar is built from the base label file and is selector-independent. "
+            "Equality/intersect/range queries share the same sidecar when their labels are encoded in the same spmat label domain; "
+            "a separate range-attribute file would need a separate measurement."
+        ),
         "row_count": len(rows),
         "min_processed_over_original_percent": min(
             row["processed_over_original_percent"] for row in rows
@@ -204,8 +209,9 @@ def write_readme(rows: list[dict[str, Any]]) -> None:
         "ARIS-style experiment record.",
         "",
         "- Evaluation type: `file_size_accounting`.",
-        "- Scope: original `.spmat` label files versus processed mixed densebit sidecar files.",
+        "- Scope: original `.spmat` base-label files versus processed mixed densebit sidecar files.",
         "- Measurement: byte counts from filesystem `stat`; no synthetic ground truth and no normalized score.",
+        "- Selector note: the sidecar is built from the base label file and is selector-independent. Equality/intersect/range queries share the same sidecar when their labels are encoded in the same `.spmat` label domain; a separate range-attribute file would need a separate measurement.",
         "- Reproduce: run `python3 experiments/label_space_ratio/measure_label_space.py` from the repo root on node6.",
         "",
         "## Outputs",

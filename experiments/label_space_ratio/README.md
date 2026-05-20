@@ -3,8 +3,9 @@
 ARIS-style experiment record.
 
 - Evaluation type: `file_size_accounting`.
-- Scope: original `.spmat` label files versus processed mixed densebit sidecar files.
+- Scope: original `.spmat` base-label files versus processed mixed densebit sidecar files.
 - Measurement: byte counts from filesystem `stat`; no synthetic ground truth and no normalized score.
+- Selector note: the sidecar is built from the base label file and is selector-independent. Equality/intersect/range queries share the same sidecar when their labels are encoded in the same `.spmat` label domain; a separate range-attribute file would need a separate measurement.
 - Reproduce: run `python3 experiments/label_space_ratio/measure_label_space.py` from the repo root on node6.
 
 ## Outputs

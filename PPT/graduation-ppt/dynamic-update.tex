@@ -194,8 +194,10 @@
 \begin{frame}[c]{$\tau_m$ 标定与重新标定}
     \centering
     \begin{columns}[c,onlytextwidth]
-        \column{0.55\textwidth}
+        \column{0.56\textwidth}
         \centering
+        {\tiny \textbf{标定曲线示意}}\par
+        \vspace{0.05em}
         \resizebox{0.98\linewidth}{!}{%
         \begin{tikzpicture}[
             scale=1.0,
@@ -222,8 +224,12 @@
             \node[font=\tiny, purple!70!black] at (4.70,0.82) {$s > \tau_m$};
         \end{tikzpicture}
         }
+        \vspace{0.18em}
+        {\tiny \textbf{1--16 线程搜索延迟}}\par
+        \vspace{0.05em}
+        \includegraphics[width=0.98\linewidth,height=0.25\textheight,keepaspectratio]{../../experiments/r116_suite/exp6_aris_cpu_clean/latency_percentiles_equality_highres.png}
 
-        \column{0.41\textwidth}
+        \column{0.40\textwidth}
         \begin{minipage}{0.98\linewidth}
             \tiny
             \raggedright
@@ -242,6 +248,13 @@
                 \item 取两路延迟相近处为 $\tau_m$，写入索引元数据。
                 \item 前台搜索线程数低于 16 才启动标定查询；标定期间暂停插入/删除。
             \end{itemize}
+            \vspace{0.12em}
+            \textbf{16 线程依据}
+            \vspace{0.12em}
+            \begin{itemize}
+                \item r116 的 1--16 线程实验中，16 线程全选择性最大 avg latency 为 8.90ms，未超过 10ms。
+                \item 因此采用“前台搜索线程数低于 16 才启动标定”的界线。
+            \end{itemize}
         \end{minipage}
     \end{columns}
 \end{frame}
@@ -251,6 +264,8 @@
     \begin{columns}[c,onlytextwidth]
         \column{0.50\textwidth}
         \centering
+        {\tiny \textbf{标签预处理手段}}\par
+        \vspace{0.05em}
         \resizebox{0.98\linewidth}{!}{%
         \begin{tikzpicture}[
             font=\scriptsize,
@@ -280,12 +295,13 @@
         \begin{minipage}{0.96\linewidth}
             \tiny
             \raggedright
-            \textbf{设计要点}
+            \textbf{标签表示}
             \vspace{0.12em}
             \begin{itemize}
-                \item sidecar 从原始 spmat 构建，不改变图索引结构。
-                \item 查询先估计候选规模，再在 prefilter / graph route 间切换。
-                \item posting 与 bitmap 统一在同一个标签接口中求交。
+                \item spmat：行是向量、列是标签，非零表示持有该标签。
+                \item posting list：\texttt{std::vector<uint32\_t>}，保存向量 id。
+                \item bitmap：\texttt{std::vector<uint64\_t>}，每个 bit 表示一个向量。
+                \item 每个标签持有一个 \texttt{DenseBitsetLabelEntryV2}，记录 encoding、候选数和 payload 位置。
             \end{itemize}
         \end{minipage}
 
@@ -299,9 +315,9 @@
             \textbf{实验结果}
             \vspace{0.12em}
             \begin{itemize}
+                \item 空间图测量 base spmat 到 mixed sidecar；同一标签文件可被等值 / 范围 selector 共用。
                 \item 5 个数据集 processed/original label size：2.94\%--38.08\%。
                 \item 等值 / 范围全选择性：recall@10 $\geq$ 98，avg latency $\leq$ 8.60ms。
-                \item 1--16 线程搜索：320 组实验全部 avg latency $\leq$ 8.90ms。
             \end{itemize}
             \vspace{0.08em}
             \textcolor{red}{结论：混合表示没有造成标签空间膨胀，并保持 10ms 平均延迟目标。}
