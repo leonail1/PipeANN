@@ -199,10 +199,13 @@ def write_plot(out_dir: Path, rows: list[dict]) -> Path | None:
         import matplotlib.pyplot as plt
 
         plt.rcParams.update({
-            "font.size": 10,
-            "axes.titlesize": 12,
-            "axes.labelsize": 10,
-            "legend.fontsize": 9,
+            "font.size": 13,
+            "axes.titlesize": 15,
+            "axes.labelsize": 13,
+            "xtick.labelsize": 11,
+            "ytick.labelsize": 11,
+            "legend.fontsize": 11,
+            "figure.titlesize": 16,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
         })

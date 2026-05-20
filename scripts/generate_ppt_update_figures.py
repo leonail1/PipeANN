@@ -15,6 +15,30 @@ ROOT = Path("experiments/r116_suite_pq16_aris_20260520_072453")
 EXP6 = ROOT / "exp6_query_thread_budget"
 EXP2_L200 = ROOT / "ppt_l200_exp2" / "exp2_stage_recall_build_vs_insert"
 PPT_UPDATES = ROOT / "ppt_updates"
+BUCKET_ORDER = ["u1e-03", "u3e-03", "u1e-02", "u5e-02", "u1e-01", "u25", "u30", "u50", "u75", "u100"]
+BUCKET_LABELS = {
+    "u1e-03": "0.1%",
+    "u3e-03": "0.3%",
+    "u1e-02": "1%",
+    "u5e-02": "5%",
+    "u1e-01": "10%",
+    "u25": "25%",
+    "u30": "30%",
+    "u50": "50%",
+    "u75": "75%",
+    "u100": "100%",
+}
+PPT_RC = {
+    "font.size": 13,
+    "axes.titlesize": 15,
+    "axes.labelsize": 13,
+    "xtick.labelsize": 11,
+    "ytick.labelsize": 11,
+    "legend.fontsize": 11,
+    "figure.titlesize": 16,
+    "figure.facecolor": "white",
+    "axes.facecolor": "white",
+}
 
 
 def load_exp6_rows() -> list[dict]:
@@ -27,6 +51,46 @@ def load_exp6_rows() -> list[dict]:
             row["p99_ms"] = float(row.get("p99_latency_us") or 0.0) / 1000.0
             rows.append(row)
     return rows
+
+
+def write_pq_residency_plots() -> None:
+    rows = list(csv.DictReader((ROOT / "pq16_pq_residency_compare.csv").open(newline="", encoding="utf-8")))
+    plt.rcParams.update(PPT_RC)
+    mode_titles = {
+        "pq_memory": "PQ code resident in memory",
+        "pq_disk_no_cache": "PQ code on disk, no cache",
+    }
+    metrics = [
+        ("latency_avg_ms", "Latency (ms)", "latency_vs_selectivity", "Avg latency"),
+        ("adjusted_rss_mib", "Adjusted RSS (MiB)", "adjusted_rss_vs_selectivity", "Adjusted RSS"),
+    ]
+    selector_styles = {
+        "intersect": ("intersect", "#2563eb", "o"),
+        "range": ("range", "#dc2626", "s"),
+    }
+    for mode, mode_title in mode_titles.items():
+        mode_rows = [row for row in rows if row["mode"] == mode]
+        for metric, ylabel, suffix, title in metrics:
+            fig, ax = plt.subplots(figsize=(8.8, 5.0), constrained_layout=True)
+            for selector, (label, color, marker) in selector_styles.items():
+                by_bucket = {row["bucket"]: row for row in mode_rows if row["selector_type"] == selector}
+                ordered = [by_bucket[bucket] for bucket in BUCKET_ORDER if bucket in by_bucket]
+                x = [BUCKET_ORDER.index(row["bucket"]) for row in ordered]
+                y = [float(row[metric]) for row in ordered]
+                ax.plot(x, y, marker=marker, linewidth=2.4, markersize=7, color=color, label=label)
+            if metric == "adjusted_rss_mib":
+                ax.axhline(30.0, color="#111827", linestyle="--", linewidth=1.1, label="30 MiB")
+            else:
+                ax.axhline(10.0, color="#111827", linestyle="--", linewidth=1.1, label="10 ms")
+            ax.set_xticks(range(len(BUCKET_ORDER)), [BUCKET_LABELS[bucket] for bucket in BUCKET_ORDER], rotation=30, ha="right")
+            ax.set_xlabel("Selectivity")
+            ax.set_ylabel(ylabel)
+            ax.set_title(f"{title}: {mode_title}")
+            ax.grid(axis="y", alpha=0.28)
+            ax.legend(ncol=3, loc="best")
+            fig.savefig(ROOT / f"pq16_{mode}_{suffix}.png", dpi=240)
+            fig.savefig(ROOT / f"pq16_{mode}_{suffix}.pdf")
+            plt.close(fig)
 
 
 def write_exp6_plots() -> None:
@@ -58,14 +122,7 @@ def write_exp6_plots() -> None:
         writer.writeheader()
         writer.writerows(summary_rows)
 
-    plt.rcParams.update(
-        {
-            "font.size": 10,
-            "axes.titlesize": 12,
-            "axes.labelsize": 10,
-            "legend.fontsize": 9,
-        }
-    )
+    plt.rcParams.update(PPT_RC)
 
     fig, ax = plt.subplots(figsize=(9.5, 4.8), constrained_layout=True)
     styles = {
@@ -94,7 +151,7 @@ def write_exp6_plots() -> None:
         xytext=(-78, 18),
         textcoords="offset points",
         arrowprops={"arrowstyle": "->", "lw": 0.8, "color": "#374151"},
-        fontsize=8,
+        fontsize=11,
     )
     fig.savefig(EXP6 / "latency_percentiles_equality_highres.png", dpi=240)
     fig.savefig(EXP6 / "latency_percentiles_equality_highres.pdf")
@@ -163,7 +220,8 @@ def write_sift1m_label_plot() -> None:
     ]
     labels = ["SIFT1M/r116 original spmat", "PipeANN hybrid labels"]
     colors = ["#64748b", "#0f766e"]
-    fig, ax = plt.subplots(figsize=(7.2, 4.4), constrained_layout=True)
+    plt.rcParams.update(PPT_RC)
+    fig, ax = plt.subplots(figsize=(7.8, 4.8), constrained_layout=True)
     bars = ax.bar(labels, values, color=colors, width=0.58)
     ax.set_ylim(0, max(values) * 1.24)
     for bar, value in zip(bars, values):
@@ -174,13 +232,13 @@ def write_sift1m_label_plot() -> None:
             textcoords="offset points",
             ha="center",
             va="bottom",
-            fontsize=10,
+            fontsize=12,
         )
     ax.set_ylabel("Disk space (MiB)")
-    ax.set_title("SIFT1M/r116 label storage: original spmat vs hybrid sidecar")
+    ax.set_title("SIFT1M/r116 label storage")
     ax.grid(axis="y", alpha=0.25)
     ratio = float(sift["processed_over_original_percent"])
-    ax.text(0.5, 0.82, f"Hybrid = {ratio:.2f}% of original", transform=ax.transAxes, ha="center", fontsize=11)
+    ax.text(0.5, 0.82, f"Hybrid = {ratio:.2f}% of original", transform=ax.transAxes, ha="center", fontsize=13)
     fig.savefig("experiments/label_space_ratio/sift1m_label_space_comparison.png", dpi=240)
     fig.savefig("experiments/label_space_ratio/sift1m_label_space_comparison.pdf")
     plt.close(fig)
@@ -205,7 +263,8 @@ def write_demand1_plots() -> None:
             ]
         )
 
-    fig, ax = plt.subplots(figsize=(8.4, 4.9), constrained_layout=True)
+    plt.rcParams.update(PPT_RC)
+    fig, ax = plt.subplots(figsize=(8.8, 5.2), constrained_layout=True)
     labels = {250000: "250k", 500000: "500k", 750000: "750k", 1000000: "1M"}
     x_order = [250000, 500000, 750000, 1000000]
 
@@ -225,7 +284,7 @@ def write_demand1_plots() -> None:
     ax.set_ylim(94.5, 100.2)
     ax.set_xlabel("Live points")
     ax.set_ylabel("Recall@10 (%)")
-    ax.set_title(f"Demand 1 recall comparison, fixed graph L=200; max avg latency {max_latency_ms:.2f} ms")
+    ax.set_title(f"Recall comparison at L=200; max avg {max_latency_ms:.2f} ms")
     ax.grid(axis="y", alpha=0.28)
     ax.legend(ncol=2, loc="lower left")
     fig.savefig(PPT_UPDATES / "exp2_seed_sweep_recall_L200.png", dpi=240)
@@ -260,7 +319,7 @@ def write_demand1_plots() -> None:
                 }
             )
 
-    fig, ax = plt.subplots(figsize=(8.4, 4.9), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(8.8, 5.2), constrained_layout=True)
     x = np.arange(len(buckets))
     for state, label, color, marker in states:
         state_rows = {row["bucket"]: row for row in high_rows if row["state"] == state}
@@ -270,17 +329,17 @@ def write_demand1_plots() -> None:
             row = state_rows[bucket]
             route = "P" if row["selected_route"] == "prefilter" else "G"
             ax.annotate(f"{route}/L{row['chosen_L']}", (xi, float(row.get("recall@10") or row["recall"])),
-                        textcoords="offset points", xytext=(0, 7), ha="center", fontsize=7, color=color)
+                        textcoords="offset points", xytext=(0, 8), ha="center", fontsize=10, color=color)
     ax.axhline(98.0, color="#dc2626", linestyle="--", linewidth=1.2, label="98% target")
     ax.set_xticks(x, [bucket_labels[bucket] for bucket in buckets])
     ax.set_ylim(97.8, 100.1)
     ax.set_xlabel("Selectivity")
     ax.set_ylabel("Recall@10 (%)")
-    ax.set_title(f"Delete/reinsert calibrated route/L; max avg latency {max_delete_latency:.2f} ms")
+    ax.set_title(f"Delete/reinsert recall; max avg {max_delete_latency:.2f} ms")
     ax.grid(axis="y", alpha=0.28)
     ax.legend(ncol=2, loc="lower left")
     ax.text(0.01, 0.02, f"min recall {min_delete_recall:.2f}%; P=prefilter, G=graph",
-            transform=ax.transAxes, fontsize=8, color="#4b5563")
+            transform=ax.transAxes, fontsize=11, color="#4b5563")
     fig.savefig(PPT_UPDATES / "delete_reinsert_calibrated_recall.png", dpi=240)
     fig.savefig(PPT_UPDATES / "delete_reinsert_calibrated_recall.pdf")
     plt.close(fig)
@@ -325,7 +384,8 @@ def write_exp6_l200_graph_plot() -> None:
             )
 
     threads = [row["threads_i"] for row in rows]
-    fig, ax = plt.subplots(figsize=(8.4, 4.6), constrained_layout=True)
+    plt.rcParams.update(PPT_RC)
+    fig, ax = plt.subplots(figsize=(8.8, 5.0), constrained_layout=True)
     series = [
         ("avg", [row["avg_ms"] for row in rows], "#dc2626", "o"),
         ("query p95", [float(row["p95_latency_us"]) / 1000.0 for row in rows], "#f59e0b", "^"),
@@ -336,7 +396,7 @@ def write_exp6_l200_graph_plot() -> None:
     ax.set_xticks(threads)
     ax.set_xlabel("Query threads")
     ax.set_ylabel("Latency (ms)")
-    ax.set_title("Exp6 L=200 graph workload: range-u75")
+    ax.set_title("L=200 graph workload: range-u75")
     ax.set_ylim(3.5, 10.8)
     ax.grid(axis="y", alpha=0.28)
     ax.legend(ncol=3, loc="upper left")
@@ -346,7 +406,7 @@ def write_exp6_l200_graph_plot() -> None:
         xytext=(-76, 20),
         textcoords="offset points",
         arrowprops={"arrowstyle": "->", "lw": 0.8, "color": "#374151"},
-        fontsize=8,
+        fontsize=11,
     )
     fig.savefig(PPT_UPDATES / "exp6_l200_graph_thread_latency.png", dpi=240)
     fig.savefig(PPT_UPDATES / "exp6_l200_graph_thread_latency.pdf")
@@ -354,6 +414,7 @@ def write_exp6_l200_graph_plot() -> None:
 
 
 def main() -> None:
+    write_pq_residency_plots()
     write_exp6_plots()
     write_sift1m_label_plot()
     write_demand1_plots()

@@ -73,10 +73,13 @@ def plot(root: Path, dpi: int) -> None:
     import matplotlib.pyplot as plt
 
     plt.rcParams.update({
-        "font.size": 10,
-        "axes.titlesize": 12,
-        "axes.labelsize": 10,
-        "legend.fontsize": 9,
+        "font.size": 13,
+        "axes.titlesize": 15,
+        "axes.labelsize": 13,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+        "legend.fontsize": 11,
+        "figure.titlesize": 16,
         "figure.facecolor": "white",
         "axes.facecolor": "white",
     })
@@ -225,7 +228,7 @@ def plot(root: Path, dpi: int) -> None:
                     text = "\n".join(f"{selector_short}:{route_l}" for selector_short, route_l, _ in items)
                 yi = max(item[2] for item in items)
                 ax.annotate(text, (xi, yi), textcoords="offset points", xytext=(0, 7),
-                            ha="center", fontsize=7, color="#374151")
+                            ha="center", fontsize=10, color="#374151")
         axes[0].axhline(10.0, color="#991b1b", linestyle="--", linewidth=1.0, label="10 ms")
         for ax in axes:
             ax.set_xticks(x_all, labels_all, rotation=35, ha="right")
@@ -236,7 +239,7 @@ def plot(root: Path, dpi: int) -> None:
         axes[0].set_title("Latency")
         axes[1].set_ylabel("QPS")
         axes[1].set_title("QPS")
-        fig.suptitle("Exp4: Direct 1M intersect/range search, selected route and minimum L for recall@10 >= 98%")
+        fig.suptitle("Exp4: selected route/L with recall@10 >= 98%")
         fig.savefig(exp4_dir / "intersect_range_latency_qps.png", dpi=dpi)
         plt.close(fig)
 
@@ -259,14 +262,14 @@ def plot(root: Path, dpi: int) -> None:
                 for xi, yi, row in zip(x, y, ordered):
                     route = row.get("selected_route") or row.get("route", "")
                     ax.annotate("G" if route == "graph" else "P", (xi, yi), textcoords="offset points",
-                                xytext=(0, 7), ha="center", fontsize=8, color=color)
+                                xytext=(0, 7), ha="center", fontsize=10, color=color)
                     if yi > max_rss_mb:
                         max_rss_mb = yi
                         max_point = (xi, yi, label)
             ax.axhline(30.0, color="#dc2626", linestyle="--", linewidth=1.4, label="30 MB limit")
             if max_point is not None:
                 ax.annotate(f"max {max_point[1]:.2f} MB", (max_point[0], max_point[1]),
-                            textcoords="offset points", xytext=(12, 10), ha="left", fontsize=9,
+                            textcoords="offset points", xytext=(12, 10), ha="left", fontsize=11,
                             arrowprops={"arrowstyle": "->", "color": "#374151", "lw": 0.9})
             ax.set_xticks(x_all, labels_all, rotation=35, ha="right")
             ax.set_ylabel("Single-query process RSS (MB)")
@@ -275,7 +278,7 @@ def plot(root: Path, dpi: int) -> None:
             ax.grid(axis="y", alpha=0.3)
             ax.legend(ncol=2)
             ax.text(0.01, 0.02, "P=prefilter, G=graph; RSS process does not load query/GT/query-spmat files.",
-                    transform=ax.transAxes, fontsize=8, color="#4b5563")
+                    transform=ax.transAxes, fontsize=11, color="#4b5563")
             fig.savefig(exp4_dir / "rss_by_selectivity.png", dpi=dpi)
             plt.close(fig)
 
@@ -297,7 +300,7 @@ def plot(root: Path, dpi: int) -> None:
                         marker=markers[route], color=colors[route], linewidth=2.0, label=route)
                 for xi, row in zip(x, rows):
                     ax.annotate(f"L={as_int(row, 'chosen_L')}", (xi, as_float(row, "avg_latency_us") / 1000.0),
-                                textcoords="offset points", xytext=(0, 7), ha="center", fontsize=7)
+                                textcoords="offset points", xytext=(0, 7), ha="center", fontsize=10)
             ax.axhline(10.0, color="#991b1b", linestyle="--", linewidth=1.0, label="10 ms")
             ax.set_xticks(list(range(len(BUCKET_ORDER))), [BUCKET_LABELS[b] for b in BUCKET_ORDER],
                           rotation=35, ha="right")

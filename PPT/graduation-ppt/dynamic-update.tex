@@ -55,9 +55,10 @@
 
 \begin{frame}[c]{需求实现情况总览}
     \centering
-    \tiny
-    \renewcommand{\arraystretch}{1.14}
-    \begin{tabular}{p{0.43\textwidth}p{0.13\textwidth}p{0.33\textwidth}}
+    \scriptsize
+    \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.10}
+    \begin{tabular}{p{0.43\textwidth}p{0.12\textwidth}p{0.35\textwidth}}
         \toprule
         \textbf{需求点} & \textbf{状态} & \textbf{备注} \\
         \midrule
@@ -194,12 +195,12 @@
 
 \begin{frame}[c]{$\tau_m$ 标定与重新标定}
     \centering
-    \begin{columns}[c,onlytextwidth]
+    \begin{columns}[T,onlytextwidth]
         \column{0.56\textwidth}
         \centering
-        {\tiny \textbf{标定曲线示意}}\par
+        {\scriptsize \textbf{标定曲线示意}}\par
         \vspace{0.05em}
-        \resizebox{0.88\linewidth}{!}{%
+        \resizebox{0.80\linewidth}{!}{%
         \begin{tikzpicture}[
             scale=1.0,
             transform shape,
@@ -226,33 +227,36 @@
         \end{tikzpicture}
         }
         \vspace{0.08em}
-        \includegraphics[width=1.00\linewidth,height=0.36\textheight,keepaspectratio]{\pqexp/ppt_updates/exp6_l200_graph_thread_latency.png}
+        \includegraphics[width=0.96\linewidth,height=0.31\textheight,keepaspectratio]{\pqexp/ppt_updates/exp6_l200_graph_thread_latency.png}
 
         \column{0.40\textwidth}
         \begin{minipage}{0.98\linewidth}
-            \tiny
+            \scriptsize
             \raggedright
             \textbf{曲线含义}
-            \vspace{0.12em}
+            \vspace{0.06em}
             \begin{itemize}
-                \item 先过滤：选择性越高，候选越多，延迟上升。
-                \item 图搜索：选择性越高，有效点越密，搜索范围缩小。
-                \item $\tau_m$：两条曲线附近的切换点。
+                \setlength{\itemsep}{0.08em}
+                \item 先过滤随候选增多而变慢。
+                \item 图搜索随有效点变密而变快。
+                \item $\tau_m$ 为两路延迟的切换点。
             \end{itemize}
-            \vspace{0.12em}
+            \vspace{0.06em}
             \textbf{标定方式}
-            \vspace{0.12em}
+            \vspace{0.06em}
             \begin{itemize}
-                \item 采样选择性点，测 prefilter / graph 在 recall@10 $\geq$ 98 下的延迟。
-                \item 取两路延迟相近处为 $\tau_m$，写入索引元数据。
-                \item 当前采用保守界线：前台搜索线程数不超过 14 时启动标定查询；标定期间暂停插入/删除。
+                \setlength{\itemsep}{0.08em}
+                \item 采样选择性点，测 recall@10 $\geq$ 98 下的两路延迟。
+                \item 取延迟相近处写入 $\tau_m$。
+                \item 标定期间暂停插入/删除。
             \end{itemize}
-            \vspace{0.12em}
+            \vspace{0.06em}
             \textbf{16 线程依据}
-            \vspace{0.12em}
+            \vspace{0.06em}
             \begin{itemize}
-                \item 图中取 $L=200$ 下最慢 graph 点：range-u75，recall@10 为 98.60。
-                \item 仅展示 avg、p95 与 10ms budget；1--16 线程均低于预算。
+                \setlength{\itemsep}{0.08em}
+                \item $L=200$ 最慢 graph 点：range-u75，recall@10 为 98.60。
+                \item avg / p95 在 1--16 线程均低于 10ms。
             \end{itemize}
         \end{minipage}
     \end{columns}
@@ -263,7 +267,7 @@
     \begin{columns}[c,onlytextwidth]
         \column{0.50\textwidth}
         \centering
-        {\tiny \textbf{标签预处理手段}}\par
+        {\scriptsize \textbf{标签预处理手段}}\par
         \vspace{0.05em}
         \resizebox{0.98\linewidth}{!}{%
         \begin{tikzpicture}[
@@ -292,7 +296,7 @@
         }
         \vspace{0.35em}
         \begin{minipage}{0.96\linewidth}
-            \tiny
+            \scriptsize
             \raggedright
             \textbf{标签表示}
             \vspace{0.12em}
@@ -306,10 +310,10 @@
 
         \column{0.48\textwidth}
         \centering
-        \includegraphics[width=\linewidth,height=0.36\textheight,keepaspectratio]{../../experiments/label_space_ratio/sift1m_label_space_comparison.png}
+        \includegraphics[width=\linewidth,height=0.38\textheight,keepaspectratio]{../../experiments/label_space_ratio/sift1m_label_space_comparison.png}
         \vspace{0.2em}
         \begin{minipage}{0.96\linewidth}
-            \tiny
+            \scriptsize
             \raggedright
             \textbf{实验结果}
             \vspace{0.12em}
@@ -338,7 +342,7 @@
     \end{minipage}
     \vfill
 
-    \includegraphics[width=0.98\linewidth,height=0.56\textheight,keepaspectratio]{../../experiments/flat_small_search/rss_latency_qps.png}
+    \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{../../experiments/flat_small_search/rss_latency_qps.png}
 \end{frame}
 
 \begin{frame}[c]{需求 1：召回率对比}
@@ -361,11 +365,11 @@
     \begin{columns}[c,onlytextwidth]
         \column{0.50\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.52\textheight,keepaspectratio]{\pqexp/ppt_updates/exp2_seed_sweep_recall_L200.png}
+        \includegraphics[width=0.98\linewidth,height=0.54\textheight,keepaspectratio]{\pqexp/ppt_updates/exp2_seed_sweep_recall_L200.png}
 
         \column{0.50\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.52\textheight,keepaspectratio]{\pqexp/ppt_updates/delete_reinsert_calibrated_recall.png}
+        \includegraphics[width=0.98\linewidth,height=0.54\textheight,keepaspectratio]{\pqexp/ppt_updates/delete_reinsert_calibrated_recall.png}
     \end{columns}
 \end{frame}
 
@@ -380,7 +384,7 @@
     \end{minipage}
     \vfill
 
-    \includegraphics[width=0.94\linewidth,height=0.64\textheight,keepaspectratio]{\pqexp/exp3_search_during_insert/search_during_insert_selectivity.png}
+    \includegraphics[width=0.96\linewidth,height=0.66\textheight,keepaspectratio]{\pqexp/exp3_search_during_insert/search_during_insert_selectivity.png}
 \end{frame}
 
 \begin{frame}[c]{需求 3：选择性查询延迟/QPS}
@@ -394,7 +398,7 @@
     \end{minipage}
     \vfill
 
-    \includegraphics[width=0.98\linewidth,height=0.62\textheight,keepaspectratio]{\pqexp/exp4_intersect_range_selectivity/intersect_range_latency_qps.png}
+    \includegraphics[width=0.98\linewidth,height=0.64\textheight,keepaspectratio]{\pqexp/exp4_intersect_range_selectivity/intersect_range_latency_qps.png}
 \end{frame}
 
 \begin{frame}[c]{需求 4：单查询 adjusted RSS}
@@ -402,7 +406,7 @@
     \begin{columns}[c,onlytextwidth]
         \column{0.66\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{\pqexp/pq16_pq_memory_adjusted_rss_vs_selectivity.png}
+        \includegraphics[width=1.00\linewidth,height=0.60\textheight,keepaspectratio]{\pqexp/pq16_pq_memory_adjusted_rss_vs_selectivity.png}
 
         \column{0.32\textwidth}
         \centering
@@ -434,7 +438,8 @@
         \vspace{0.5em}
 
         \centering
-        \scriptsize
+        \footnotesize
+        \setlength{\tabcolsep}{3pt}
         \renewcommand{\arraystretch}{1.18}
         \begin{tabular}{r r r r r r r r}
             \toprule
@@ -448,7 +453,7 @@
         \end{tabular}
 
         \vspace{0.35em}
-        {\tiny 单位：MiB；额外/原始为额外合计与原始向量的比值。}
+        {\scriptsize 单位：MiB；额外/原始为额外合计与原始向量的比值。}
     \end{minipage}
 \end{frame}
 
