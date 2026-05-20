@@ -142,6 +142,12 @@ def write_plot(rows: list[dict[str, Any]]) -> None:
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib import font_manager
+
+    font_path = Path("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf")
+    font_prop = font_manager.FontProperties(fname=str(font_path)) if font_path.exists() else None
+    text_kwargs = {"fontproperties": font_prop} if font_prop is not None else {}
+    matplotlib.rcParams["axes.unicode_minus"] = False
 
     ordered = sorted(rows, key=lambda row: row["processed_over_original_percent"])
     datasets = [row["dataset"] for row in ordered]
@@ -150,8 +156,8 @@ def write_plot(rows: list[dict[str, Any]]) -> None:
     fig, ax = plt.subplots(figsize=(8.6, 4.5), dpi=240)
     colors = ["#4E79A7", "#59A14F", "#9C755F", "#F28E2B", "#E15759"]
     bars = ax.barh(datasets, ratios, color=colors[: len(ratios)])
-    ax.set_xlabel("Processed / original label size (%)", fontsize=11)
-    ax.set_title("Mixed Label Sidecar Space", fontsize=13, weight="bold")
+    ax.set_xlabel("处理后占原始标签文件的比例", fontsize=11, **text_kwargs)
+    ax.set_title("混合标签磁盘空间占用", fontsize=13, weight="bold", **text_kwargs)
     ax.set_xlim(0, max(ratios) * 1.18)
     ax.grid(axis="x", color="#D9D9D9", linewidth=0.8)
     ax.set_axisbelow(True)

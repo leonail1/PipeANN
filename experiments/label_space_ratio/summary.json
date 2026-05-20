@@ -1,6 +1,6 @@
 {
   "evaluation_type": "file_size_accounting",
-  "generated_at_utc": "2026-05-20T03:24:14.057467+00:00",
+  "generated_at_utc": "2026-05-20T03:48:51.378231+00:00",
   "scope": "Original .spmat base-label files versus processed mixed densebit sidecar files.",
   "selector_scope_note": "The sidecar is built from the base label file and is selector-independent. Equality/intersect/range queries share the same sidecar when their labels are encoded in the same spmat label domain; a separate range-attribute file would need a separate measurement.",
   "row_count": 5,

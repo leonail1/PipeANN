@@ -296,10 +296,10 @@
             \textbf{标签表示}
             \vspace{0.12em}
             \begin{itemize}
-                \item spmat：行是向量、列是标签，非零表示持有该标签。
+                \item 原始标签采用 spmat 格式：行是向量、列是标签，非零表示持有该标签。
+                \item 预处理后生成混合标签结构：按标签候选规模选择 posting list 或 bitmap。
                 \item posting list：\texttt{std::vector<uint32\_t>}，保存向量 id。
                 \item bitmap：\texttt{std::vector<uint64\_t>}，每个 bit 表示一个向量。
-                \item 每个标签对应一个目录项：\texttt{\{encoding, candidate\_count, payload\_offset, payload\_size\}}。
             \end{itemize}
         \end{minipage}
 
@@ -313,12 +313,12 @@
             \textbf{实验结果}
             \vspace{0.12em}
             \begin{itemize}
-                \item 空间图测量 base spmat 到 mixed sidecar；同一标签文件可被等值 / 范围 selector 共用。
-                \item 5 个数据集 processed/original label size：2.94\%--38.08\%。
-                \item 等值 / 范围全选择性：recall@10 $\geq$ 98，avg latency $\leq$ 8.60ms。
+                \item 原始标签文件为 spmat，经过预处理后得到混合标签文件。
+                \item 在 5 个数据集上，混合标签文件仅为原始 spmat 文件的 2.94\%--38.08\%。
+                \item 磁盘空间占用明显降低，没有出现标签空间膨胀。
             \end{itemize}
             \vspace{0.08em}
-            \textcolor{red}{结论：混合表示没有造成标签空间膨胀，并保持 10ms 平均延迟目标。}
+            \textcolor{red}{结论：混合标签预处理在保持标签语义的同时，带来明确的磁盘空间收益。}
         \end{minipage}
     \end{columns}
 \end{frame}
