@@ -198,7 +198,7 @@
         \centering
         {\tiny \textbf{标定曲线示意}}\par
         \vspace{0.05em}
-        \resizebox{0.98\linewidth}{!}{%
+        \resizebox{0.88\linewidth}{!}{%
         \begin{tikzpicture}[
             scale=1.0,
             transform shape,
@@ -224,10 +224,8 @@
             \node[font=\tiny, purple!70!black] at (4.70,0.82) {$s > \tau_m$};
         \end{tikzpicture}
         }
-        \vspace{0.18em}
-        {\tiny \textbf{1--16 线程搜索延迟}}\par
-        \vspace{0.05em}
-        \includegraphics[width=0.98\linewidth,height=0.25\textheight,keepaspectratio]{../../experiments/r116_suite/exp6_aris_cpu_clean/latency_percentiles_equality_highres.png}
+        \vspace{0.08em}
+        \includegraphics[width=1.00\linewidth,height=0.36\textheight,keepaspectratio]{../../experiments/r116_suite/exp6_aris_cpu_clean/latency_percentiles_equality_highres.png}
 
         \column{0.40\textwidth}
         \begin{minipage}{0.98\linewidth}
@@ -301,7 +299,7 @@
                 \item spmat：行是向量、列是标签，非零表示持有该标签。
                 \item posting list：\texttt{std::vector<uint32\_t>}，保存向量 id。
                 \item bitmap：\texttt{std::vector<uint64\_t>}，每个 bit 表示一个向量。
-                \item 每个标签持有一个 \texttt{DenseBitsetLabelEntryV2}，记录 encoding、候选数和 payload 位置。
+                \item 每个标签对应一个目录项：\texttt{\{encoding, candidate\_count, payload\_offset, payload\_size\}}。
             \end{itemize}
         \end{minipage}
 
