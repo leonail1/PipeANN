@@ -291,7 +291,7 @@ def write_demand1_plots() -> None:
     fig.savefig(PPT_UPDATES / "exp2_seed_sweep_recall_L200.pdf")
     plt.close(fig)
 
-    fixed_delete_path = ROOT / "exp4_delete_reinsert_fixed_params" / "fixed_params_fullgt_table.csv"
+    fixed_delete_path = ROOT / "exp4_delete_reinsert_fixed_params_livegt" / "fixed_params_dynamic_livegt_table.csv"
     delete_rows = list(csv.DictReader(fixed_delete_path.open(newline="", encoding="utf-8")))
     buckets = ["u25", "u30", "u50", "u75", "u100"]
     bucket_labels = {"u25": "25%", "u30": "30%", "u50": "50%", "u75": "75%", "u100": "100%"}
@@ -303,7 +303,7 @@ def write_demand1_plots() -> None:
     high_rows = [row for row in delete_rows if row.get("bucket") in buckets]
     max_delete_latency = max(float(row.get("avg_latency_ms") or float(row["avg_latency_us"]) / 1000.0) for row in high_rows)
 
-    with (PPT_UPDATES / "delete_reinsert_fixed_fullgt_recall.csv").open("w", newline="", encoding="utf-8") as f:
+    with (PPT_UPDATES / "delete_reinsert_fixed_livegt_recall.csv").open("w", newline="", encoding="utf-8") as f:
         fieldnames = ["state", "bucket", "selected_route", "chosen_L", "recall@10", "avg_latency_ms", "status"]
         writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
@@ -316,7 +316,7 @@ def write_demand1_plots() -> None:
                     "chosen_L": row["chosen_L"],
                     "recall@10": row.get("recall@10") or row["recall"],
                     "avg_latency_ms": row.get("avg_latency_ms") or float(row["avg_latency_us"]) / 1000.0,
-                    "status": row.get("status", ""),
+                    "status": "ok" if row.get("selected_pass_all_states") == "True" else row.get("status", ""),
                 }
             )
 
@@ -331,26 +331,19 @@ def write_demand1_plots() -> None:
             row = state_rows[bucket]
             route = "P" if row["selected_route"] == "prefilter" else "G"
             params_by_bucket.setdefault(bucket, f"{route}/L{row['chosen_L']}")
-            if row.get("status") != "ok":
-                ax.scatter([xi], [float(row.get("recall@10") or row["recall"])], marker="x",
-                           s=90, linewidths=2.4, color="#dc2626", zorder=5)
-                ax.annotate("1M GT includes deleted vectors",
-                            (xi, float(row.get("recall@10") or row["recall"])),
-                            textcoords="offset points", xytext=(-22, -22), ha="right",
-                            fontsize=10, color="#dc2626")
     for xi, bucket in zip(x, buckets):
         ax.annotate(params_by_bucket[bucket], (xi, 100.05), textcoords="offset points",
                     xytext=(0, 0), ha="center", va="bottom", fontsize=10, color="#374151")
     ax.axhline(98.0, color="#dc2626", linestyle="--", linewidth=1.2, label="98% target")
     ax.set_xticks(x, [bucket_labels[bucket] for bucket in buckets])
-    ax.set_ylim(74.0, 101.2)
+    ax.set_ylim(97.8, 100.2)
     ax.set_xlabel("Selectivity")
     ax.set_ylabel("Recall@10 (%)")
-    ax.set_title(f"Fixed route/L, no auto; max avg {max_delete_latency:.2f} ms")
+    ax.set_title(f"State-specific GT, fixed route/L; max avg {max_delete_latency:.2f} ms")
     ax.grid(axis="y", alpha=0.28)
     ax.legend(ncol=2, loc="lower left")
-    fig.savefig(PPT_UPDATES / "delete_reinsert_fixed_fullgt_recall.png", dpi=240)
-    fig.savefig(PPT_UPDATES / "delete_reinsert_fixed_fullgt_recall.pdf")
+    fig.savefig(PPT_UPDATES / "delete_reinsert_fixed_livegt_recall.png", dpi=240)
+    fig.savefig(PPT_UPDATES / "delete_reinsert_fixed_livegt_recall.pdf")
     plt.close(fig)
 
 
