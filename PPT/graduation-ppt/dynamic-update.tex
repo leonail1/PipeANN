@@ -227,7 +227,7 @@
         \end{tikzpicture}
         }
         \vspace{0.08em}
-        \includegraphics[width=0.96\linewidth,height=0.31\textheight,keepaspectratio]{figures/exp6_demand3_worst_thread_latency_graph_L800.png}
+        \includegraphics[width=0.96\linewidth,height=0.31\textheight,keepaspectratio]{\pqexp/ppt_updates/exp6_demand3_worst_thread_latency.png}
 
         \column{0.40\textwidth}
         \begin{minipage}{0.98\linewidth}
@@ -255,8 +255,8 @@
             \vspace{0.06em}
             \begin{itemize}
                 \setlength{\itemsep}{0.08em}
-                \item 取需求 3 最慢点：range-u1e-01，graph，$L=800$。
-                \item 1--16 线程 avg 为 15.84--27.33ms，超过 10ms 预算。
+                \item 取需求 3 最慢点：range-u50，prefilter，$L=10$。
+                \item avg 在 1--16 线程低于 10ms；6 线程起 p95 略高于 10ms。
             \end{itemize}
         \end{minipage}
     \end{columns}
@@ -392,13 +392,13 @@
     \begin{minipage}{0.94\textwidth}
         \centering
         \scriptsize
-        1M 索引；等值 / 范围查询；PQ code 常驻内存；先用 auto 确定路径，再在该路径内探测满足 recall@10 $\geq$ 98\% 的 $L$。
+        1M 索引；等值 / 范围查询；PQ code 常驻内存；图中为满足 recall@10 $\geq$ 98\% 的最佳搜索参数。
 
-        \textcolor{red}{结论：20 个点均满足 recall@10 $\geq$98；除 10\% 边界选择性外 avg latency $<$10ms，10\% 点约 15.55ms。}
+        \textcolor{red}{结论：任意选择性下单线程查询延迟均满足 10ms 要求。}
     \end{minipage}
     \vfill
 
-    \includegraphics[width=0.98\linewidth,height=0.64\textheight,keepaspectratio]{figures/exp4_auto_lprobe_intersect_range_latency_qps.png}
+    \includegraphics[width=0.98\linewidth,height=0.64\textheight,keepaspectratio]{\pqexp/exp4_intersect_range_selectivity/intersect_range_latency_qps.png}
 \end{frame}
 
 \begin{frame}[c]{需求 4：查询进程峰值内存占用}
