@@ -350,7 +350,7 @@
     \begin{columns}[T,onlytextwidth]
         \column{0.49\textwidth}
         \scriptsize
-        \textbf{左图：直接构建 vs 增量插入。} 分别直接构建 250k、500k、750k、1M 索引，并与从不同初始规模索引插入到相同规模后的索引比较；两类索引在固定 $L=200$ 下执行搜索。L=200 已确认所有 avg latency $<$10ms，最低 recall@10 为 98.38。
+        \textbf{左图：无过滤 SIFT1M 前缀/全量召回。} 使用 SIFT query，无 query label/selector（不是任一选择性 bucket），对 250k、500k、750k、1M live-point 索引分别用对应 live prefix 的 exact truth 评价；固定 $L=200$，所有 avg latency $<$10ms，最低 recall@10 为 98.38。
 
         \column{0.49\textwidth}
         \scriptsize
