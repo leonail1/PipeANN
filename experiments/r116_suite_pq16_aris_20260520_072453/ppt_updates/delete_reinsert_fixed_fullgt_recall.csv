@@ -1,0 +1,16 @@
+state,bucket,selected_route,chosen_L,recall@10,avg_latency_ms,status
+1m_initial,u25,graph,400,98.269997,9.936948242,ok
+750k_after_delete,u25,graph,400,98.940002,9.383160156,ok
+1m_after_reinsert,u25,graph,400,98.120003,8.38593457,ok
+1m_initial,u30,prefilter,10,99.400002,3.829698975,ok
+750k_after_delete,u30,prefilter,10,99.400002,3.7898959960000003,ok
+1m_after_reinsert,u30,prefilter,10,99.379997,3.897939941,ok
+1m_initial,u50,graph,300,98.970001,7.520410156,ok
+750k_after_delete,u50,graph,300,99.169998,7.1393872069999995,ok
+1m_after_reinsert,u50,graph,300,98.75,6.384306152,ok
+1m_initial,u75,graph,200,98.57,4.984892090000001,ok
+750k_after_delete,u75,graph,200,98.949997,5.085569824,ok
+1m_after_reinsert,u75,graph,200,98.260002,4.373019043,ok
+1m_initial,u100,graph,200,99.120003,5.182665039000001,ok
+750k_after_delete,u100,graph,200,77.449997,5.086516113,warn
+1m_after_reinsert,u100,graph,200,98.75,4.369089844,ok

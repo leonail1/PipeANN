@@ -354,12 +354,12 @@
 
         \column{0.49\textwidth}
         \scriptsize
-        \textbf{右图：删除 / 重插入后的图质量。} 先构建 1M 索引，删除 250k 向量得到 750k 索引，再插入 250k 向量回到 1M。per-bucket calibrated route/L 的高选择性结果全部 $\geq$98，最大 avg latency 为 9.96ms。
+        \textbf{右图：删除 / 重插入后的图质量。} 先构建 1M 索引，删除 250k 向量得到 750k 索引，再插入 250k 向量回到 1M。每个选择性 bucket 固定同一组手动 route/L，不走 auto；除 u100 after-delete 因 1M truth 包含已删除向量而降至 77.45 外，其余点均 $\geq$98，最大 avg latency 为 9.94ms。
     \end{columns}
     \vspace{0.4em}
 
     \scriptsize
-    \textcolor{red}{结论：PQ16/R116 在 L=200 或 per-bucket calibration 口径下满足 recall@10 $>$98，且延迟保持在 10ms 预算内。}
+    \textcolor{red}{结论：PQ16/R116 在 L=200 或固定手动 route/L 口径下整体满足 10ms 预算；delete 后若仍按完整 1M truth 评价，u100 会把已删除向量计入 GT，需改用 live-set truth 才能支持完整 recall claim。}
     \vspace{0.2em}
 
     \begin{columns}[c,onlytextwidth]
@@ -369,7 +369,7 @@
 
         \column{0.50\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.54\textheight,keepaspectratio]{\pqexp/ppt_updates/delete_reinsert_calibrated_recall.png}
+        \includegraphics[width=0.98\linewidth,height=0.54\textheight,keepaspectratio]{\pqexp/ppt_updates/delete_reinsert_fixed_fullgt_recall.png}
     \end{columns}
 \end{frame}
 
