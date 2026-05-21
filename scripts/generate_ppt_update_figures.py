@@ -305,7 +305,7 @@ def write_demand1_plots() -> None:
 
     with (PPT_UPDATES / "delete_reinsert_calibrated_recall.csv").open("w", newline="", encoding="utf-8") as f:
         fieldnames = ["state", "bucket", "selected_route", "chosen_L", "recall@10", "avg_latency_ms"]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for row in high_rows:
             writer.writerow(
@@ -345,18 +345,24 @@ def write_demand1_plots() -> None:
     plt.close(fig)
 
 
-def write_exp6_l200_graph_plot() -> None:
+def write_exp6_demand3_worst_plot() -> None:
     PPT_UPDATES.mkdir(parents=True, exist_ok=True)
+    exp4_rows = list(csv.DictReader((ROOT / "exp4_intersect_range_selectivity" / "table.csv").open(newline="", encoding="utf-8")))
+    worst = max(exp4_rows, key=lambda row: float(row["avg_latency_us"]))
+    worst_route = worst.get("selected_route") or worst.get("route")
+    worst_l = str(worst.get("chosen_L"))
     rows = [
         row
         for row in load_exp6_rows()
-        if row["selector_type"] == "range"
-        and row["bucket"] == "u75"
-        and (row.get("selected_route") or row.get("route")) == "graph"
-        and row.get("chosen_L") == "200"
+        if row["selector_type"] == worst["selector_type"]
+        and row["bucket"] == worst["bucket"]
+        and (row.get("selected_route") or row.get("route")) == worst_route
+        and str(row.get("chosen_L")) == worst_l
     ]
     rows = sorted(rows, key=lambda row: row["threads_i"])
-    with (PPT_UPDATES / "exp6_l200_graph_thread_latency.csv").open("w", newline="", encoding="utf-8") as f:
+    if not rows:
+        raise RuntimeError(f"no exp6 rows match demand3 worst row: {worst}")
+    with (PPT_UPDATES / "exp6_demand3_worst_thread_latency.csv").open("w", newline="", encoding="utf-8") as f:
         fieldnames = [
             "threads",
             "avg_latency_ms",
@@ -367,7 +373,7 @@ def write_exp6_l200_graph_plot() -> None:
             "selected_route",
             "chosen_L",
         ]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow(
@@ -386,9 +392,11 @@ def write_exp6_l200_graph_plot() -> None:
     threads = [row["threads_i"] for row in rows]
     plt.rcParams.update(PPT_RC)
     fig, ax = plt.subplots(figsize=(8.8, 5.0), constrained_layout=True)
+    avg_values = [row["avg_ms"] for row in rows]
+    p95_values = [float(row["p95_latency_us"]) / 1000.0 for row in rows]
     series = [
-        ("avg", [row["avg_ms"] for row in rows], "#dc2626", "o"),
-        ("query p95", [float(row["p95_latency_us"]) / 1000.0 for row in rows], "#f59e0b", "^"),
+        ("avg", avg_values, "#dc2626", "o"),
+        ("query p95", p95_values, "#f59e0b", "^"),
     ]
     for label, values, color, marker in series:
         ax.plot(threads, values, marker=marker, linewidth=2.0, color=color, label=label)
@@ -396,20 +404,30 @@ def write_exp6_l200_graph_plot() -> None:
     ax.set_xticks(threads)
     ax.set_xlabel("Query threads")
     ax.set_ylabel("Latency (ms)")
-    ax.set_title("L=200 graph workload: range-u75")
-    ax.set_ylim(3.5, 10.8)
+    ax.set_title(f"Demand 3 worst workload: {worst['selector_type']}-{worst['bucket']} {worst_route}/L{worst_l}")
+    ax.set_ylim(max(0.0, min(avg_values + p95_values) - 0.8), max(10.0, max(avg_values + p95_values)) + 0.9)
     ax.grid(axis="y", alpha=0.28)
     ax.legend(ncol=3, loc="upper left")
+    max_avg_thread = max(rows, key=lambda row: row["avg_ms"])
+    max_p95_thread = max(rows, key=lambda row: float(row["p95_latency_us"]))
     ax.annotate(
-        "max avg 7.50 ms",
-        xy=(16, next(row["avg_ms"] for row in rows if row["threads_i"] == 16)),
-        xytext=(-76, 20),
+        f"max avg {max_avg_thread['avg_ms']:.2f} ms",
+        xy=(max_avg_thread["threads_i"], max_avg_thread["avg_ms"]),
+        xytext=(-84, -24),
         textcoords="offset points",
         arrowprops={"arrowstyle": "->", "lw": 0.8, "color": "#374151"},
         fontsize=11,
     )
-    fig.savefig(PPT_UPDATES / "exp6_l200_graph_thread_latency.png", dpi=240)
-    fig.savefig(PPT_UPDATES / "exp6_l200_graph_thread_latency.pdf")
+    ax.annotate(
+        f"max p95 {float(max_p95_thread['p95_latency_us']) / 1000.0:.2f} ms",
+        xy=(max_p95_thread["threads_i"], float(max_p95_thread["p95_latency_us"]) / 1000.0),
+        xytext=(-88, 18),
+        textcoords="offset points",
+        arrowprops={"arrowstyle": "->", "lw": 0.8, "color": "#374151"},
+        fontsize=11,
+    )
+    fig.savefig(PPT_UPDATES / "exp6_demand3_worst_thread_latency.png", dpi=240)
+    fig.savefig(PPT_UPDATES / "exp6_demand3_worst_thread_latency.pdf")
     plt.close(fig)
 
 
@@ -418,7 +436,7 @@ def main() -> None:
     write_exp6_plots()
     write_sift1m_label_plot()
     write_demand1_plots()
-    write_exp6_l200_graph_plot()
+    write_exp6_demand3_worst_plot()
     print("wrote updated exp6 and SIFT1M label-space plots")
 
 

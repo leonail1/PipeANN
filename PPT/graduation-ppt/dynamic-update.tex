@@ -227,7 +227,7 @@
         \end{tikzpicture}
         }
         \vspace{0.08em}
-        \includegraphics[width=0.96\linewidth,height=0.31\textheight,keepaspectratio]{\pqexp/ppt_updates/exp6_l200_graph_thread_latency.png}
+        \includegraphics[width=0.96\linewidth,height=0.31\textheight,keepaspectratio]{\pqexp/ppt_updates/exp6_demand3_worst_thread_latency.png}
 
         \column{0.40\textwidth}
         \begin{minipage}{0.98\linewidth}
@@ -255,8 +255,8 @@
             \vspace{0.06em}
             \begin{itemize}
                 \setlength{\itemsep}{0.08em}
-                \item $L=200$ 最慢 graph 点：range-u75，recall@10 为 98.60。
-                \item avg / p95 在 1--16 线程均低于 10ms。
+                \item 取需求 3 最慢点：range-u50，prefilter，$L=10$。
+                \item avg 在 1--16 线程低于 10ms；6 线程起 p95 略高于 10ms。
             \end{itemize}
         \end{minipage}
     \end{columns}
