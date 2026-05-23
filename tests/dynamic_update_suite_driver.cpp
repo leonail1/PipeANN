@@ -13,9 +13,11 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include <omp.h>
+#include <sched.h>
 #include <sys/resource.h>
 #include <unistd.h>
 
@@ -40,10 +42,15 @@ struct Config {
   std::string base_label_file;
   std::string query_label_file;
   std::string query_label_csv;
+  std::string delete_id_file;
+  std::string insert_tag_file;
+  std::string flat_pq_pivots;
   std::string selector_type = "none";
   std::string route = "auto";
   std::string jsonl_output;
   std::string metric = "l2";
+  std::string raw_command;
+  uint32_t cpu_cap = 0;
   uint64_t insert_start = 0;
   uint64_t insert_count = 0;
   uint64_t delete_start = 0;
@@ -57,6 +64,8 @@ struct Config {
   uint32_t k = 10;
   uint32_t search_l = 60;
   uint32_t mem_l = 0;
+  uint32_t pq_bytes = 16;
+  uint64_t flat_threshold = 10000;
   uint64_t query_limit = 0;
   bool final_merge = true;
   bool single_query_static_rss = false;
@@ -106,71 +115,131 @@ std::string require_value(int argc, char **argv, int *index, const std::string &
 
 Config parse_args(int argc, char **argv) {
   Config config;
+  std::unordered_set<std::string> seen_scalar_args;
+  std::ostringstream raw_command;
+  for (int i = 0; i < argc; ++i) {
+    if (i != 0) raw_command << " ";
+    raw_command << argv[i];
+  }
+  config.raw_command = raw_command.str();
   for (int index = 1; index < argc; ++index) {
     const std::string arg(argv[index]);
+    auto mark_scalar = [&](const std::string &name) {
+      if (!seen_scalar_args.insert(name).second) {
+        throw std::runtime_error("duplicate scalar argument: " + name);
+      }
+    };
     if (arg == "--mode") {
+      mark_scalar(arg);
       config.mode = require_value(argc, argv, &index, arg);
     } else if (arg == "--source-prefix") {
+      mark_scalar(arg);
       config.source_prefix = require_value(argc, argv, &index, arg);
     } else if (arg == "--dest-prefix") {
+      mark_scalar(arg);
       config.dest_prefix = require_value(argc, argv, &index, arg);
     } else if (arg == "--data-bin") {
+      mark_scalar(arg);
       config.data_bin = require_value(argc, argv, &index, arg);
     } else if (arg == "--query-bin") {
+      mark_scalar(arg);
       config.query_bin = require_value(argc, argv, &index, arg);
     } else if (arg == "--query-vector-csv") {
+      mark_scalar(arg);
       config.query_vector_csv = require_value(argc, argv, &index, arg);
     } else if (arg == "--truthset-bin") {
+      mark_scalar(arg);
       config.truthset_bin = require_value(argc, argv, &index, arg);
     } else if (arg == "--base-label-file") {
+      mark_scalar(arg);
       config.base_label_file = require_value(argc, argv, &index, arg);
     } else if (arg == "--query-label-file") {
+      mark_scalar(arg);
       config.query_label_file = require_value(argc, argv, &index, arg);
     } else if (arg == "--query-label-csv") {
+      mark_scalar(arg);
       config.query_label_csv = require_value(argc, argv, &index, arg);
+    } else if (arg == "--delete-id-file") {
+      mark_scalar(arg);
+      config.delete_id_file = require_value(argc, argv, &index, arg);
+    } else if (arg == "--insert-tag-file") {
+      mark_scalar(arg);
+      config.insert_tag_file = require_value(argc, argv, &index, arg);
+    } else if (arg == "--flat-pq-pivots") {
+      mark_scalar(arg);
+      config.flat_pq_pivots = require_value(argc, argv, &index, arg);
     } else if (arg == "--selector-type") {
+      mark_scalar(arg);
       config.selector_type = require_value(argc, argv, &index, arg);
     } else if (arg == "--route") {
+      mark_scalar(arg);
       config.route = require_value(argc, argv, &index, arg);
     } else if (arg == "--jsonl-output") {
+      mark_scalar(arg);
       config.jsonl_output = require_value(argc, argv, &index, arg);
     } else if (arg == "--metric") {
+      mark_scalar(arg);
       config.metric = require_value(argc, argv, &index, arg);
+    } else if (arg == "--cpu-cap") {
+      mark_scalar(arg);
+      config.cpu_cap = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
     } else if (arg == "--insert-start") {
+      mark_scalar(arg);
       config.insert_start = std::stoull(require_value(argc, argv, &index, arg));
     } else if (arg == "--insert-count") {
+      mark_scalar(arg);
       config.insert_count = std::stoull(require_value(argc, argv, &index, arg));
     } else if (arg == "--delete-start") {
+      mark_scalar(arg);
       config.delete_start = std::stoull(require_value(argc, argv, &index, arg));
     } else if (arg == "--delete-count") {
+      mark_scalar(arg);
       config.delete_count = std::stoull(require_value(argc, argv, &index, arg));
     } else if (arg == "--insert-threads") {
+      mark_scalar(arg);
       config.insert_threads = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
     } else if (arg == "--search-threads") {
+      mark_scalar(arg);
       config.search_threads = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
     } else if (arg == "--merge-threads") {
+      mark_scalar(arg);
       config.merge_threads = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
     } else if (arg == "--build-l") {
+      mark_scalar(arg);
       config.build_l = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
     } else if (arg == "--build-r") {
+      mark_scalar(arg);
       config.build_r = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
     } else if (arg == "--beamwidth") {
+      mark_scalar(arg);
       config.beamwidth = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
     } else if (arg == "--k") {
+      mark_scalar(arg);
       config.k = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
     } else if (arg == "--search-l") {
+      mark_scalar(arg);
       config.search_l = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
     } else if (arg == "--mem-l") {
+      mark_scalar(arg);
       config.mem_l = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
+    } else if (arg == "--pq-bytes") {
+      mark_scalar(arg);
+      config.pq_bytes = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
+    } else if (arg == "--flat-threshold") {
+      mark_scalar(arg);
+      config.flat_threshold = std::stoull(require_value(argc, argv, &index, arg));
     } else if (arg == "--query-limit") {
+      mark_scalar(arg);
       config.query_limit = std::stoull(require_value(argc, argv, &index, arg));
     } else if (arg == "--skip-final-merge") {
+      mark_scalar(arg);
       config.final_merge = false;
     } else if (arg == "--single-query-static-rss") {
+      mark_scalar(arg);
       config.single_query_static_rss = true;
     } else if (arg == "--help") {
       throw std::runtime_error(
-          "usage: dynamic_update_suite_driver --mode insert-only|search-during-insert|delete-batch|reinsert-batch|measure-dynamic-search ...");
+          "usage: dynamic_update_suite_driver --mode insert-only|zero-insert-only|search-during-insert|delete-batch|reinsert-batch|measure-dynamic-search|measure-delete-only|measure-delete-then-merge ... [--flat-pq-pivots <path> for zero-insert-only]");
     } else {
       throw std::runtime_error("unknown argument: " + arg);
     }
@@ -178,12 +247,26 @@ Config parse_args(int argc, char **argv) {
   if (config.mode.empty() || config.source_prefix.empty()) {
     throw std::runtime_error("--mode and --source-prefix are required");
   }
-  if ((config.mode == "insert-only" || config.mode == "reinsert-batch" || config.mode == "search-during-insert")
+  if ((config.mode == "insert-only" || config.mode == "reinsert-batch" || config.mode == "search-during-insert"
+       || config.mode == "zero-insert-only")
       && config.data_bin.empty()) {
     throw std::runtime_error("--data-bin is required for insert modes");
   }
-  if ((config.mode == "insert-only" || config.mode == "reinsert-batch" || config.mode == "delete-batch")
-      && config.dest_prefix.empty()) {
+  if (!config.insert_tag_file.empty() &&
+      !(config.mode == "insert-only" || config.mode == "reinsert-batch" || config.mode == "search-during-insert"
+        || config.mode == "zero-insert-only")) {
+      throw std::runtime_error("--insert-tag-file is only valid for insert modes");
+    }
+  if (!config.flat_pq_pivots.empty() && config.mode != "zero-insert-only") {
+    throw std::runtime_error("--flat-pq-pivots is only valid for zero-insert-only");
+  }
+  if (!config.flat_pq_pivots.empty() && !file_exists(config.flat_pq_pivots)) {
+    throw std::runtime_error("--flat-pq-pivots file does not exist: " + config.flat_pq_pivots);
+  }
+  if (config.mode == "zero-insert-only" && config.insert_count <= config.flat_threshold) {
+    throw std::runtime_error("--insert-count must exceed --flat-threshold so PQ materialization occurs");
+  }
+  if (config.mode == "measure-delete-then-merge" && config.dest_prefix.empty()) {
     throw std::runtime_error("--dest-prefix is required for merge-producing modes");
   }
   if ((config.mode == "measure-dynamic-search" || config.mode == "search-during-insert")
@@ -232,6 +315,147 @@ uint64_t current_rss_kb() {
     return 0;
   }
   return resident_pages * static_cast<uint64_t>(page_size) / 1024ULL;
+}
+
+std::string cpus_allowed_list() {
+  std::ifstream reader("/proc/self/status");
+  std::string line;
+  while (std::getline(reader, line)) {
+    const std::string key = "Cpus_allowed_list:";
+    if (line.rfind(key, 0) == 0) {
+      const auto pos = line.find_first_not_of(" \t", key.size());
+      return pos == std::string::npos ? "" : line.substr(pos);
+    }
+  }
+  return "";
+}
+
+bool cpu_cap_enforced(uint32_t cpu_cap) {
+  if (cpu_cap == 0) {
+    return true;
+  }
+  cpu_set_t mask;
+  CPU_ZERO(&mask);
+  if (sched_getaffinity(0, sizeof(mask), &mask) != 0) {
+    return false;
+  }
+  return static_cast<uint32_t>(CPU_COUNT(&mask)) <= cpu_cap;
+}
+
+std::vector<uint32_t> load_delete_tags(const Config &config) {
+  std::vector<uint32_t> tags;
+  if (!config.delete_id_file.empty()) {
+    std::ifstream reader(config.delete_id_file);
+    if (!reader.is_open()) {
+      throw std::runtime_error("failed to open delete id file: " + config.delete_id_file);
+    }
+    uint64_t value = 0;
+    while (reader >> value) {
+      if (value > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error("delete tag exceeds uint32 range");
+      }
+      tags.push_back(static_cast<uint32_t>(value));
+    }
+    if (config.delete_count != 0 && tags.size() != config.delete_count) {
+      throw std::runtime_error("delete id file count does not match --delete-count");
+    }
+    return tags;
+  }
+  if (config.delete_start + config.delete_count > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1ULL) {
+    throw std::runtime_error("delete range exceeds uint32 tag range");
+  }
+  tags.reserve(static_cast<size_t>(config.delete_count));
+  for (uint64_t i = 0; i < config.delete_count; ++i) {
+    tags.push_back(static_cast<uint32_t>(config.delete_start + i));
+  }
+  return tags;
+}
+
+std::vector<uint32_t> load_insert_tags(const Config &config) {
+  if (!config.insert_tag_file.empty()) {
+    std::ifstream reader(config.insert_tag_file);
+    if (!reader.is_open()) {
+      throw std::runtime_error("failed to open insert tag file: " + config.insert_tag_file);
+    }
+    std::vector<uint32_t> tags;
+    uint64_t value = 0;
+    while (reader >> value) {
+      if (value > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error("insert tag exceeds uint32 range");
+      }
+      tags.push_back(static_cast<uint32_t>(value));
+    }
+    if (tags.size() != config.insert_count) {
+      throw std::runtime_error("insert tag file count does not match --insert-count");
+    }
+    return tags;
+  }
+  if (config.insert_start + config.insert_count > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1ULL) {
+    throw std::runtime_error("insert range exceeds uint32 tag range");
+  }
+  std::vector<uint32_t> tags;
+  tags.reserve(static_cast<size_t>(config.insert_count));
+  for (uint64_t i = 0; i < config.insert_count; ++i) {
+    tags.push_back(static_cast<uint32_t>(config.insert_start + i));
+  }
+  return tags;
+}
+
+void validate_unique_delete_tags(const std::vector<uint32_t> &tags) {
+  std::unordered_set<uint32_t> seen;
+  seen.reserve(tags.size());
+  for (uint32_t tag : tags) {
+    if (!seen.insert(tag).second) {
+      throw std::runtime_error("duplicate delete tag: " + std::to_string(tag));
+    }
+  }
+}
+
+std::string fnv1a_tags_hex(const std::vector<uint32_t> &tags) {
+  uint64_t hash = 1469598103934665603ULL;
+  for (uint32_t tag : tags) {
+    for (size_t byte = 0; byte < sizeof(uint32_t); ++byte) {
+      hash ^= static_cast<uint8_t>((tag >> (byte * 8)) & 0xffU);
+      hash *= 1099511628211ULL;
+    }
+  }
+  std::ostringstream out;
+  out << "fnv1a64:" << std::hex << std::setw(16) << std::setfill('0') << hash;
+  return out.str();
+}
+
+uint32_t load_bin_dim(const std::string &data_bin) {
+  std::ifstream reader(data_bin, std::ios::binary);
+  if (!reader.is_open()) {
+    throw std::runtime_error("failed to open data bin: " + data_bin);
+  }
+  int32_t npts_i32 = 0;
+  int32_t dim_i32 = 0;
+  reader.read(reinterpret_cast<char *>(&npts_i32), sizeof(int32_t));
+  reader.read(reinterpret_cast<char *>(&dim_i32), sizeof(int32_t));
+  if (!reader.good() || npts_i32 < 0 || dim_i32 <= 0) {
+    throw std::runtime_error("failed to read data bin header: " + data_bin);
+  }
+  return static_cast<uint32_t>(dim_i32);
+}
+
+uint64_t disk_index_label_size(const std::string &prefix) {
+  pipeann::SSDIndexMetadata<float> meta;
+  meta.load_from_disk_index(prefix + "_disk.index");
+  return meta.label_size;
+}
+
+bool densebit_sidecar_loadable(const std::string &prefix, uint64_t npoints) {
+  const std::string sidecar_path = pipeann::DenseBitsetIndex::default_sidecar_path(prefix);
+  if (!file_exists(sidecar_path)) {
+    return false;
+  }
+  try {
+    auto densebit = pipeann::DenseBitsetIndex::load(sidecar_path, npoints);
+    return densebit != nullptr;
+  } catch (const std::exception &) {
+    return false;
+  }
 }
 
 std::vector<uint32_t> parse_label_csv(const std::string &csv) {
@@ -676,6 +900,8 @@ int run_single_query_static_rss(Config config) {
       << "\"route\":\"" << json_escape(config.route) << "\","
       << "\"threads\":" << config.search_threads << ","
       << "\"insert_threads\":" << config.insert_threads << ","
+      << "\"pq_bytes\":" << config.pq_bytes << ","
+      << "\"flat_threshold\":" << config.flat_threshold << ","
       << "\"points\":" << live_count << ","
       << "\"chosen_L\":" << config.search_l << ","
       << "\"max_rss_kb\":" << metrics.process_max_rss_kb << ","
@@ -711,11 +937,15 @@ double insert_range(const Config &config, pipeann::DynamicSSDIndex<float, uint32
                     std::atomic<bool> *stop_flag, std::atomic<uint64_t> *inserted_out) {
   size_t dim = 0;
   std::vector<float> vectors = load_vector_slice(config.data_bin, config.insert_start, config.insert_count, &dim);
+  std::vector<uint32_t> insert_tags = load_insert_tags(config);
+  validate_unique_delete_tags(insert_tags);
   std::unique_ptr<pipeann::SpmatLabel> base_labels;
   if (!config.base_label_file.empty()) {
     base_labels.reset(new pipeann::SpmatLabel(config.base_label_file));
-    if (base_labels->labels_.size() < config.insert_start + config.insert_count) {
-      throw std::runtime_error("base label file does not cover inserted tag range");
+    for (uint32_t tag : insert_tags) {
+      if (base_labels->labels_.size() <= tag) {
+        throw std::runtime_error("base label file does not cover inserted tag " + std::to_string(tag));
+      }
     }
   }
   std::atomic<uint64_t> inserted {0};
@@ -725,7 +955,7 @@ double insert_range(const Config &config, pipeann::DynamicSSDIndex<float, uint32
     if (stop_flag != nullptr && stop_flag->load(std::memory_order_relaxed)) {
       continue;
     }
-    const uint32_t tag = static_cast<uint32_t>(config.insert_start + static_cast<uint64_t>(i));
+    const uint32_t tag = insert_tags[static_cast<size_t>(i)];
     index.insert(vectors.data() + static_cast<size_t>(i) * dim, tag);
     if (base_labels != nullptr) {
       const auto &labels = base_labels->labels_[tag];
@@ -742,26 +972,51 @@ double insert_range(const Config &config, pipeann::DynamicSSDIndex<float, uint32
 }
 
 double delete_range(const Config &config, pipeann::DynamicSSDIndex<float, uint32_t> &index) {
+  std::vector<uint32_t> tags = load_delete_tags(config);
+  validate_unique_delete_tags(tags);
   const auto start = std::chrono::steady_clock::now();
 #pragma omp parallel for num_threads(config.insert_threads) schedule(dynamic, 1024)
-  for (int64_t i = 0; i < static_cast<int64_t>(config.delete_count); ++i) {
-    index.lazy_delete(static_cast<uint32_t>(config.delete_start + static_cast<uint64_t>(i)));
+  for (int64_t i = 0; i < static_cast<int64_t>(tags.size()); ++i) {
+    index.lazy_delete(tags[static_cast<size_t>(i)]);
   }
   const auto end = std::chrono::steady_clock::now();
   std::chrono::duration<double> elapsed = end - start;
   return elapsed.count();
 }
 
+double delete_tags(const Config &config, pipeann::DynamicSSDIndex<float, uint32_t> &index,
+                   const std::vector<uint32_t> &tags) {
+  validate_unique_delete_tags(tags);
+  const auto start = std::chrono::steady_clock::now();
+#pragma omp parallel for num_threads(config.insert_threads) schedule(dynamic, 1024)
+  for (int64_t i = 0; i < static_cast<int64_t>(tags.size()); ++i) {
+    index.lazy_delete(tags[static_cast<size_t>(i)]);
+  }
+  const auto end = std::chrono::steady_clock::now();
+  return std::chrono::duration<double>(end - start).count();
+}
+
 std::string common_fields(const Config &config, const std::string &mode, uint64_t live_count) {
   std::ostringstream out;
   out << "\"mode\":\"" << json_escape(mode) << "\","
+      << "\"status\":\"ok\","
       << "\"route\":\"" << json_escape(config.route) << "\","
       << "\"threads\":" << config.search_threads << ","
+      << "\"cpu_cap\":" << config.cpu_cap << ","
+      << "\"cpu_cap_enforced\":" << (cpu_cap_enforced(config.cpu_cap) ? "true" : "false") << ","
+      << "\"cpu_affinity_allowed_cpus\":\"" << json_escape(cpus_allowed_list()) << "\","
+      << "\"source_prefix\":\"" << json_escape(config.source_prefix) << "\","
+      << "\"dest_prefix\":\"" << json_escape(config.dest_prefix) << "\","
       << "\"insert_threads\":" << config.insert_threads << ","
+      << "\"pq_bytes\":" << config.pq_bytes << ","
+      << "\"flat_threshold\":" << config.flat_threshold << ","
+      << "\"flat_pq_pivots\":\"" << json_escape(config.flat_pq_pivots) << "\","
       << "\"points\":" << live_count << ","
       << "\"chosen_L\":" << config.search_l << ","
+      << "\"search_l\":" << config.search_l << ","
       << "\"max_rss_kb\":" << max_rss_kb() << ","
-      << "\"live_point_count\":" << live_count;
+      << "\"live_point_count\":" << live_count << ","
+      << "\"raw_command\":\"" << json_escape(config.raw_command) << "\"";
   return out.str();
 }
 
@@ -770,10 +1025,69 @@ int run(Config config) {
     return run_single_query_static_rss(config);
   }
 
+  if (config.mode == "zero-insert-only") {
+    auto distance = make_distance(config.metric);
+    pipeann::IndexBuildParameters parameters;
+    parameters.set(config.build_r, config.build_l, 384, 1.2, config.insert_threads, true,
+                   config.beamwidth);
+    auto index = pipeann::DynamicSSDIndex<float, uint32_t>(
+        parameters, config.source_prefix, load_bin_dim(config.data_bin), distance.get(),
+        pipeann::get_metric(config.metric), config.flat_threshold, PIPE_SEARCH, config.pq_bytes, config.flat_pq_pivots);
+
+    const std::vector<uint32_t> insert_tags_vec = load_insert_tags(config);
+    const std::string inserted_tag_hash = fnv1a_tags_hex(insert_tags_vec);
+    const double insert_s = insert_range(config, index, nullptr, nullptr);
+    if (index.is_flat_mode()) {
+      throw std::runtime_error("zero-insert-only did not materialize to disk");
+    }
+
+    double merge_s = 0.0;
+    std::string final_prefix = config.source_prefix;
+    if (config.final_merge) {
+      const auto start = std::chrono::steady_clock::now();
+      index.final_merge(config.merge_threads);
+      merge_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+      final_prefix = config.source_prefix + "_merge";
+    }
+
+    const uint64_t live_count = index.live_point_count();
+    const uint64_t label_size = disk_index_label_size(final_prefix);
+    const bool sidecar_ok = densebit_sidecar_loadable(final_prefix, live_count);
+    if (!sidecar_ok && !config.base_label_file.empty()) {
+      throw std::runtime_error("zero-insert-only densebit sidecar missing or unloadable for " + final_prefix);
+    }
+
+    std::ostringstream out;
+    out << "{" << common_fields(config, config.mode, live_count)
+        << ",\"phase\":\"zero-insert-only\""
+        << ",\"final_index_prefix\":\"" << json_escape(final_prefix) << "\""
+        << ",\"flat_materialized\":true"
+        << ",\"elapsed_s\":" << std::fixed << std::setprecision(6) << (insert_s + merge_s)
+        << ",\"insert_count\":" << config.insert_count
+        << ",\"insert_scope\":\""
+        << (config.insert_tag_file.empty() ? "dense_tag_range_from_insert_start" : "insert_tag_file_tags") << "\""
+        << ",\"inserted_tag_hash\":\"" << json_escape(inserted_tag_hash) << "\""
+        << ",\"insert_wall_s\":" << insert_s
+        << ",\"insert_elapsed_s\":" << insert_s
+        << ",\"merge_wall_s\":" << merge_s
+        << ",\"merge_elapsed_s\":" << merge_s
+        << ",\"wall_s\":" << (insert_s + merge_s)
+        << ",\"qps\":" << (static_cast<double>(config.insert_count) / std::max(insert_s, 1e-9))
+        << ",\"avg_latency_us\":0,\"p50_latency_us\":0,\"p95_latency_us\":0,\"p99_latency_us\":0,\"recall@10\":0"
+        << ",\"main_index_label_size\":" << label_size
+        << ",\"label_sidecar_loadable\":" << (sidecar_ok ? "true" : "false")
+        << ",\"label_storage_mode\":\"" << (label_size == 0 ? "sidecar" : "embedded") << "\""
+        << ",\"disk_format_version\":1}";
+    append_jsonl(config, out.str());
+    return 0;
+  }
+
   auto distance = make_distance(config.metric);
   auto index = open_dynamic_index(config, distance.get());
 
   if (config.mode == "insert-only" || config.mode == "reinsert-batch") {
+    const std::vector<uint32_t> insert_tags_vec = load_insert_tags(config);
+    const std::string inserted_tag_hash = fnv1a_tags_hex(insert_tags_vec);
     const double insert_s = insert_range(config, index, nullptr, nullptr);
     double merge_s = 0.0;
     if (config.final_merge) {
@@ -785,6 +1099,10 @@ int run(Config config) {
     std::ostringstream out;
     out << "{" << common_fields(config, config.mode, live_count)
         << ",\"elapsed_s\":" << std::fixed << std::setprecision(6) << (insert_s + merge_s)
+        << ",\"insert_count\":" << config.insert_count
+        << ",\"insert_scope\":\""
+        << (config.insert_tag_file.empty() ? "dense_tag_range_from_insert_start" : "insert_tag_file_tags") << "\""
+        << ",\"inserted_tag_hash\":\"" << json_escape(inserted_tag_hash) << "\""
         << ",\"insert_elapsed_s\":" << insert_s
         << ",\"merge_elapsed_s\":" << merge_s
         << ",\"qps\":" << (static_cast<double>(config.insert_count) / std::max(insert_s, 1e-9))
@@ -794,7 +1112,10 @@ int run(Config config) {
   }
 
   if (config.mode == "delete-batch") {
-    const double delete_s = delete_range(config, index);
+    std::vector<uint32_t> delete_tags_vec = load_delete_tags(config);
+    validate_unique_delete_tags(delete_tags_vec);
+    const std::string deleted_tag_hash = fnv1a_tags_hex(delete_tags_vec);
+    const double delete_s = delete_tags(config, index, delete_tags_vec);
     const auto merge_start = std::chrono::steady_clock::now();
     if (config.final_merge) {
       index.final_merge(config.merge_threads);
@@ -804,10 +1125,57 @@ int run(Config config) {
     std::ostringstream out;
     out << "{" << common_fields(config, config.mode, live_count)
         << ",\"elapsed_s\":" << std::fixed << std::setprecision(6) << (delete_s + merge_s)
+        << ",\"delete_count\":" << delete_tags_vec.size()
+        << ",\"deleted_tag_hash\":\"" << json_escape(deleted_tag_hash) << "\""
+        << ",\"delete_scope\":\""
+        << (config.delete_id_file.empty() ? "dense_tag_range_from_delete_start" : "delete_id_file_tags") << "\""
         << ",\"delete_elapsed_s\":" << delete_s
         << ",\"merge_elapsed_s\":" << merge_s
-        << ",\"qps\":" << (static_cast<double>(config.delete_count) / std::max(delete_s, 1e-9))
+        << ",\"qps\":" << (static_cast<double>(delete_tags_vec.size()) / std::max(delete_s, 1e-9))
         << ",\"avg_latency_us\":0,\"p50_latency_us\":0,\"p95_latency_us\":0,\"p99_latency_us\":0,\"recall@10\":0}";
+    append_jsonl(config, out.str());
+    return 0;
+  }
+
+  if (config.mode == "measure-delete-only" || config.mode == "measure-delete-then-merge") {
+    std::vector<uint32_t> delete_tags_vec = load_delete_tags(config);
+    const std::string deleted_tag_hash = fnv1a_tags_hex(delete_tags_vec);
+    const double delete_s = delete_tags(config, index, delete_tags_vec);
+    double merge_s = 0.0;
+    if (config.mode == "measure-delete-then-merge") {
+      const auto merge_start = std::chrono::steady_clock::now();
+      index.final_merge(config.merge_threads);
+      merge_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - merge_start).count();
+    }
+    const uint64_t live_count = index.live_point_count();
+    uint64_t label_size = 0;
+    bool sidecar_ok = false;
+    if (config.mode == "measure-delete-then-merge") {
+      label_size = disk_index_label_size(config.dest_prefix);
+      sidecar_ok = densebit_sidecar_loadable(config.dest_prefix, live_count);
+      if (!sidecar_ok) {
+        throw std::runtime_error("merged densebit sidecar missing or unloadable for " + config.dest_prefix);
+      }
+    }
+    std::ostringstream out;
+    out << "{" << common_fields(config, config.mode, live_count)
+        << ",\"phase\":\"" << json_escape(config.mode) << "\""
+        << ",\"delete_count\":" << delete_tags_vec.size()
+        << ",\"deleted_tag_hash\":\"" << json_escape(deleted_tag_hash) << "\""
+        << ",\"delete_scope\":\""
+        << (config.delete_id_file.empty() ? "initial_dense_id_range" : "delete_id_file_tags") << "\""
+        << ",\"insert_count\":0"
+        << ",\"delete_wall_s\":" << std::fixed << std::setprecision(6) << delete_s
+        << ",\"merge_wall_s\":" << merge_s
+        << ",\"wall_s\":" << (delete_s + merge_s)
+        << ",\"elapsed_s\":" << (delete_s + merge_s)
+        << ",\"qps\":" << (static_cast<double>(delete_tags_vec.size()) / std::max(delete_s, 1e-9))
+        << ",\"avg_latency_us\":" << (1e6 * delete_s / std::max<size_t>(delete_tags_vec.size(), 1))
+        << ",\"p50_latency_us\":0,\"p95_latency_us\":0,\"p99_latency_us\":0,\"recall@10\":0"
+        << ",\"main_index_label_size\":" << label_size
+        << ",\"label_sidecar_loadable\":" << (sidecar_ok ? "true" : "false")
+        << ",\"label_storage_mode\":\"" << (label_size == 0 ? "sidecar" : "embedded") << "\""
+        << ",\"disk_format_version\":1}";
     append_jsonl(config, out.str());
     return 0;
   }
@@ -815,9 +1183,20 @@ int run(Config config) {
   if (config.mode == "measure-dynamic-search") {
     SearchMetrics metrics = run_search(config, index);
     const uint64_t live_count = index.live_point_count();
+    std::string actual_route = "none";
+    if (metrics.prefilter_count > 0 && metrics.graph_count == 0 && metrics.fallback_count == 0) {
+      actual_route = "prefilter";
+    } else if (metrics.graph_count > 0 && metrics.prefilter_count == 0 && metrics.fallback_count == 0) {
+      actual_route = "graph";
+    } else if (metrics.prefilter_count + metrics.graph_count + metrics.fallback_count > 0) {
+      actual_route = "mixed";
+    }
     std::ostringstream out;
     out << "{" << common_fields(config, config.mode, live_count)
+        << ",\"phase\":\"measure-dynamic-search\""
+        << ",\"actual_route\":\"" << json_escape(actual_route) << "\""
         << ",\"elapsed_s\":" << std::fixed << std::setprecision(6) << metrics.elapsed_s
+        << ",\"wall_s\":" << metrics.elapsed_s
         << ",\"qps\":" << metrics.qps
         << ",\"avg_latency_us\":" << metrics.avg_latency_us
         << ",\"p50_latency_us\":" << metrics.p50_latency_us
@@ -830,13 +1209,16 @@ int run(Config config) {
         << ",\"query_peak_rss_kb\":" << metrics.query_peak_rss_kb
         << ",\"query_peak_delta_kb\":" << metrics.query_peak_delta_kb
         << ",\"mean_candidate_count\":" << metrics.mean_candidate_count
+        << ",\"candidate_count\":" << metrics.mean_candidate_count
         << ",\"mean_route_overhead_us\":" << metrics.mean_route_overhead_us
         << ",\"prefilter_count\":" << metrics.prefilter_count
         << ",\"graph_count\":" << metrics.graph_count
         << ",\"fallback_count\":" << metrics.fallback_count
         << ",\"empty_count\":" << metrics.empty_count
         << ",\"min_threshold\":" << metrics.min_threshold
-        << ",\"max_threshold\":" << metrics.max_threshold << "}";
+        << ",\"max_threshold\":" << metrics.max_threshold
+        << ",\"tau_m\":" << metrics.max_threshold
+        << ",\"threshold_version\":0}";
     append_jsonl(config, out.str());
     return 0;
   }

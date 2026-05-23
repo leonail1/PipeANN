@@ -1,0 +1,39 @@
+{
+  "claims": [
+    {
+      "claim": "At the configured point scale, no-retrain PQ drift is quantified against direct fresh-retrain PQ.",
+      "evidence": [
+        "raw/phaseB_pq_drift.jsonl",
+        "raw/phaseB_zero_insert.jsonl",
+        "raw/phaseB_selected_route_l.jsonl",
+        "raw/phaseB_penalty.jsonl"
+      ],
+      "id": "P2_PHASEB_1M_PQ_DRIFT",
+      "note": "1000000-point direct fresh-retrain vs zero-insert no-retrain evidence; seed_points=100000; zero-insert is flat-until-final materialization.",
+      "status": "EVIDENCE_MAIN"
+    },
+    {
+      "claim": "Across configured 60% delete + insert cycles, no-retrain drift penalty is quantified against per-cycle retrain.",
+      "evidence": [
+        "raw/phaseC_delete_steps.jsonl",
+        "raw/phaseC_no_retrain_cycles.jsonl",
+        "raw/phaseC_cycle_inventory.jsonl",
+        "raw/phaseC_selected_route_l.jsonl",
+        "raw/phaseC_penalty.jsonl"
+      ],
+      "id": "P3_PHASEC_CYCLE_DRIFT",
+      "note": "5-cycle 1000000-live evidence over BigANN/SIFT 6M prefix; not full SIFT100M.",
+      "status": "EVIDENCE_MAIN"
+    },
+    {
+      "claim": "PQ retraining/recode cost is measured across CPU core counts.",
+      "evidence": [
+        "raw/phaseD_pq_core_sweep.jsonl"
+      ],
+      "id": "P4_PQ_RETRAIN_CORE_SWEEP",
+      "note": "Core sweep reports build, PQ train, and recode wall time for representative 1000000-point live set.",
+      "status": "EVIDENCE_MAIN"
+    }
+  ],
+  "created_utc": "20260522T114247Z"
+}

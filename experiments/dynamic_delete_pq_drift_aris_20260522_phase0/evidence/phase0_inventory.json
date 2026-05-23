@@ -1,0 +1,123 @@
+{
+  "aris_docs": [
+    "/Users/zhengganglin/Downloads/Auto-claude-code-research-in-sleep/docs/ARIS_INTRO.md",
+    "/Users/zhengganglin/Downloads/Auto-claude-code-research-in-sleep/docs/TRAE_ARIS_RUNBOOK_CN.md"
+  ],
+  "cpu_cap": 16,
+  "hash_note": "Files larger than 512MiB use a clearly marked prefix hash for fast provenance; full hashes should be added for final paper-grade claims if runtime permits.",
+  "records": [
+    {
+      "exists": true,
+      "hash": "sha256:bdf4760e0cbd325f21e6b3788dd8604f5f27d5cea8832728d35be999f2232101",
+      "mtime_ns": 1779421315047337023,
+      "path": "/mnt/bak3/lzg/PipeANN-github/build/tests/dynamic_update_suite_driver",
+      "role": "binary",
+      "size_bytes": 45856952
+    },
+    {
+      "exists": true,
+      "hash": "sha256:0ea9ac76ed66adfbba8d7f803cc57b0e0db61a942fb797bae99edb26dd5dbc65",
+      "mtime_ns": 1779421334359237150,
+      "path": "/mnt/bak3/lzg/PipeANN-github/build/tests/build_disk_index",
+      "role": "binary",
+      "size_bytes": 19494848
+    },
+    {
+      "exists": true,
+      "hash": "sha256:c46990e18e60538744033169019723ed20cb3f7393373a137aaa36509995f1e0",
+      "mtime_ns": 1779421316031331921,
+      "path": "/mnt/bak3/lzg/PipeANN-github/build/tests/search_disk_index_hybrid",
+      "role": "binary",
+      "size_bytes": 39668184
+    },
+    {
+      "exists": true,
+      "hash": "sha256:12c53eed5791fc2da36ed97001358d98600db1a302c3a7d01ae2327c018621fe",
+      "mtime_ns": 1779247160727025217,
+      "path": "/mnt/bak3/lzg/PipeANN-github/build/tests/utils/compute_groundtruth",
+      "role": "binary",
+      "size_bytes": 1674728
+    },
+    {
+      "exists": true,
+      "hash": "sha256:d2bee4cda9de3e234e9ce4518e9de20f370491f51581e25f21fe5dbd5c1ff7c7",
+      "mtime_ns": 1779247185064984459,
+      "path": "/mnt/bak3/lzg/PipeANN-github/build/tests/calibrate_hybrid_threshold",
+      "role": "binary",
+      "size_bytes": 37119760
+    },
+    {
+      "exists": true,
+      "hash": "sha256:8c7b3d999ba3133f865af72df078f77c2d248fdb80571d7ea1f1bb8e1750658e",
+      "mtime_ns": 1778666765684656883,
+      "path": "/mnt/bak3/lzg/PipeANN-github/data/sift1m/sift_base.bin",
+      "role": "base_bin",
+      "size_bytes": 512000008
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/data/sift_query_1000.bin",
+      "role": "query_bin"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/base_1m.spmat",
+      "role": "base_labels"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/data/sift100m/sift100m_base.fvecs",
+      "role": "sift100m_bin"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u1e-03.spmat",
+      "role": "query_label_intersect_or_range_u1e-03"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u3e-03.spmat",
+      "role": "query_label_intersect_or_range_u3e-03"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u1e-02.spmat",
+      "role": "query_label_intersect_or_range_u1e-02"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u5e-02.spmat",
+      "role": "query_label_intersect_or_range_u5e-02"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u1e-01.spmat",
+      "role": "query_label_intersect_or_range_u1e-01"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u25.spmat",
+      "role": "query_label_intersect_or_range_u25"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u30.spmat",
+      "role": "query_label_intersect_or_range_u30"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u50.spmat",
+      "role": "query_label_intersect_or_range_u50"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u75.spmat",
+      "role": "query_label_intersect_or_range_u75"
+    },
+    {
+      "exists": false,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u100.spmat",
+      "role": "query_label_intersect_or_range_u100"
+    }
+  ]
+}

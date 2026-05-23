@@ -1,0 +1,147 @@
+{
+  "created_utc": "20260522T220702Z",
+  "files": {
+    "claim_registry.json": {
+      "exists": true,
+      "hash": "sha256:e0315a36bf544612cad3c1d7c25c2bdbffcfb4f551ef202ee87e34e7f0635b7a",
+      "mtime_ns": 1779487622054905812,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/claim_registry.json",
+      "role": "claim_registry.json",
+      "size_bytes": 1497
+    },
+    "evidence/input_inventory.json": {
+      "exists": true,
+      "hash": "sha256:0517d4af4ecf00af861da438e8e7fc51a3472014cb3d8b76e9f4e9e1b6a2f70e",
+      "mtime_ns": 1779450171717270566,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/evidence/input_inventory.json",
+      "role": "evidence/input_inventory.json",
+      "size_bytes": 9662
+    },
+    "evidence/runner_config.json": {
+      "exists": true,
+      "hash": "sha256:df5e94a93298becde180049c30980847f3f4fa1bc8f0399a8309e8f68589742a",
+      "mtime_ns": 1779450169425309419,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/evidence/runner_config.json",
+      "role": "evidence/runner_config.json",
+      "size_bytes": 1768
+    },
+    "raw/commands.jsonl": {
+      "exists": true,
+      "hash": "sha256:4aecefb692673098fdf614ce888386ecf4607a2e4df8a65dbfe331975c82be1f",
+      "mtime_ns": 1779487389129898050,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/commands.jsonl",
+      "role": "raw/commands.jsonl",
+      "size_bytes": 5968589
+    },
+    "raw/phaseB_penalty.jsonl": {
+      "exists": true,
+      "hash": "sha256:9e83432e38c6ae0300b3df339bc3446db7bdc25f399b026a9bf34e8248eb2a2c",
+      "mtime_ns": 1779457212661726173,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/phaseB_penalty.jsonl",
+      "role": "raw/phaseB_penalty.jsonl",
+      "size_bytes": 18074
+    },
+    "raw/phaseB_pq_drift.jsonl": {
+      "exists": true,
+      "hash": "sha256:6a2ed64829218fdfc8a72f4d77d139c5139281c9d510026cd7b0349bcd9da1e5",
+      "mtime_ns": 1779452884357651307,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/phaseB_pq_drift.jsonl",
+      "role": "raw/phaseB_pq_drift.jsonl",
+      "size_bytes": 2994
+    },
+    "raw/phaseB_selected_route_l.jsonl": {
+      "exists": true,
+      "hash": "sha256:ffb251382c38a59a62a9613a52febe777758efa88eb9dca68a1d9dcf4b81f48d",
+      "mtime_ns": 1779457212649726168,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/phaseB_selected_route_l.jsonl",
+      "role": "raw/phaseB_selected_route_l.jsonl",
+      "size_bytes": 110790
+    },
+    "raw/phaseB_zero_insert.jsonl": {
+      "exists": true,
+      "hash": "sha256:6f1d3f7d21ba9936e0e800c17b83d33d457ad63abbfc5c1654b7b5f7e2699115",
+      "mtime_ns": 1779452884161650842,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/phaseB_zero_insert.jsonl",
+      "role": "raw/phaseB_zero_insert.jsonl",
+      "size_bytes": 2000
+    },
+    "raw/phaseC_cycle_inventory.jsonl": {
+      "exists": true,
+      "hash": "sha256:b2e63197af944f182ab812bc6fc911f862712f4cc107f45a04389c5107bf091b",
+      "mtime_ns": 1779479715097081644,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/phaseC_cycle_inventory.jsonl",
+      "role": "raw/phaseC_cycle_inventory.jsonl",
+      "size_bytes": 27417
+    },
+    "raw/phaseC_delete_steps.jsonl": {
+      "exists": true,
+      "hash": "sha256:0bb1fe846478f444e77f74e4d636a64a524ddc1bbd8b6944a37cea0e024a63f7",
+      "mtime_ns": 1779478863412294412,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/phaseC_delete_steps.jsonl",
+      "role": "raw/phaseC_delete_steps.jsonl",
+      "size_bytes": 8157
+    },
+    "raw/phaseC_no_retrain_cycles.jsonl": {
+      "exists": true,
+      "hash": "sha256:ed7fd1a868980f208e7ea51aea366115e35ae218d27bde45c0a313af607ee865",
+      "mtime_ns": 1779479484156851517,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/phaseC_no_retrain_cycles.jsonl",
+      "role": "raw/phaseC_no_retrain_cycles.jsonl",
+      "size_bytes": 8363
+    },
+    "raw/phaseC_penalty.jsonl": {
+      "exists": true,
+      "hash": "sha256:7e174436b2849fd52cc6ba131dd5f93ee179c592f9b6b7e4206a452b0ecdeaec",
+      "mtime_ns": 1779484162499018898,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/phaseC_penalty.jsonl",
+      "role": "raw/phaseC_penalty.jsonl",
+      "size_bytes": 90411
+    },
+    "raw/phaseC_selected_route_l.jsonl": {
+      "exists": true,
+      "hash": "sha256:7d1571d25ce9a7cf5648cc2f708605ee19f6a30c7fafd360055ad8de28294dcc",
+      "mtime_ns": 1779484162479018872,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/phaseC_selected_route_l.jsonl",
+      "role": "raw/phaseC_selected_route_l.jsonl",
+      "size_bytes": 551427
+    },
+    "raw/phaseD_pq_core_sweep.jsonl": {
+      "exists": true,
+      "hash": "sha256:9c6c8f42f6184a2e82fb17a288bb7898617c943fb26ad0b640c408d392efa1f6",
+      "mtime_ns": 1779487622054905812,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/phaseD_pq_core_sweep.jsonl",
+      "role": "raw/phaseD_pq_core_sweep.jsonl",
+      "size_bytes": 4213
+    },
+    "raw/selected_route_l.jsonl": {
+      "exists": true,
+      "hash": "sha256:85e5857ae032675570610c6685ef523093e06e85f1eea2b1d4cf78441101cd17",
+      "mtime_ns": 1779484162479018872,
+      "path": "experiments/pq_drift_1m_aris_main_20260522/raw/selected_route_l.jsonl",
+      "role": "raw/selected_route_l.jsonl",
+      "size_bytes": 621993
+    }
+  },
+  "phaseB_penalty.jsonl": {
+    "count": 20,
+    "max_matched_reference_recall_delta_ms": 0.9976236609999997,
+    "max_selected_feasible_delta_ms": 0.9976236609999997,
+    "median_selected_feasible_delta_ms": -0.00039196099999999493,
+    "unmatched_count": 0
+  },
+  "phaseC_penalty.jsonl": {
+    "count": 100,
+    "max_matched_reference_recall_delta_ms": 5.868766591,
+    "max_selected_feasible_delta_ms": 5.405887928,
+    "median_selected_feasible_delta_ms": 0.11290281400000021,
+    "unmatched_count": 1
+  },
+  "selected": {
+    "count": 240,
+    "max_avg_latency_ms": 13.681434317999999,
+    "max_p95_latency_ms": 18.353411,
+    "min_recall": 98.0,
+    "pass_count": 240,
+    "selection_policy": "post_hoc_retuned_fastest_feasible_recall_ge_98"
+  }
+}

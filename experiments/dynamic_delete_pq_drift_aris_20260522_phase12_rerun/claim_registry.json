@@ -1,0 +1,56 @@
+{
+  "claims": [
+    {
+      "claim": "Current delete path marks tombstones/live state and does not immediately rewrite the main disk index.",
+      "evidence": [],
+      "id": "C1_DELETE_IS_MARK_ONLY",
+      "status": "PENDING"
+    },
+    {
+      "claim": "Deleting 60% of vectors has mean latency <0.9 ms/vector under the CPU cap.",
+      "evidence": [
+        "raw/phase1_delete_only.jsonl",
+        "raw/phase1_inputs.jsonl",
+        "logs/phase1_delete_only.log"
+      ],
+      "id": "C2_DELETE_60PCT_SUB_MS",
+      "note": "Smoke evidence; final-grade status depends on independent ARIS review.",
+      "status": "EVIDENCE_SMOKE"
+    },
+    {
+      "claim": "Materializing marked deletes through merge has measured wall time under CPU_CAP=16.",
+      "evidence": [
+        "raw/phase2_delete_then_merge.jsonl",
+        "raw/phase2_outputs.jsonl",
+        "logs/phase2_delete_then_merge.log"
+      ],
+      "id": "C3_MERGE_MATERIALIZE_TIME",
+      "note": "Smoke evidence; CPU affinity must be checked by independent ARIS review.",
+      "status": "EVIDENCE_SMOKE"
+    },
+    {
+      "claim": "After repeated 60% delete + equal-count insert cycles, retuned route/L can reach recall@10 >= 98%.",
+      "evidence": [],
+      "id": "C4_CYCLES_RECALL_RETUNED",
+      "status": "PENDING"
+    },
+    {
+      "claim": "PQ drift from zero-data insertion is quantified against direct-build PQ code, including retrain cost.",
+      "evidence": [],
+      "id": "C5_PQ_DRIFT",
+      "status": "PENDING"
+    },
+    {
+      "claim": "The v2 main disk index stores only raw vectors plus adjacency; labels live in sidecar files.",
+      "evidence": [
+        "raw/phase2_delete_then_merge.jsonl",
+        "raw/phase2_outputs.jsonl",
+        "logs/phase2_delete_then_merge.log"
+      ],
+      "id": "C6_LABEL_SIDECAR",
+      "note": "Sidecar evidence requires main_index_label_size=0 and label_sidecar_loadable=true in driver output.",
+      "status": "EVIDENCE_SMOKE"
+    }
+  ],
+  "created_utc": "20260522T040813Z"
+}

@@ -1,0 +1,1371 @@
+{
+  "base_bin": "/mnt/bak3/lzg/PipeANN-github/experiments/pq_drift_1m_aris_main_20260522/data/segment00_1000000.bin",
+  "bracket": [
+    1000,
+    1000000
+  ],
+  "candidate_models": [
+    {
+      "bootstrap_relative_iqr": 0.14815844755436877,
+      "bootstrap_tau_p10": 135372,
+      "bootstrap_tau_p50": 149236,
+      "bootstrap_tau_p90": 157483,
+      "fit_error": 0.016461971626052934,
+      "graph_fit_error": 0.0024539468796167512,
+      "graph_model": "isotonic_decreasing",
+      "prefilter_fit_error": 0.014008024746436183,
+      "scale": "sqrt",
+      "tau_m": 157311
+    },
+    {
+      "bootstrap_relative_iqr": 0.13232637117066393,
+      "bootstrap_tau_p10": 131438,
+      "bootstrap_tau_p50": 142078,
+      "bootstrap_tau_p90": 150239,
+      "fit_error": 0.03326918145160748,
+      "graph_fit_error": 0.0024539468796167512,
+      "graph_model": "isotonic_decreasing",
+      "prefilter_fit_error": 0.030815234571990733,
+      "scale": "raw",
+      "tau_m": 150060
+    },
+    {
+      "bootstrap_relative_iqr": 0.16308399431845394,
+      "bootstrap_tau_p10": 139086,
+      "bootstrap_tau_p50": 156648,
+      "bootstrap_tau_p90": 164633,
+      "fit_error": 0.07365698406641447,
+      "graph_fit_error": 0.0024539468796167512,
+      "graph_model": "isotonic_decreasing",
+      "prefilter_fit_error": 0.07120303718679771,
+      "scale": "log1p",
+      "tau_m": 164470
+    }
+  ],
+  "config": {
+    "beamwidth": 4,
+    "calibration_sources": [
+      "synthetic_target"
+    ],
+    "k": 10,
+    "mem_l": 0,
+    "nbr_type": "pq",
+    "queries_per_point": 100,
+    "search_l": 100,
+    "selector_type": "intersect",
+    "similarity": "l2",
+    "synthetic_ensemble_size": 5,
+    "synthetic_only": true,
+    "targets": [
+      0.001,
+      0.01,
+      0.05,
+      0.1,
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "threads": 1
+  },
+  "coverage_status": "ok",
+  "format": "pipeann.hybrid.tau_calibration.v1",
+  "index_prefix": "/mnt/bak3/lzg/PipeANN-github/experiments/pq_drift_1m_aris_main_20260522/indexes/phaseB_direct_retrain_1m_pq16",
+  "margin": 0.95,
+  "meta_path": "/mnt/bak3/lzg/PipeANN-github/experiments/pq_drift_1m_aris_main_20260522/indexes/phaseB_direct_retrain_1m_pq16_hybrid.meta",
+  "model_disagreement": 0.09602825536452086,
+  "points_jsonl": "/mnt/bak3/lzg/PipeANN-github/experiments/pq_drift_1m_aris_main_20260522/indexes/phaseB_direct_retrain_1m_pq16_tau_calibration.points.jsonl",
+  "refinement_rounds": 0,
+  "selected_fit_model": "sqrt:isotonic_decreasing",
+  "sidecar_path": "/mnt/bak3/lzg/PipeANN-github/experiments/pq_drift_1m_aris_main_20260522/indexes/phaseB_direct_retrain_1m_pq16_labels.densebit",
+  "status": "ok",
+  "tau_m": 157311,
+  "tau_m_by_model": {
+    "log1p:isotonic_decreasing": 164470,
+    "raw:isotonic_decreasing": 150060,
+    "sqrt:isotonic_decreasing": 157311
+  },
+  "threshold_version": 1,
+  "used_points": [
+    {
+      "candidate_count": 1000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 10218.839844,
+        "mean_ios": 113.269997,
+        "p50_latency_us": 9914.0,
+        "p95_latency_us": 12057.0,
+        "p99_latency_us": 14951.0,
+        "qps": 97.099274,
+        "route": "graph"
+      },
+      "label_ids": [
+        0
+      ],
+      "name": "synthetic_target_1000_s0",
+      "prefilter": {
+        "avg_latency_us": 222.929993,
+        "mean_ios": 96.0,
+        "p50_latency_us": 159.0,
+        "p95_latency_us": 395.0,
+        "p99_latency_us": 2264.0,
+        "qps": 4302.086426,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 1315444171423,
+      "selectivity": 0.001,
+      "source": "synthetic_target",
+      "target_selectivity": 0.001
+    },
+    {
+      "candidate_count": 1000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2304.98999,
+        "mean_ios": 113.169998,
+        "p50_latency_us": 2230.0,
+        "p95_latency_us": 2739.0,
+        "p99_latency_us": 5214.0,
+        "qps": 418.17807,
+        "route": "graph"
+      },
+      "label_ids": [
+        1
+      ],
+      "name": "synthetic_target_1000_s1",
+      "prefilter": {
+        "avg_latency_us": 108.599998,
+        "mean_ios": 96.0,
+        "p50_latency_us": 96.0,
+        "p95_latency_us": 140.0,
+        "p99_latency_us": 757.0,
+        "qps": 8825.084961,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 1315444276152,
+      "selectivity": 0.001,
+      "source": "synthetic_target",
+      "target_selectivity": 0.001
+    },
+    {
+      "candidate_count": 1000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2272.110107,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2234.0,
+        "p95_latency_us": 2451.0,
+        "p99_latency_us": 4489.0,
+        "qps": 424.260498,
+        "route": "graph"
+      },
+      "label_ids": [
+        2
+      ],
+      "name": "synthetic_target_1000_s2",
+      "prefilter": {
+        "avg_latency_us": 216.869995,
+        "mean_ios": 96.0,
+        "p50_latency_us": 195.0,
+        "p95_latency_us": 324.0,
+        "p99_latency_us": 1818.0,
+        "qps": 4416.780762,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 1315444380881,
+      "selectivity": 0.001,
+      "source": "synthetic_target",
+      "target_selectivity": 0.001
+    },
+    {
+      "candidate_count": 1000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2259.780029,
+        "mean_ios": 113.169998,
+        "p50_latency_us": 2229.0,
+        "p95_latency_us": 2405.0,
+        "p99_latency_us": 4491.0,
+        "qps": 427.053741,
+        "route": "graph"
+      },
+      "label_ids": [
+        3
+      ],
+      "name": "synthetic_target_1000_s3",
+      "prefilter": {
+        "avg_latency_us": 221.490005,
+        "mean_ios": 96.0,
+        "p50_latency_us": 174.0,
+        "p95_latency_us": 299.0,
+        "p99_latency_us": 1915.0,
+        "qps": 4326.820312,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 1315444485610,
+      "selectivity": 0.001,
+      "source": "synthetic_target",
+      "target_selectivity": 0.001
+    },
+    {
+      "candidate_count": 1000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2260.360107,
+        "mean_ios": 113.169998,
+        "p50_latency_us": 2228.0,
+        "p95_latency_us": 2402.0,
+        "p99_latency_us": 4309.0,
+        "qps": 426.663086,
+        "route": "graph"
+      },
+      "label_ids": [
+        4
+      ],
+      "name": "synthetic_target_1000_s4",
+      "prefilter": {
+        "avg_latency_us": 216.300003,
+        "mean_ios": 96.0,
+        "p50_latency_us": 196.0,
+        "p95_latency_us": 327.0,
+        "p99_latency_us": 1795.0,
+        "qps": 4430.89209,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 1315444590339,
+      "selectivity": 0.001,
+      "source": "synthetic_target",
+      "target_selectivity": 0.001
+    },
+    {
+      "candidate_count": 10000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2277.399902,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2238.0,
+        "p95_latency_us": 2465.0,
+        "p99_latency_us": 4601.0,
+        "qps": 423.605194,
+        "route": "graph"
+      },
+      "label_ids": [
+        5
+      ],
+      "name": "synthetic_target_10000_s0",
+      "prefilter": {
+        "avg_latency_us": 448.140015,
+        "mean_ios": 128.0,
+        "p50_latency_us": 392.0,
+        "p95_latency_us": 797.0,
+        "p99_latency_us": 2645.0,
+        "qps": 2141.433105,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 13154259370423,
+      "selectivity": 0.01,
+      "source": "synthetic_target",
+      "target_selectivity": 0.01
+    },
+    {
+      "candidate_count": 10000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2281.350098,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2238.0,
+        "p95_latency_us": 2444.0,
+        "p99_latency_us": 5190.0,
+        "qps": 422.6203,
+        "route": "graph"
+      },
+      "label_ids": [
+        6
+      ],
+      "name": "synthetic_target_10000_s1",
+      "prefilter": {
+        "avg_latency_us": 462.350006,
+        "mean_ios": 128.0,
+        "p50_latency_us": 376.0,
+        "p95_latency_us": 737.0,
+        "p99_latency_us": 3168.0,
+        "qps": 2074.862549,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 13154259475152,
+      "selectivity": 0.01,
+      "source": "synthetic_target",
+      "target_selectivity": 0.01
+    },
+    {
+      "candidate_count": 10000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2276.899902,
+        "mean_ios": 113.150002,
+        "p50_latency_us": 2235.0,
+        "p95_latency_us": 2416.0,
+        "p99_latency_us": 5128.0,
+        "qps": 423.067902,
+        "route": "graph"
+      },
+      "label_ids": [
+        7
+      ],
+      "name": "synthetic_target_10000_s2",
+      "prefilter": {
+        "avg_latency_us": 454.320007,
+        "mean_ios": 128.0,
+        "p50_latency_us": 331.0,
+        "p95_latency_us": 876.0,
+        "p99_latency_us": 2503.0,
+        "qps": 2112.620361,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 13154259579881,
+      "selectivity": 0.01,
+      "source": "synthetic_target",
+      "target_selectivity": 0.01
+    },
+    {
+      "candidate_count": 10000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2286.02002,
+        "mean_ios": 113.169998,
+        "p50_latency_us": 2242.0,
+        "p95_latency_us": 2455.0,
+        "p99_latency_us": 5284.0,
+        "qps": 421.799072,
+        "route": "graph"
+      },
+      "label_ids": [
+        8
+      ],
+      "name": "synthetic_target_10000_s3",
+      "prefilter": {
+        "avg_latency_us": 452.359985,
+        "mean_ios": 128.0,
+        "p50_latency_us": 383.0,
+        "p95_latency_us": 799.0,
+        "p99_latency_us": 2877.0,
+        "qps": 2121.416016,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 13154259684610,
+      "selectivity": 0.01,
+      "source": "synthetic_target",
+      "target_selectivity": 0.01
+    },
+    {
+      "candidate_count": 10000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2254.209961,
+        "mean_ios": 113.209999,
+        "p50_latency_us": 2227.0,
+        "p95_latency_us": 2429.0,
+        "p99_latency_us": 3482.0,
+        "qps": 429.163269,
+        "route": "graph"
+      },
+      "label_ids": [
+        9
+      ],
+      "name": "synthetic_target_10000_s4",
+      "prefilter": {
+        "avg_latency_us": 472.920013,
+        "mean_ios": 128.0,
+        "p50_latency_us": 357.0,
+        "p95_latency_us": 954.0,
+        "p99_latency_us": 2837.0,
+        "qps": 2029.106201,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 13154259789339,
+      "selectivity": 0.01,
+      "source": "synthetic_target",
+      "target_selectivity": 0.01
+    },
+    {
+      "candidate_count": 50000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2283.370117,
+        "mean_ios": 113.160004,
+        "p50_latency_us": 2232.0,
+        "p95_latency_us": 2403.0,
+        "p99_latency_us": 5323.0,
+        "qps": 422.207581,
+        "route": "graph"
+      },
+      "label_ids": [
+        10
+      ],
+      "name": "synthetic_target_50000_s0",
+      "prefilter": {
+        "avg_latency_us": 957.169983,
+        "mean_ios": 160.0,
+        "p50_latency_us": 926.0,
+        "p95_latency_us": 1050.0,
+        "p99_latency_us": 1692.0,
+        "qps": 841.534424,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 65771215810423,
+      "selectivity": 0.05,
+      "source": "synthetic_target",
+      "target_selectivity": 0.05
+    },
+    {
+      "candidate_count": 50000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2284.879883,
+        "mean_ios": 113.160004,
+        "p50_latency_us": 2239.0,
+        "p95_latency_us": 2477.0,
+        "p99_latency_us": 5176.0,
+        "qps": 421.800568,
+        "route": "graph"
+      },
+      "label_ids": [
+        11
+      ],
+      "name": "synthetic_target_50000_s1",
+      "prefilter": {
+        "avg_latency_us": 1076.089966,
+        "mean_ios": 160.0,
+        "p50_latency_us": 930.0,
+        "p95_latency_us": 1800.0,
+        "p99_latency_us": 4277.0,
+        "qps": 744.759277,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 65771215915152,
+      "selectivity": 0.05,
+      "source": "synthetic_target",
+      "target_selectivity": 0.05
+    },
+    {
+      "candidate_count": 50000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2255.860107,
+        "mean_ios": 113.199997,
+        "p50_latency_us": 2233.0,
+        "p95_latency_us": 2440.0,
+        "p99_latency_us": 3497.0,
+        "qps": 428.847595,
+        "route": "graph"
+      },
+      "label_ids": [
+        12
+      ],
+      "name": "synthetic_target_50000_s2",
+      "prefilter": {
+        "avg_latency_us": 971.650024,
+        "mean_ios": 160.0,
+        "p50_latency_us": 928.0,
+        "p95_latency_us": 1062.0,
+        "p99_latency_us": 1845.0,
+        "qps": 832.890625,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 65771216019881,
+      "selectivity": 0.05,
+      "source": "synthetic_target",
+      "target_selectivity": 0.05
+    },
+    {
+      "candidate_count": 50000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2278.439941,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2241.0,
+        "p95_latency_us": 2426.0,
+        "p99_latency_us": 4643.0,
+        "qps": 423.334381,
+        "route": "graph"
+      },
+      "label_ids": [
+        13
+      ],
+      "name": "synthetic_target_50000_s3",
+      "prefilter": {
+        "avg_latency_us": 1064.26001,
+        "mean_ios": 160.0,
+        "p50_latency_us": 925.0,
+        "p95_latency_us": 1985.0,
+        "p99_latency_us": 4058.0,
+        "qps": 753.457703,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 65771216124610,
+      "selectivity": 0.05,
+      "source": "synthetic_target",
+      "target_selectivity": 0.05
+    },
+    {
+      "candidate_count": 50000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2288.560059,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2242.0,
+        "p95_latency_us": 2455.0,
+        "p99_latency_us": 4968.0,
+        "qps": 421.44577,
+        "route": "graph"
+      },
+      "label_ids": [
+        14
+      ],
+      "name": "synthetic_target_50000_s4",
+      "prefilter": {
+        "avg_latency_us": 1072.069946,
+        "mean_ios": 160.0,
+        "p50_latency_us": 946.0,
+        "p95_latency_us": 1900.0,
+        "p99_latency_us": 4131.0,
+        "qps": 750.103394,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 65771216229339,
+      "selectivity": 0.05,
+      "source": "synthetic_target",
+      "target_selectivity": 0.05
+    },
+    {
+      "candidate_count": 100000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2286.0,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2240.0,
+        "p95_latency_us": 2452.0,
+        "p99_latency_us": 5011.0,
+        "qps": 421.683289,
+        "route": "graph"
+      },
+      "label_ids": [
+        15
+      ],
+      "name": "synthetic_target_100000_s0",
+      "prefilter": {
+        "avg_latency_us": 1708.109985,
+        "mean_ios": 160.0,
+        "p50_latency_us": 1514.0,
+        "p95_latency_us": 2707.0,
+        "p99_latency_us": 5952.0,
+        "qps": 495.101746,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 131542411360423,
+      "selectivity": 0.1,
+      "source": "synthetic_target",
+      "target_selectivity": 0.1
+    },
+    {
+      "candidate_count": 100000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2255.699951,
+        "mean_ios": 113.209999,
+        "p50_latency_us": 2238.0,
+        "p95_latency_us": 2412.0,
+        "p99_latency_us": 3522.0,
+        "qps": 428.792725,
+        "route": "graph"
+      },
+      "label_ids": [
+        16
+      ],
+      "name": "synthetic_target_100000_s1",
+      "prefilter": {
+        "avg_latency_us": 1597.219971,
+        "mean_ios": 160.0,
+        "p50_latency_us": 1517.0,
+        "p95_latency_us": 1753.0,
+        "p99_latency_us": 2557.0,
+        "qps": 531.99762,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 131542411465152,
+      "selectivity": 0.1,
+      "source": "synthetic_target",
+      "target_selectivity": 0.1
+    },
+    {
+      "candidate_count": 100000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2285.719971,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2238.0,
+        "p95_latency_us": 2483.0,
+        "p99_latency_us": 5295.0,
+        "qps": 421.857544,
+        "route": "graph"
+      },
+      "label_ids": [
+        17
+      ],
+      "name": "synthetic_target_100000_s2",
+      "prefilter": {
+        "avg_latency_us": 1707.640015,
+        "mean_ios": 160.0,
+        "p50_latency_us": 1521.0,
+        "p95_latency_us": 2728.0,
+        "p99_latency_us": 6222.0,
+        "qps": 494.863647,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 131542411569881,
+      "selectivity": 0.1,
+      "source": "synthetic_target",
+      "target_selectivity": 0.1
+    },
+    {
+      "candidate_count": 100000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2256.73999,
+        "mean_ios": 113.209999,
+        "p50_latency_us": 2237.0,
+        "p95_latency_us": 2405.0,
+        "p99_latency_us": 3519.0,
+        "qps": 428.650116,
+        "route": "graph"
+      },
+      "label_ids": [
+        18
+      ],
+      "name": "synthetic_target_100000_s3",
+      "prefilter": {
+        "avg_latency_us": 1760.420044,
+        "mean_ios": 160.0,
+        "p50_latency_us": 1621.0,
+        "p95_latency_us": 2408.0,
+        "p99_latency_us": 5887.0,
+        "qps": 483.326477,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 131542411674610,
+      "selectivity": 0.1,
+      "source": "synthetic_target",
+      "target_selectivity": 0.1
+    },
+    {
+      "candidate_count": 100000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2284.399902,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2237.0,
+        "p95_latency_us": 2463.0,
+        "p99_latency_us": 5348.0,
+        "qps": 422.060547,
+        "route": "graph"
+      },
+      "label_ids": [
+        19
+      ],
+      "name": "synthetic_target_100000_s4",
+      "prefilter": {
+        "avg_latency_us": 1581.030029,
+        "mean_ios": 160.0,
+        "p50_latency_us": 1523.0,
+        "p95_latency_us": 1742.0,
+        "p99_latency_us": 2384.0,
+        "qps": 536.384644,
+        "route": "prefilter"
+      },
+      "prefilter_wins": true,
+      "query_count": 100,
+      "seed": 131542411779339,
+      "selectivity": 0.1,
+      "source": "synthetic_target",
+      "target_selectivity": 0.1
+    },
+    {
+      "candidate_count": 250000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2286.149902,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2243.0,
+        "p95_latency_us": 2479.0,
+        "p99_latency_us": 5226.0,
+        "qps": 421.708893,
+        "route": "graph"
+      },
+      "label_ids": [
+        20
+      ],
+      "name": "synthetic_target_250000_s0",
+      "prefilter": {
+        "avg_latency_us": 3500.070068,
+        "mean_ios": 192.0,
+        "p50_latency_us": 3330.0,
+        "p95_latency_us": 3977.0,
+        "p99_latency_us": 10532.0,
+        "qps": 252.579315,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 328855998010423,
+      "selectivity": 0.25,
+      "source": "synthetic_target",
+      "target_selectivity": 0.25
+    },
+    {
+      "candidate_count": 250000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2288.629883,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2244.0,
+        "p95_latency_us": 2425.0,
+        "p99_latency_us": 5183.0,
+        "qps": 421.361664,
+        "route": "graph"
+      },
+      "label_ids": [
+        21
+      ],
+      "name": "synthetic_target_250000_s1",
+      "prefilter": {
+        "avg_latency_us": 3483.219971,
+        "mean_ios": 192.0,
+        "p50_latency_us": 3330.0,
+        "p95_latency_us": 3572.0,
+        "p99_latency_us": 10561.0,
+        "qps": 254.121552,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 328855998115152,
+      "selectivity": 0.25,
+      "source": "synthetic_target",
+      "target_selectivity": 0.25
+    },
+    {
+      "candidate_count": 250000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2260.790039,
+        "mean_ios": 113.199997,
+        "p50_latency_us": 2236.0,
+        "p95_latency_us": 2413.0,
+        "p99_latency_us": 3405.0,
+        "qps": 427.937195,
+        "route": "graph"
+      },
+      "label_ids": [
+        22
+      ],
+      "name": "synthetic_target_250000_s2",
+      "prefilter": {
+        "avg_latency_us": 3368.469971,
+        "mean_ios": 192.0,
+        "p50_latency_us": 3319.0,
+        "p95_latency_us": 3566.0,
+        "p99_latency_us": 4399.0,
+        "qps": 263.832611,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 328855998219881,
+      "selectivity": 0.25,
+      "source": "synthetic_target",
+      "target_selectivity": 0.25
+    },
+    {
+      "candidate_count": 250000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2264.649902,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2226.0,
+        "p95_latency_us": 2395.0,
+        "p99_latency_us": 4581.0,
+        "qps": 425.889252,
+        "route": "graph"
+      },
+      "label_ids": [
+        23
+      ],
+      "name": "synthetic_target_250000_s3",
+      "prefilter": {
+        "avg_latency_us": 4816.850098,
+        "mean_ios": 192.0,
+        "p50_latency_us": 4752.0,
+        "p95_latency_us": 5161.0,
+        "p99_latency_us": 10929.0,
+        "qps": 184.503113,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 328855998324610,
+      "selectivity": 0.25,
+      "source": "synthetic_target",
+      "target_selectivity": 0.25
+    },
+    {
+      "candidate_count": 250000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2282.52002,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2241.0,
+        "p95_latency_us": 2418.0,
+        "p99_latency_us": 5212.0,
+        "qps": 422.413116,
+        "route": "graph"
+      },
+      "label_ids": [
+        24
+      ],
+      "name": "synthetic_target_250000_s4",
+      "prefilter": {
+        "avg_latency_us": 3369.379883,
+        "mean_ios": 192.0,
+        "p50_latency_us": 3325.0,
+        "p95_latency_us": 3566.0,
+        "p99_latency_us": 4357.0,
+        "qps": 263.760254,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 328855998429339,
+      "selectivity": 0.25,
+      "source": "synthetic_target",
+      "target_selectivity": 0.25
+    },
+    {
+      "candidate_count": 500000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2281.320068,
+        "mean_ios": 113.190002,
+        "p50_latency_us": 2228.0,
+        "p95_latency_us": 2417.0,
+        "p99_latency_us": 5097.0,
+        "qps": 422.634735,
+        "route": "graph"
+      },
+      "label_ids": [
+        25
+      ],
+      "name": "synthetic_target_500000_s0",
+      "prefilter": {
+        "avg_latency_us": 6083.72998,
+        "mean_ios": 192.0,
+        "p50_latency_us": 6082.0,
+        "p95_latency_us": 6149.0,
+        "p99_latency_us": 6900.0,
+        "qps": 148.148697,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 657711975760423,
+      "selectivity": 0.5,
+      "source": "synthetic_target",
+      "target_selectivity": 0.5
+    },
+    {
+      "candidate_count": 500000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2304.830078,
+        "mean_ios": 113.160004,
+        "p50_latency_us": 2259.0,
+        "p95_latency_us": 2492.0,
+        "p99_latency_us": 5180.0,
+        "qps": 418.461456,
+        "route": "graph"
+      },
+      "label_ids": [
+        26
+      ],
+      "name": "synthetic_target_500000_s1",
+      "prefilter": {
+        "avg_latency_us": 6194.359863,
+        "mean_ios": 192.0,
+        "p50_latency_us": 6077.0,
+        "p95_latency_us": 6233.0,
+        "p99_latency_us": 15431.0,
+        "qps": 145.10318,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 657711975865152,
+      "selectivity": 0.5,
+      "source": "synthetic_target",
+      "target_selectivity": 0.5
+    },
+    {
+      "candidate_count": 500000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2373.040039,
+        "mean_ios": 113.150002,
+        "p50_latency_us": 2259.0,
+        "p95_latency_us": 2484.0,
+        "p99_latency_us": 8934.0,
+        "qps": 406.844788,
+        "route": "graph"
+      },
+      "label_ids": [
+        27
+      ],
+      "name": "synthetic_target_500000_s2",
+      "prefilter": {
+        "avg_latency_us": 6204.240234,
+        "mean_ios": 192.0,
+        "p50_latency_us": 6080.0,
+        "p95_latency_us": 6167.0,
+        "p99_latency_us": 16174.0,
+        "qps": 144.765976,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 657711975969881,
+      "selectivity": 0.5,
+      "source": "synthetic_target",
+      "target_selectivity": 0.5
+    },
+    {
+      "candidate_count": 500000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2257.280029,
+        "mean_ios": 113.150002,
+        "p50_latency_us": 2216.0,
+        "p95_latency_us": 2405.0,
+        "p99_latency_us": 5014.0,
+        "qps": 426.75827,
+        "route": "graph"
+      },
+      "label_ids": [
+        28
+      ],
+      "name": "synthetic_target_500000_s3",
+      "prefilter": {
+        "avg_latency_us": 6208.540039,
+        "mean_ios": 192.0,
+        "p50_latency_us": 6089.0,
+        "p95_latency_us": 6157.0,
+        "p99_latency_us": 15758.0,
+        "qps": 144.723343,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 657711976074610,
+      "selectivity": 0.5,
+      "source": "synthetic_target",
+      "target_selectivity": 0.5
+    },
+    {
+      "candidate_count": 500000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2262.780029,
+        "mean_ios": 113.209999,
+        "p50_latency_us": 2239.0,
+        "p95_latency_us": 2402.0,
+        "p99_latency_us": 3940.0,
+        "qps": 427.527618,
+        "route": "graph"
+      },
+      "label_ids": [
+        29
+      ],
+      "name": "synthetic_target_500000_s4",
+      "prefilter": {
+        "avg_latency_us": 6073.0,
+        "mean_ios": 192.0,
+        "p50_latency_us": 6065.0,
+        "p95_latency_us": 6147.0,
+        "p99_latency_us": 7027.0,
+        "qps": 148.47084,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 657711976179339,
+      "selectivity": 0.5,
+      "source": "synthetic_target",
+      "target_selectivity": 0.5
+    },
+    {
+      "candidate_count": 750000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2300.300049,
+        "mean_ios": 113.190002,
+        "p50_latency_us": 2262.0,
+        "p95_latency_us": 2437.0,
+        "p99_latency_us": 5016.0,
+        "qps": 419.143494,
+        "route": "graph"
+      },
+      "label_ids": [
+        30
+      ],
+      "name": "synthetic_target_750000_s0",
+      "prefilter": {
+        "avg_latency_us": 9054.450195,
+        "mean_ios": 192.0,
+        "p50_latency_us": 8928.0,
+        "p95_latency_us": 9033.0,
+        "p99_latency_us": 19778.0,
+        "qps": 99.859154,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 986567953510423,
+      "selectivity": 0.75,
+      "source": "synthetic_target",
+      "target_selectivity": 0.75
+    },
+    {
+      "candidate_count": 750000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2301.429932,
+        "mean_ios": 113.169998,
+        "p50_latency_us": 2254.0,
+        "p95_latency_us": 2523.0,
+        "p99_latency_us": 5287.0,
+        "qps": 419.072937,
+        "route": "graph"
+      },
+      "label_ids": [
+        31
+      ],
+      "name": "synthetic_target_750000_s1",
+      "prefilter": {
+        "avg_latency_us": 9011.799805,
+        "mean_ios": 192.0,
+        "p50_latency_us": 8894.0,
+        "p95_latency_us": 8997.0,
+        "p99_latency_us": 18722.0,
+        "qps": 100.431313,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 986567953615152,
+      "selectivity": 0.75,
+      "source": "synthetic_target",
+      "target_selectivity": 0.75
+    },
+    {
+      "candidate_count": 750000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2305.379883,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2259.0,
+        "p95_latency_us": 2520.0,
+        "p99_latency_us": 5261.0,
+        "qps": 418.27533,
+        "route": "graph"
+      },
+      "label_ids": [
+        32
+      ],
+      "name": "synthetic_target_750000_s2",
+      "prefilter": {
+        "avg_latency_us": 9127.580078,
+        "mean_ios": 192.0,
+        "p50_latency_us": 8915.0,
+        "p95_latency_us": 9677.0,
+        "p99_latency_us": 19218.0,
+        "qps": 99.008301,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 986567953719881,
+      "selectivity": 0.75,
+      "source": "synthetic_target",
+      "target_selectivity": 0.75
+    },
+    {
+      "candidate_count": 750000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2300.889893,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2258.0,
+        "p95_latency_us": 2469.0,
+        "p99_latency_us": 4927.0,
+        "qps": 419.320526,
+        "route": "graph"
+      },
+      "label_ids": [
+        33
+      ],
+      "name": "synthetic_target_750000_s3",
+      "prefilter": {
+        "avg_latency_us": 9013.849609,
+        "mean_ios": 192.0,
+        "p50_latency_us": 8893.0,
+        "p95_latency_us": 8993.0,
+        "p99_latency_us": 19146.0,
+        "qps": 100.323097,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 986567953824610,
+      "selectivity": 0.75,
+      "source": "synthetic_target",
+      "target_selectivity": 0.75
+    },
+    {
+      "candidate_count": 750000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2308.409912,
+        "mean_ios": 113.209999,
+        "p50_latency_us": 2260.0,
+        "p95_latency_us": 2462.0,
+        "p99_latency_us": 5296.0,
+        "qps": 417.826416,
+        "route": "graph"
+      },
+      "label_ids": [
+        34
+      ],
+      "name": "synthetic_target_750000_s4",
+      "prefilter": {
+        "avg_latency_us": 12715.389648,
+        "mean_ios": 192.0,
+        "p50_latency_us": 12619.0,
+        "p95_latency_us": 12948.0,
+        "p99_latency_us": 19679.0,
+        "qps": 70.777611,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 986567953929339,
+      "selectivity": 0.75,
+      "source": "synthetic_target",
+      "target_selectivity": 0.75
+    },
+    {
+      "candidate_count": 1000000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2433.350098,
+        "mean_ios": 113.160004,
+        "p50_latency_us": 2360.0,
+        "p95_latency_us": 2926.0,
+        "p99_latency_us": 6678.0,
+        "qps": 393.637329,
+        "route": "graph"
+      },
+      "label_ids": [
+        35
+      ],
+      "name": "synthetic_target_1000000_s0",
+      "prefilter": {
+        "avg_latency_us": 12183.759766,
+        "mean_ios": 192.0,
+        "p50_latency_us": 12222.0,
+        "p95_latency_us": 12464.0,
+        "p99_latency_us": 21627.0,
+        "qps": 74.217018,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 1315423931260423,
+      "selectivity": 1.0,
+      "source": "synthetic_target",
+      "target_selectivity": 1.0
+    },
+    {
+      "candidate_count": 1000000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2298.139893,
+        "mean_ios": 113.190002,
+        "p50_latency_us": 2262.0,
+        "p95_latency_us": 2446.0,
+        "p99_latency_us": 4793.0,
+        "qps": 419.804199,
+        "route": "graph"
+      },
+      "label_ids": [
+        36
+      ],
+      "name": "synthetic_target_1000000_s1",
+      "prefilter": {
+        "avg_latency_us": 11934.669922,
+        "mean_ios": 192.0,
+        "p50_latency_us": 11832.0,
+        "p95_latency_us": 12093.0,
+        "p99_latency_us": 21721.0,
+        "qps": 76.162949,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 1315423931365152,
+      "selectivity": 1.0,
+      "source": "synthetic_target",
+      "target_selectivity": 1.0
+    },
+    {
+      "candidate_count": 1000000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2265.129883,
+        "mean_ios": 113.209999,
+        "p50_latency_us": 2240.0,
+        "p95_latency_us": 2419.0,
+        "p99_latency_us": 3514.0,
+        "qps": 427.076874,
+        "route": "graph"
+      },
+      "label_ids": [
+        37
+      ],
+      "name": "synthetic_target_1000000_s2",
+      "prefilter": {
+        "avg_latency_us": 11863.860352,
+        "mean_ios": 192.0,
+        "p50_latency_us": 11821.0,
+        "p95_latency_us": 12112.0,
+        "p99_latency_us": 13308.0,
+        "qps": 76.987961,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 1315423931469881,
+      "selectivity": 1.0,
+      "source": "synthetic_target",
+      "target_selectivity": 1.0
+    },
+    {
+      "candidate_count": 1000000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2279.879883,
+        "mean_ios": 113.18,
+        "p50_latency_us": 2226.0,
+        "p95_latency_us": 2421.0,
+        "p99_latency_us": 5448.0,
+        "qps": 422.800476,
+        "route": "graph"
+      },
+      "label_ids": [
+        38
+      ],
+      "name": "synthetic_target_1000000_s3",
+      "prefilter": {
+        "avg_latency_us": 11827.280273,
+        "mean_ios": 192.0,
+        "p50_latency_us": 11795.0,
+        "p95_latency_us": 12074.0,
+        "p99_latency_us": 12691.0,
+        "qps": 77.182892,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 1315423931574610,
+      "selectivity": 1.0,
+      "source": "synthetic_target",
+      "target_selectivity": 1.0
+    },
+    {
+      "candidate_count": 1000000,
+      "format": "pipeann.hybrid.tau_calibration_point.v1",
+      "graph": {
+        "avg_latency_us": 2268.830078,
+        "mean_ios": 113.209999,
+        "p50_latency_us": 2246.0,
+        "p95_latency_us": 2441.0,
+        "p99_latency_us": 3481.0,
+        "qps": 426.429596,
+        "route": "graph"
+      },
+      "label_ids": [
+        39
+      ],
+      "name": "synthetic_target_1000000_s4",
+      "prefilter": {
+        "avg_latency_us": 11813.290039,
+        "mean_ios": 192.0,
+        "p50_latency_us": 11787.0,
+        "p95_latency_us": 12054.0,
+        "p99_latency_us": 12477.0,
+        "qps": 77.270752,
+        "route": "prefilter"
+      },
+      "prefilter_wins": false,
+      "query_count": 100,
+      "seed": 1315423931679339,
+      "selectivity": 1.0,
+      "source": "synthetic_target",
+      "target_selectivity": 1.0
+    }
+  ]
+}

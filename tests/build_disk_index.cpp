@@ -21,6 +21,7 @@ struct CalibrationOptions {
   std::string k = "10";
   std::string mem_l = "0";
   std::string search_l = "100";
+  std::string label_storage = "sidecar";
 };
 
 std::string shell_quote(const std::string &value) {
@@ -109,6 +110,18 @@ bool parse_calibration_options(int argc, char **argv, int start_index, Calibrati
       options->search_l = value;
       continue;
     }
+    if (arg == "--label-storage") {
+      const char *value = require_value(arg);
+      if (value == nullptr) {
+        return false;
+      }
+      options->label_storage = value;
+      if (options->label_storage != "sidecar" && options->label_storage != "embedded") {
+        LOG(ERROR) << "Unsupported --label-storage: " << options->label_storage;
+        return false;
+      }
+      continue;
+    }
 
     LOG(ERROR) << "Unknown option: " << arg;
     return false;
@@ -176,7 +189,8 @@ int main(int argc, char **argv) {
                  "(spmat)> <(optional) label_file.spmat>"
                  " [--calibration-selector-type intersect/subset/range]"
                  " [--calibration-threads N] [--calibration-beamwidth B]"
-                 " [--calibration-k K] [--calibration-mem-l L] [--calibration-l-search L]."
+                 " [--calibration-k K] [--calibration-mem-l L] [--calibration-l-search L]"
+                 " [--label-storage sidecar|embedded]."
                  " See README for more information on parameters."
               << std::endl;
     return -1;
@@ -203,6 +217,8 @@ int main(int argc, char **argv) {
       }
       label = new pipeann::SpmatLabel(label_file);
     }
+    pipeann::AbstractLabel *main_index_label =
+        calibration_options.label_storage == "embedded" ? label : nullptr;
 
     bool build_ok = false;
     if (std::string(argv[1]) == std::string("float")) {
@@ -210,17 +226,17 @@ int main(int argc, char **argv) {
 
       build_ok = pipeann::build_disk_index<float>(argv[2], argv[3], std::stoi(argv[4]), std::stoi(argv[5]),
                                                   std::stoi(argv[7]), std::stoi(argv[8]), std::stoi(argv[6]), m,
-                                                  nullptr, nbr_handler, label, label_source_file);
+                                                  nullptr, nbr_handler, main_index_label, label_source_file);
     } else if (std::string(argv[1]) == std::string("int8")) {
       pipeann::AbstractNeighbor<int8_t> *nbr_handler = pipeann::get_nbr_handler<int8_t>(m, nbr_type);
       build_ok = pipeann::build_disk_index<int8_t>(argv[2], argv[3], std::stoi(argv[4]), std::stoi(argv[5]),
                                                    std::stoi(argv[7]), std::stoi(argv[8]), std::stoi(argv[6]), m,
-                                                   nullptr, nbr_handler, label, label_source_file);
+                                                   nullptr, nbr_handler, main_index_label, label_source_file);
     } else if (std::string(argv[1]) == std::string("uint8")) {
       pipeann::AbstractNeighbor<uint8_t> *nbr_handler = pipeann::get_nbr_handler<uint8_t>(m, nbr_type);
       build_ok = pipeann::build_disk_index<uint8_t>(argv[2], argv[3], std::stoi(argv[4]), std::stoi(argv[5]),
                                                     std::stoi(argv[7]), std::stoi(argv[8]), std::stoi(argv[6]), m,
-                                                    nullptr, nbr_handler, label, label_source_file);
+                                                    nullptr, nbr_handler, main_index_label, label_source_file);
     } else {
       LOG(ERROR) << "Error. wrong file type";
       delete label;

@@ -1,0 +1,65 @@
+{
+  "created_utc": "20260522T043535Z",
+  "files": {
+    "claim_registry.json": {
+      "exists": true,
+      "hash": "sha256:e6fa9d12c8a1268d346cb705839b5a55e829331bf6920afaa5106c58f3dd6a96",
+      "mtime_ns": 1779424535213966563,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase3_smoke/claim_registry.json",
+      "role": "claim_registry.json",
+      "size_bytes": 1597
+    },
+    "evidence/phase0_inventory.json": {
+      "exists": true,
+      "hash": "sha256:54384c015dd30fe3d668a1d5390f3c04ba705312b640fd2b9af4f42adf321702",
+      "mtime_ns": 1779423274366364733,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase3_smoke/evidence/phase0_inventory.json",
+      "role": "evidence/phase0_inventory.json",
+      "size_bytes": 10212
+    },
+    "raw/phase1_delete_only.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase3_smoke/raw/phase1_delete_only.jsonl",
+      "role": "raw/phase1_delete_only.jsonl"
+    },
+    "raw/phase2_delete_then_merge.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase3_smoke/raw/phase2_delete_then_merge.jsonl",
+      "role": "raw/phase2_delete_then_merge.jsonl"
+    },
+    "raw/phase3_cycles.jsonl": {
+      "exists": true,
+      "hash": "sha256:25686c740e9b9a4946ad416c5bec219b7d68c3ee54bc1ec12c8abebacb887883",
+      "mtime_ns": 1779424097449159294,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase3_smoke/raw/phase3_cycles.jsonl",
+      "role": "raw/phase3_cycles.jsonl",
+      "size_bytes": 1730
+    },
+    "raw/phase4_pq_drift.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase3_smoke/raw/phase4_pq_drift.jsonl",
+      "role": "raw/phase4_pq_drift.jsonl"
+    },
+    "raw/selected_route_l.jsonl": {
+      "exists": true,
+      "hash": "sha256:0716597f735e8d040ae8c2f99c327acae77ff56176d26a4b1c7ffdae8116bc6a",
+      "mtime_ns": 1779424535209966474,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase3_smoke/raw/selected_route_l.jsonl",
+      "role": "raw/selected_route_l.jsonl",
+      "size_bytes": 10211
+    }
+  },
+  "retuned_calibration": {
+    "by_cycle": {
+      "cycle01": {
+        "failed": 0,
+        "pass": 4,
+        "total": 4
+      }
+    },
+    "failed_recall_count": 0,
+    "selection_policy": "post_hoc_retuned_fastest_feasible_recall_ge_98",
+    "supports_recall_claim_count": 4,
+    "total_selected_points": 4
+  }
+}

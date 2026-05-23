@@ -1,0 +1,273 @@
+{
+  "contract_version": 1,
+  "delete_id_semantics": {
+    "phase1_phase2_delete_id_file": "One uint32 tag/id per line, interpreted as current live external tag when tags are enabled.",
+    "phase3_delete_scope": "`current-live-tags` means sample uniformly without replacement from all tags live at the start of that cycle."
+  },
+  "duplicate_arg_policy": "Driver must reject duplicate scalar CLI args; the runner avoids emitting duplicates.",
+  "field_schema": {
+    "avg_latency_us": "float microseconds per query",
+    "candidate_count": "float or int mean candidates for this selector/query batch",
+    "cpu_affinity_allowed_cpus": "string or array from sched_getaffinity/proc status in child process",
+    "cpu_cap": "int cores requested by runner",
+    "cpu_cap_enforced": "bool true only if taskset/numactl or equivalent affinity was applied",
+    "delete_wall_s": "float seconds spent inside lazy-delete loop only",
+    "insert_wall_s": "float seconds spent inserting vectors only",
+    "main_index_label_size": "int bytes of label payload embedded in main node record; must be 0 for sidecar-only claim",
+    "merge_wall_s": "float seconds spent inside final_merge/merge_deletes only",
+    "p95_latency_us": "float microseconds per query"
+  },
+  "live_corpus_contract": {
+    "gt_scope": "All post-cycle GT must be computed against these live files, not original base files.",
+    "live_base_label_file": "spmat with nrow equal to live_data_bin npoints. Row i contains labels for live_tag_file row i.",
+    "live_data_bin": "PipeANN save_bin float matrix. Row i is the exact vector for live_tag_file row i.",
+    "live_tag_file": "PipeANN save_bin uint32/TagT vector with nrow equal to live_data_bin npoints."
+  },
+  "mode_required_json_fields": {
+    "cycle-delete-insert": [
+      "delete_step",
+      "insert_step",
+      "mode",
+      "status",
+      "cpu_cap",
+      "cpu_cap_enforced",
+      "cpu_affinity_allowed_cpus",
+      "source_prefix",
+      "dest_prefix",
+      "delete_count",
+      "deleted_tag_hash",
+      "delete_scope",
+      "insert_count",
+      "insert_segment",
+      "live_point_count",
+      "live_data_bin",
+      "live_base_label_file",
+      "live_tag_file",
+      "live_gt_scope",
+      "raw_command"
+    ],
+    "delete-batch": [
+      "mode",
+      "status",
+      "cpu_cap",
+      "cpu_cap_enforced",
+      "cpu_affinity_allowed_cpus",
+      "source_prefix",
+      "dest_prefix",
+      "delete_count",
+      "deleted_tag_hash",
+      "delete_scope",
+      "delete_elapsed_s",
+      "merge_elapsed_s",
+      "raw_command"
+    ],
+    "insert-only": [
+      "mode",
+      "status",
+      "cpu_cap",
+      "cpu_cap_enforced",
+      "cpu_affinity_allowed_cpus",
+      "source_prefix",
+      "dest_prefix",
+      "insert_count",
+      "insert_scope",
+      "inserted_tag_hash",
+      "insert_elapsed_s",
+      "merge_elapsed_s",
+      "live_point_count",
+      "raw_command"
+    ],
+    "measure-delete-only": [
+      "mode",
+      "status",
+      "cpu_cap",
+      "cpu_cap_enforced",
+      "cpu_affinity_allowed_cpus",
+      "source_prefix",
+      "delete_count",
+      "deleted_tag_hash",
+      "delete_scope",
+      "live_point_count",
+      "delete_wall_s",
+      "raw_command"
+    ],
+    "measure-delete-then-merge": [
+      "mode",
+      "status",
+      "cpu_cap",
+      "cpu_cap_enforced",
+      "cpu_affinity_allowed_cpus",
+      "source_prefix",
+      "dest_prefix",
+      "delete_count",
+      "deleted_tag_hash",
+      "delete_scope",
+      "live_point_count",
+      "delete_wall_s",
+      "merge_wall_s",
+      "main_index_label_size",
+      "label_storage_mode",
+      "raw_command"
+    ],
+    "measure-dynamic-search": [
+      "mode",
+      "status",
+      "cpu_cap",
+      "cpu_cap_enforced",
+      "source_prefix",
+      "route",
+      "actual_route",
+      "search_l",
+      "recall@10",
+      "avg_latency_us",
+      "p95_latency_us",
+      "candidate_count",
+      "prefilter_count",
+      "graph_count",
+      "raw_command"
+    ],
+    "pq-drift": [
+      "mode",
+      "status",
+      "cpu_cap",
+      "cpu_cap_enforced",
+      "pq_bytes",
+      "pq_codebook_hash",
+      "pq_code_hash",
+      "pq_retrained",
+      "pq_train_core_count",
+      "pq_train_wall_s",
+      "pq_recode_wall_s",
+      "pq_training_points",
+      "variant",
+      "final_index_prefix",
+      "raw_command"
+    ]
+  },
+  "required_json_fields": [
+    "mode",
+    "phase",
+    "status",
+    "cpu_cap",
+    "cpu_cap_enforced",
+    "threads",
+    "source_prefix",
+    "dest_prefix",
+    "delete_count",
+    "deleted_tag_hash",
+    "delete_scope",
+    "insert_count",
+    "insert_segment",
+    "live_point_count",
+    "live_data_bin",
+    "live_base_label_file",
+    "live_tag_file",
+    "live_gt_scope",
+    "route",
+    "actual_route",
+    "search_l",
+    "recall@10",
+    "avg_latency_us",
+    "p95_latency_us",
+    "candidate_count",
+    "prefilter_count",
+    "graph_count",
+    "fallback_count",
+    "tau_m",
+    "threshold_version",
+    "delete_wall_s",
+    "merge_wall_s",
+    "insert_wall_s",
+    "wall_s",
+    "max_rss_kb",
+    "pq_bytes",
+    "pq_codebook_hash",
+    "pq_code_hash",
+    "pq_retrained",
+    "pq_train_core_count",
+    "pq_train_wall_s",
+    "pq_recode_wall_s",
+    "label_storage_mode",
+    "disk_format_version",
+    "main_index_label_size",
+    "raw_command"
+  ],
+  "required_modes": {
+    "cycle-delete-insert": {
+      "implementation_status": "implemented_as_runner_composition_of_delete-batch_and_insert-only",
+      "purpose": "Runner-composed cycle: delete-batch+merge to an intermediate index, then insert-only+merge equal-count replacement vectors into the deleted tag set and emit live-corpus files for GT.",
+      "required_args": [
+        "--source-prefix",
+        "--dest-prefix",
+        "--jsonl-output",
+        "--delete-id-file",
+        "--insert-tag-file",
+        "--data-bin",
+        "--insert-count"
+      ]
+    },
+    "delete-batch": {
+      "purpose": "Phase3 composition step: lazy-delete supplied tags and final_merge to an intermediate prefix.",
+      "required_args": [
+        "--source-prefix",
+        "--dest-prefix",
+        "--jsonl-output",
+        "--delete-id-file",
+        "--delete-count"
+      ]
+    },
+    "insert-only": {
+      "purpose": "Phase3 composition step: insert replacement vectors using the supplied tag file and final_merge to the next-cycle prefix.",
+      "required_args": [
+        "--source-prefix",
+        "--dest-prefix",
+        "--jsonl-output",
+        "--data-bin",
+        "--insert-tag-file",
+        "--insert-count"
+      ]
+    },
+    "measure-delete-only": {
+      "purpose": "Load an existing disk index, lazy-delete a supplied tag/id set, do not call final_merge.",
+      "required_args": [
+        "--source-prefix",
+        "--jsonl-output",
+        "--delete-id-file",
+        "--delete-count"
+      ]
+    },
+    "measure-delete-then-merge": {
+      "purpose": "Lazy-delete a supplied tag/id set and then materialize through final_merge into --dest-prefix.",
+      "required_args": [
+        "--source-prefix",
+        "--dest-prefix",
+        "--jsonl-output",
+        "--delete-id-file",
+        "--delete-count"
+      ]
+    },
+    "measure-dynamic-search": {
+      "purpose": "Run search for a fixed route/L/query/GT/selector and append full route, recall, latency, and RSS stats.",
+      "required_args": [
+        "--source-prefix",
+        "--jsonl-output",
+        "--query-bin",
+        "--truthset-bin",
+        "--query-label-file",
+        "--selector-type",
+        "--route",
+        "--search-l"
+      ]
+    },
+    "pq-drift": {
+      "implementation_status": "implemented_smoke_for_direct_vs_zero_insert_seed_pq_no_retrain",
+      "purpose": "Compare direct-build PQ with zero-data incremental PQ using seed-trained pivots and no full-corpus retrain, plus optional retrain cost proxies from build logs.",
+      "required_args": [
+        "--jsonl-output",
+        "--data-bin",
+        "--base-label-file",
+        "--query-bin"
+      ]
+    }
+  }
+}

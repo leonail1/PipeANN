@@ -1,0 +1,18 @@
+{
+  "figures": [
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/phaseC_delete_insert_merge_cost.png",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/phaseC_delete_insert_merge_cost.pdf",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/selected_recall.png",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/selected_recall.pdf",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/selected_latency.png",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/selected_latency.pdf",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/no_retrain_selected_feasible_latency_delta.png",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/no_retrain_selected_feasible_latency_delta.pdf",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/no_retrain_matched_reference_recall_delta.png",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/no_retrain_matched_reference_recall_delta.pdf",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/selected_l_uplift.png",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/selected_l_uplift.pdf",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/phaseD_pq_core_sweep.png",
+    "experiments/pq_drift_1m_aris_smoke_10k_20260522/figures/phaseD_pq_core_sweep.pdf"
+  ]
+}

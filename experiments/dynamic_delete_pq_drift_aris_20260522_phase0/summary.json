@@ -1,0 +1,46 @@
+{
+  "created_utc": "20260522T034224Z",
+  "files": {
+    "claim_registry.json": {
+      "exists": true,
+      "hash": "sha256:f4cc34b5c271a4cce9172bfd46e40c6628c63505330ae8fb698095c0391aff6f",
+      "mtime_ns": 1779421343683189136,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase0/claim_registry.json",
+      "role": "claim_registry.json",
+      "size_bytes": 1303
+    },
+    "evidence/phase0_inventory.json": {
+      "exists": true,
+      "hash": "sha256:819cf3734859af5ca1b368d52be6ed9bc2859dbd3458a6e6fdceb820cdfd1dc3",
+      "mtime_ns": 1779421344907182844,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase0/evidence/phase0_inventory.json",
+      "role": "evidence/phase0_inventory.json",
+      "size_bytes": 4536
+    },
+    "raw/phase1_delete_only.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase0/raw/phase1_delete_only.jsonl",
+      "role": "raw/phase1_delete_only.jsonl"
+    },
+    "raw/phase2_delete_then_merge.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase0/raw/phase2_delete_then_merge.jsonl",
+      "role": "raw/phase2_delete_then_merge.jsonl"
+    },
+    "raw/phase3_cycles.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase0/raw/phase3_cycles.jsonl",
+      "role": "raw/phase3_cycles.jsonl"
+    },
+    "raw/phase4_pq_drift.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase0/raw/phase4_pq_drift.jsonl",
+      "role": "raw/phase4_pq_drift.jsonl"
+    },
+    "raw/selected_route_l.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase0/raw/selected_route_l.jsonl",
+      "role": "raw/selected_route_l.jsonl"
+    }
+  }
+}

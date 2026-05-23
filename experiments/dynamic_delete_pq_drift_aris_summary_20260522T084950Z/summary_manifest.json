@@ -1,0 +1,22 @@
+{
+  "created_utc": "20260522T084952Z",
+  "evidence_roots": {
+    "phase12": "/mnt/bak3/lzg/PipeANN-github/experiments/dynamic_delete_pq_drift_aris_20260522_phase12_rerun",
+    "phase3_5cycle": "/mnt/bak3/lzg/PipeANN-github/experiments/dynamic_delete_pq_drift_aris_20260522_phase3_5cycle_bigann6m",
+    "phase4_flatfinal": "/mnt/bak3/lzg/PipeANN-github/experiments/dynamic_delete_pq_drift_aris_20260522_phase4_flatfinal"
+  },
+  "figures": [
+    "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/figures/phase12_delete_merge.png",
+    "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/figures/phase12_delete_merge.pdf",
+    "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/figures/phase3_5cycle_costs.png",
+    "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/figures/phase3_5cycle_costs.pdf",
+    "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/figures/phase3_selected_recall_latency.png",
+    "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/figures/phase3_selected_recall_latency.pdf",
+    "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/figures/phase4_pq_train_recode.png",
+    "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/figures/phase4_pq_train_recode.pdf",
+    "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/figures/phase4_selected_latency.png",
+    "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/figures/phase4_selected_latency.pdf"
+  ],
+  "output": "experiments/dynamic_delete_pq_drift_aris_summary_20260522T084950Z/previous_results_summary.md",
+  "repo": "/mnt/bak3/lzg/PipeANN-github"
+}

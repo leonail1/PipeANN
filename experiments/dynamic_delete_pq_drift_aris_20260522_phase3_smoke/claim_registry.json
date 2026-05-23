@@ -1,0 +1,47 @@
+{
+  "claims": [
+    {
+      "claim": "Current delete path marks tombstones/live state and does not immediately rewrite the main disk index.",
+      "evidence": [],
+      "id": "C1_DELETE_IS_MARK_ONLY",
+      "status": "PENDING"
+    },
+    {
+      "claim": "Deleting 60% of vectors has mean latency <0.9 ms/vector under the CPU cap.",
+      "evidence": [],
+      "id": "C2_DELETE_60PCT_SUB_MS",
+      "status": "PENDING"
+    },
+    {
+      "claim": "Materializing marked deletes through merge has measured wall time under CPU_CAP=16.",
+      "evidence": [],
+      "id": "C3_MERGE_MATERIALIZE_TIME",
+      "status": "PENDING"
+    },
+    {
+      "claim": "After repeated 60% delete + equal-count insert cycles, retuned route/L can reach recall@10 >= 98%.",
+      "evidence": [
+        "raw/phase3_delete_steps.jsonl",
+        "raw/phase3_cycles.jsonl",
+        "raw/phase3_live_corpus_inventory.jsonl",
+        "raw/selected_route_l.jsonl"
+      ],
+      "id": "C4_CYCLES_RECALL_RETUNED",
+      "note": "Evidence is smoke/main depending on --main-cycles and whether SIFT100M or SIFT1M fallback was used.",
+      "status": "EVIDENCE_SMOKE"
+    },
+    {
+      "claim": "PQ drift from zero-data insertion is quantified against direct-build PQ code, including retrain cost.",
+      "evidence": [],
+      "id": "C5_PQ_DRIFT",
+      "status": "PENDING"
+    },
+    {
+      "claim": "The v2 main disk index stores only raw vectors plus adjacency; labels live in sidecar files.",
+      "evidence": [],
+      "id": "C6_LABEL_SIDECAR",
+      "status": "PENDING"
+    }
+  ],
+  "created_utc": "20260522T041433Z"
+}

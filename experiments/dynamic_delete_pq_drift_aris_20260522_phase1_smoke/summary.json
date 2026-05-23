@@ -1,0 +1,52 @@
+{
+  "created_utc": "20260522T035509Z",
+  "files": {
+    "claim_registry.json": {
+      "exists": true,
+      "hash": "sha256:4eadcd52b57aeff74812e32fc5964a02f508448d7767b2e9a3ac130e244f51fc",
+      "mtime_ns": 1779421514122332344,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase1_smoke/claim_registry.json",
+      "role": "claim_registry.json",
+      "size_bytes": 1303
+    },
+    "evidence/phase0_inventory.json": {
+      "exists": true,
+      "hash": "sha256:cbc3ef6f20b3fe3f8998c971179224181e5b3409a659b4a98e1c83993c3d0d85",
+      "mtime_ns": 1779422070979710787,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase1_smoke/evidence/phase0_inventory.json",
+      "role": "evidence/phase0_inventory.json",
+      "size_bytes": 4900
+    },
+    "raw/phase1_delete_only.jsonl": {
+      "exists": true,
+      "hash": "sha256:97e4bd516780220fbc4363ceb5f4ac5e28e093490ba9c0875356b41ca6af17a9",
+      "mtime_ns": 1779421734369270725,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase1_smoke/raw/phase1_delete_only.jsonl",
+      "role": "raw/phase1_delete_only.jsonl",
+      "size_bytes": 1630
+    },
+    "raw/phase2_delete_then_merge.jsonl": {
+      "exists": true,
+      "hash": "sha256:7cda6522a1e2b6236918e9a0e723ad0d55e601776290047f0991afc25162a59c",
+      "mtime_ns": 1779422109395535986,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase1_smoke/raw/phase2_delete_then_merge.jsonl",
+      "role": "raw/phase2_delete_then_merge.jsonl",
+      "size_bytes": 1895
+    },
+    "raw/phase3_cycles.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase1_smoke/raw/phase3_cycles.jsonl",
+      "role": "raw/phase3_cycles.jsonl"
+    },
+    "raw/phase4_pq_drift.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase1_smoke/raw/phase4_pq_drift.jsonl",
+      "role": "raw/phase4_pq_drift.jsonl"
+    },
+    "raw/selected_route_l.jsonl": {
+      "exists": false,
+      "path": "experiments/dynamic_delete_pq_drift_aris_20260522_phase1_smoke/raw/selected_route_l.jsonl",
+      "role": "raw/selected_route_l.jsonl"
+    }
+  }
+}

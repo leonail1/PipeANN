@@ -1,0 +1,92 @@
+{
+  "base_labels": {
+    "exists": true,
+    "hash": "sha256:db05e82d09eaac2458cc04c86b2b45699d7e54e3e2f860857561f9b3dab5c8ad",
+    "mtime_ns": 1779329475696053440,
+    "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite_pq16_aris_20260520_072453/labels/base_1m.spmat",
+    "role": "source_base_labels",
+    "size_bytes": 31712032
+  },
+  "bigann_bin": {
+    "exists": true,
+    "hash": "sha256_first_536870912_bytes:1e37009916f2b49f1aca3cc9caefc06f249a22198e5dad7ef23097b7078cb17c",
+    "mtime_ns": 1779428868927024348,
+    "path": "/mnt/bak3/lzg/PipeANN-github/data/bigann/sift_base_6m_float.bin",
+    "role": "bigann_sift_6m_prefix",
+    "size_bytes": 3072000008
+  },
+  "dataset_scope": "BigANN/SIFT 6M prefix split into 1M live corpus plus 600k replacement segments; not full SIFT100M.",
+  "identity_tags": {
+    "exists": true,
+    "hash": "sha256:3c581f199a05edbb9cf86a6a3c8e559d683a1e3908e4f75442f5f002e8d7dd36",
+    "mtime_ns": 1779439974928144028,
+    "path": "experiments/pq_drift_1m_aris_smoke_10k_20260522/data/identity_tags_10000.bin",
+    "role": "identity_tags",
+    "size_bytes": 40008
+  },
+  "label_semantics": "Filter labels are synthetic and bound to stable tag ids reused by delete/insert experiments; they are not native labels for the replacement segment vectors.",
+  "labels_1m": {
+    "exists": true,
+    "hash": "sha256:f5c8ca47e54134465f6d0ebd2a36b81e3018b364fe64369cc3efc5575d756fae",
+    "mtime_ns": 1779439974912144085,
+    "path": "experiments/pq_drift_1m_aris_smoke_10k_20260522/labels/base_labels_10000.spmat",
+    "role": "labels_1m",
+    "size_bytes": 752032
+  },
+  "query_bin": {
+    "exists": true,
+    "hash": "sha256:a571a066869de8cdb6f0c21c6a4c45004963e7e34ba46209a3f1aaedbb102428",
+    "mtime_ns": 1779329472636092555,
+    "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite_pq16_aris_20260520_072453/data/sift_query_1000.bin",
+    "role": "query_bin",
+    "size_bytes": 512008
+  },
+  "query_label_dir": {
+    "exists": true,
+    "is_dir": true,
+    "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite_pq16_aris_20260520_072453/labels",
+    "role": "query_label_dir"
+  },
+  "query_label_files": [
+    {
+      "exists": true,
+      "hash": "sha256:15a401562c8486ac13d8f24ec4baf663f67c9997386f64164e50642e39278e45",
+      "mtime_ns": 1779329475716053185,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite_pq16_aris_20260520_072453/labels/query_1000_u1e-03.spmat",
+      "role": "query_label_intersect_u1e-03",
+      "size_bytes": 16032
+    },
+    {
+      "exists": true,
+      "hash": "sha256:4064b6753391a2db0a40213d56bcf6d1cc0aca4a7df7e64ec291b7d2f6092773",
+      "mtime_ns": 1779329475716053185,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite_pq16_aris_20260520_072453/labels/query_1000_u50.spmat",
+      "role": "query_label_intersect_u50",
+      "size_bytes": 16032
+    },
+    {
+      "exists": true,
+      "hash": "sha256:15a401562c8486ac13d8f24ec4baf663f67c9997386f64164e50642e39278e45",
+      "mtime_ns": 1779353799398100048,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite_pq16_aris_20260520_072453/labels/query_1000_range_u1e-03.spmat",
+      "role": "query_label_range_u1e-03",
+      "size_bytes": 16032
+    },
+    {
+      "exists": true,
+      "hash": "sha256:9c64990d80448cb7d659abef0303f451ca515196419e1aa7a38107545e121921",
+      "mtime_ns": 1779353799406100061,
+      "path": "/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite_pq16_aris_20260520_072453/labels/query_1000_range_u50.spmat",
+      "role": "query_label_range_u50",
+      "size_bytes": 24032
+    }
+  ],
+  "segment0": {
+    "exists": true,
+    "hash": "sha256:1c829130a0abf373d37021d2bbe2c38aa37e2b7ef5c84b9554aa5dfaa2915a14",
+    "mtime_ns": 1779439974832144375,
+    "path": "experiments/pq_drift_1m_aris_smoke_10k_20260522/data/segment00_10000.bin",
+    "role": "initial_1m_segment",
+    "size_bytes": 5120008
+  }
+}

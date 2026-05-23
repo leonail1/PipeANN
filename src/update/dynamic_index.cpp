@@ -501,7 +501,8 @@ namespace pipeann {
   template<typename T, typename TagT>
   DynamicSSDIndex<T, TagT>::DynamicSSDIndex(IndexBuildParameters &parameters, const std::string disk_prefix_out,
                                             uint32_t data_dim, Distance<T> *dist, pipeann::Metric dist_metric,
-                                            uint64_t flat_threshold, int search_mode) {
+                                            uint64_t flat_threshold, int search_mode, uint32_t flat_pq_bytes,
+                                            const std::string &flat_pq_pivots_path) {
     this->_dist_metric = dist_metric;
     this->journal = new pipeann::Journal<TagT>(disk_prefix_out + "_journal");
 
@@ -524,6 +525,8 @@ namespace pipeann {
     _disk_index = nullptr;
     flat_mode_ = true;
     flat_threshold_ = flat_threshold;
+    flat_pq_bytes_ = std::max<uint32_t>(1, std::min<uint32_t>(flat_pq_bytes, data_dim));
+    flat_pq_pivots_path_ = flat_pq_pivots_path;
     flat_dim_ = data_dim;
     live_point_count_.store(0);
   }
@@ -695,14 +698,18 @@ namespace pipeann {
       label_source_file = label_path.c_str();
     }
 
-    AbstractNeighbor<T> *nbr_handler = new PQNeighbor<T>(this->_dist_metric);
+    PQNeighbor<T> *pq_nbr_handler = new PQNeighbor<T>(this->_dist_metric);
+    if (!flat_pq_pivots_path_.empty()) {
+      pq_nbr_handler->set_pretrained_pq_pivots(flat_pq_pivots_path_);
+    }
+    AbstractNeighbor<T> *nbr_handler = pq_nbr_handler;
     const uint32_t R = _paras_disk.R == 0 ? 64 : _paras_disk.R;
     const uint32_t L = _paras_disk.L == 0 ? R + 32 : _paras_disk.L;
     const uint32_t build_threads = _num_threads == 0 ? 1 : _num_threads;
-    const uint32_t pq_bytes = std::min<uint32_t>(32, std::max<uint32_t>(1, flat_dim_));
+    const uint32_t pq_bytes = std::max<uint32_t>(1, std::min<uint32_t>(flat_pq_bytes_, flat_dim_));
     const bool build_ok = pipeann::build_disk_index<T, TagT>(
         data_path.c_str(), _disk_index_prefix_in.c_str(), R, L, 1, build_threads, pq_bytes, _dist_metric,
-        tag_path.c_str(), nbr_handler, label.get(), label_source_file);
+        tag_path.c_str(), nbr_handler, nullptr, label_source_file);
     if (!build_ok) {
       delete nbr_handler;
       return false;

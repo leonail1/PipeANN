@@ -20,8 +20,8 @@ namespace pipeann {
       return true;
     }
     if (!has_label_writer) {
-      LOG(ERROR) << "label_source_file was provided but no label writer is attached to the build";
-      return false;
+      LOG(INFO) << "label_source_file provided without a label writer; labels will be written to sidecar only";
+      return true;
     }
     if (!has_label_source) {
       LOG(ERROR) << "Filtered build requires label_source_file to generate <index_prefix>_labels.densebit";
