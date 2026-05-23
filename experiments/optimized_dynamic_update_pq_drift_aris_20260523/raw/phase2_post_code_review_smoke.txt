@@ -1,0 +1,14 @@
+timestamp_utc=2026-05-23T02:30:51Z
+git_head=f25d3d652e316c630c9ad2cda851957d72c2aeb5
+git_diff_name_status=M	scripts/run_pq_drift_1m_aris.py
+command=python3 -m py_compile scripts/run_pq_drift_1m_aris.py scripts/run_dynamic_delete_pq_drift_aris.py
+py_compile=PASS
+command=python3 scripts/run_pq_drift_1m_aris.py --help | grep -- --l-sweep
+                               [--l-sweep L_SWEEP]
+  --l-sweep L_SWEEP     Comma-separated search L candidates used during
+help_l_sweep=PASS
+command=parse_l_sweep import/defaults
+DEFAULT_L_SWEEP [50, 75, 100, 150, 200, 250, 300, 400, 450, 470]
+PARSED [400, 450, 470]
+BAD_VALUE_EXCEPTION ArgumentTypeError --l-sweep values must be positive
+parse_l_sweep=PASS

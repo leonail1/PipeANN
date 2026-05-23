@@ -1,0 +1,259 @@
+{
+  "aris_methodology_applied": [
+    "claim-driven registry before new claims",
+    "executor keeps evidence paths and raw files; fresh subagent reviews evidence after each phase",
+    "code/experiment-script edits require fresh code review before tests or experiments",
+    "do not claim fixed-parameter recall stability without fixed-parameter evidence"
+  ],
+  "claims": [
+    {
+      "caveat": "Delete performance evidence and lazy-delete/tombstone code path are already supported; this run did not change delete code.",
+      "claim": "Delete path is mark-delete/tombstone-style, not immediate vector/adjacency rewrite.",
+      "evidence": [
+        "tests/dynamic_update_suite_driver.cpp mode measure-delete-only",
+        "src/update/dynamic_index.cpp lazy_delete",
+        "experiments/dynamic_delete_pq_drift_aris_20260522_phase12_rerun/raw/phase1_delete_only.jsonl"
+      ],
+      "id": "C_DELETE_TOMBSTONE_STYLE",
+      "status": "PASS_EXISTING_EVIDENCE"
+    },
+    {
+      "claim": "60% delete is sub-millisecond per vector at 1M scale under tested driver path.",
+      "evidence": [
+        "experiments/dynamic_delete_pq_drift_aris_20260522_phase12_rerun/raw/phase1_delete_only.jsonl",
+        "experiments/pq_drift_1m_aris_main_20260522/raw/phaseC_delete_steps.jsonl"
+      ],
+      "id": "C_DELETE_60PCT_FAST",
+      "metrics": {
+        "phase12_delete_count": 600000,
+        "phase12_delete_wall_s": 0.974438,
+        "phase12_ms_per_vector": 0.0016240633333333334,
+        "phaseC_mean_ms_per_vector": 0.005221837666666667
+      },
+      "status": "PASS"
+    },
+    {
+      "caveat": "This is merge/materialization, not full rebuild.",
+      "claim": "After 60% delete, merge/materialization at 1M scale is inside a 3 minute window.",
+      "evidence": [
+        "experiments/dynamic_delete_pq_drift_aris_20260522_phase12_rerun/raw/phase2_delete_then_merge.jsonl",
+        "experiments/pq_drift_1m_aris_main_20260522/raw/phaseC_delete_steps.jsonl"
+      ],
+      "id": "C_MERGE_AFTER_60PCT_WITHIN_3MIN_1M",
+      "metrics": {
+        "phase12_merge_wall_s": 31.160545,
+        "phaseC_merge_wall_s_values": [
+          35.863939,
+          36.237252,
+          31.997058,
+          34.458514,
+          35.443117
+        ]
+      },
+      "status": "PASS_1M_CPU16"
+    },
+    {
+      "allowed_wording": "retuned route/L can recover recall@10 >= 98",
+      "claim": "After dynamic updates, allowing route/L reselection can recover recall@10 >= 98 on selected points.",
+      "evidence": [
+        "experiments/pq_drift_1m_aris_main_20260522/raw/phaseC_selected_route_l.jsonl"
+      ],
+      "forbidden_wording": "same search parameters preserve graph quality or recall",
+      "id": "C_DYNAMIC_RECALL_RETUNED_GE_98",
+      "metrics": {
+        "min_recall": 98.0,
+        "pass_count": 200,
+        "selected_count": 200
+      },
+      "status": "PASS_CORRECTED_SCOPE"
+    },
+    {
+      "caveat": "Retuned route/L policy. Range replacements are configured graph but actual_route=mixed/fallback; do not call them pure graph executions.",
+      "claim": "Every selected dynamic update point has avg query latency <10ms while recall@10 >=98.",
+      "evidence": [
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/optimized_dynamic_update_results.jsonl",
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/optimized_dynamic_update_results_summary.json",
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/raw/phase2_targeted_rerun.jsonl"
+      ],
+      "id": "C_LAT_AVG_10MS_ALL_SELECTED",
+      "metrics": {
+        "avg_lt_10ms_count": 200,
+        "max_avg_latency_ms": 9.949428326,
+        "min_recall": 98.0,
+        "recall_pass_count": 200,
+        "replacement_count": 7,
+        "selected_count": 200
+      },
+      "next_action": "targeted profiling; optimize high-selectivity prefilter or route/L policy",
+      "status": "PASS_OPTIMIZED_PHASE2"
+    },
+    {
+      "caveat": "p95 <10ms is an additional desired criterion, not the original primary latency claim.",
+      "claim": "Selected dynamic update points should preferably also have p95 <10ms.",
+      "evidence": [
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/optimized_dynamic_update_results_summary.json",
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/figures/latency_before_after_p95.png"
+      ],
+      "id": "C_LAT_P95_10MS_DESIRED",
+      "metrics": {
+        "max_p95_latency_ms": 9.972903,
+        "p95_lt_10ms_count": 200
+      },
+      "status": "PASS_OPTIMIZED_PHASE2_DESIRED"
+    },
+    {
+      "caveat": "partial_recode and larger_seed_pq rows are design-only in this evidence set and are not counted as experimental passes.",
+      "claim": "No-retrain or triggered strategy matches reference recall within 0.1pp for all 100 PhaseC comparisons.",
+      "evidence": [
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/raw/phase3_pq_unmatched_targeted_rerun.jsonl",
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/pq_drift_strategy_compare.csv",
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/pq_drift_strategy_compare_summary.json"
+      ],
+      "id": "C_PQ_MATCHED_REFERENCE_100_100",
+      "metrics": {
+        "avg_latency_ms": 5.100167027,
+        "fastest_matched_recall_at_10": 99.42,
+        "fastest_matched_strategy": "no_retrain_expanded_prefilter_L420",
+        "optimized_matched": "100/100",
+        "original_matched": "99/100",
+        "p95_latency_ms": 7.193725000000001,
+        "target_recall_at_10": 99.41
+      },
+      "next_action": "compare no-retrain, triggered-retrain, partial-recode, and larger seed PQ strategies",
+      "status": "PASS_OPTIMIZED_PHASE3"
+    },
+    {
+      "caveat": "Do not conflate this with full build/rebuild.",
+      "claim": "PQ train + recode itself is much less than 3 minutes on 16 cores.",
+      "evidence": [
+        "experiments/pq_drift_1m_aris_main_20260522/raw/phaseD_pq_core_sweep.jsonl"
+      ],
+      "id": "C_PQ_TRAIN_RECODE_LT_3MIN",
+      "metrics": {
+        "core16_pq_recode_wall_s": 2.01885,
+        "core16_pq_train_wall_s": 2.47967
+      },
+      "status": "PASS_CORE_OPERATION_ONLY"
+    },
+    {
+      "caveat": "Full rebuild remains 232.91s and must be treated as background/offline. The foreground claim applies to PQ train/recode plus merge/retuned serving path, not blocking full rebuild.",
+      "claim": "The foreground-blocking maintenance path fits the daily 3 minute window with <=1pp recall drop.",
+      "evidence": [
+        "experiments/pq_drift_1m_aris_main_20260522/raw/phaseD_pq_core_sweep.jsonl",
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/pq_drift_strategy_compare_summary.json",
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/ppt_ready_conclusion_summary.md"
+      ],
+      "id": "C_FRONTEND_BLOCKING_MAINT_LT_3MIN",
+      "metrics": {
+        "core16_full_build_wall_s": 232.91205430030823,
+        "core16_pq_recode_wall_s": 2.01885,
+        "core16_pq_train_wall_s": 2.47967,
+        "core16_train_plus_recode_s": 4.49852
+      },
+      "next_action": "separate PQ train/recode, merge, and full rebuild; design background/incremental path",
+      "status": "PASS_FOR_CORE_PQ_MAINTENANCE_WITH_BACKGROUND_FULL_REBUILD"
+    },
+    {
+      "caveat": "Strict <=1x is not met by current sector-packed R=116 layout. No-sector-slack packing is analytical/design evidence only, not implemented.",
+      "claim": "Strict total index footprint is <=1x raw vector bytes.",
+      "current_observation": "PPT/report currently cite around 1.03x extra index over raw under R=116/PQ16 or mixed historical ratios; exact numerator/denominator must be audited.",
+      "evidence": [
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/index_space_audit.md",
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/index_space_audit.csv",
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/phase4_space_label_audit_summary.json"
+      ],
+      "id": "C_SPACE_STRICT_LE_1X",
+      "metrics": {
+        "estimated_no_sector_slack_strict_excess_x": 0.9552219928871564,
+        "main_index_only_excess_over_raw_x": 1.0000079687498755,
+        "phaseC_cycle05_no_tag_excess_over_raw_x": 1.0333469760414535,
+        "phaseC_cycle05_strict_excess_over_raw_x": 1.041159491544383
+      },
+      "next_action": "produce strict and engineering space calculations with file-component breakdown",
+      "status": "FAIL_STRICT_CURRENT_LAYOUT_ENGINEERING_PATH_IDENTIFIED"
+    },
+    {
+      "caveat": "This is a labels claim, not a tag/id-map claim; dynamic indexes may still have _disk.index.tags.",
+      "claim": "With --label-storage sidecar, main index node records contain no embedded label payload.",
+      "evidence": [
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/label_sidecar_layout_audit.md",
+        "experiments/optimized_dynamic_update_pq_drift_aris_20260523/label_sidecar_header_audit.jsonl",
+        "experiments/dynamic_delete_pq_drift_aris_20260522_phase12_rerun/raw/phase2_delete_then_merge.jsonl"
+      ],
+      "id": "C_LABEL_SIDECAR_MAIN_INDEX_NO_LABELS",
+      "metrics": {
+        "label_sidecar_loadable": true,
+        "main_index_label_size": 0,
+        "sidecar_version": 2
+      },
+      "next_action": "code-level layout audit: node record, sector packing, metadata, tag map, densebit sidecar",
+      "status": "PASS_CODE_LAYOUT_AUDIT"
+    },
+    {
+      "claim": "Dynamic updates do not reduce recall under identical search parameters.",
+      "evidence": [],
+      "id": "C_FIXED_PARAMETER_RECALL_UNAFFECTED",
+      "required_if_needed": "Run fixed-parameter control separately; do not use it as replacement for retuned acceptance claim.",
+      "status": "UNSUPPORTED_DO_NOT_CLAIM"
+    }
+  ],
+  "created_utc": "2026-05-23T01:56:39Z",
+  "current_not_passing_claims": [
+    "C_SPACE_STRICT_LE_1X",
+    "C_FIXED_PARAMETER_RECALL_UNAFFECTED"
+  ],
+  "evidence_roots": {
+    "organized_analysis": "experiments/organized_dynamic_delete_pq_drift_aris",
+    "phase12_delete_merge": "experiments/dynamic_delete_pq_drift_aris_20260522_phase12_rerun",
+    "phase3_5cycle_legacy": "experiments/dynamic_delete_pq_drift_aris_20260522_phase3_5cycle_bigann6m",
+    "pq_drift_1m_main": "experiments/pq_drift_1m_aris_main_20260522"
+  },
+  "expected_latest_commit": "f25d3d6 Add ARIS dynamic delete and PQ drift experiments",
+  "final_review": {
+    "artifact": "experiments/optimized_dynamic_update_pq_drift_aris_20260523/aris_final_review.md",
+    "updated_utc": "2026-05-23T02:58:44Z",
+    "verdict": "PASS_FOR_LATENCY_PQDRIFT_LABELS_MAINTENANCE_CORE_FAIL_FOR_STRICT_SPACE_CURRENT_LAYOUT"
+  },
+  "format": "pipeann.aris.optimized_claim_registry.v1",
+  "git_head": "f25d3d652e316c630c9ad2cda851957d72c2aeb5",
+  "phase0_evidence_review": {
+    "action_taken": "Added label-sidecar layout audit and fixed-parameter recall unsupported claim to current_not_passing_claims.",
+    "proceed_to_phase1": true,
+    "reviewer": "fresh subagent 019e528c-ba91-7de0-8202-8295067d0fe7",
+    "verdict": "WARN"
+  },
+  "phase_reviews": {
+    "phase0": {
+      "reviewer_agent": "019e528c-ba91-7de0-8202-8295067d0fe7",
+      "verdict": "WARN_THEN_FIXED"
+    },
+    "phase1": {
+      "reviewer_agent": "019e52a0-5c34-7193-853c-9b39c2bb084d",
+      "verdict": "WARN_THEN_FIXED"
+    },
+    "phase2": {
+      "note": "Code review PASS occurred in Codex subagent 019e52a2-0b85-7fd2-b93a-d126ce48f33d before smoke/rerun, but the PASS transcript is not independently timestamped inside node6 artifacts.",
+      "reviewer_agents": [
+        "019e52a7-f4b7-7ab1-a6fc-ccdfb19451b6",
+        "019e52ac-18a6-7273-b917-c72688884367"
+      ],
+      "verdict": "METRICS_PASS_WORKFLOW_ARTIFACT_WARN"
+    },
+    "phase3": {
+      "reviewer_agent": "019e52ae-9a7a-7f10-848d-59de4f73b24a",
+      "verdict": "PASS"
+    },
+    "phase4": {
+      "reviewer_agent": "019e52b6-c957-7422-8e2f-040baacc9bd6",
+      "verdict": "EVIDENCE_PASS_TOOL_FLOW_WARN"
+    }
+  },
+  "protected_existing_untracked_paths": [
+    "experiments/r116_suite_pq16_aris_20260520_072453/exp4_intersect_range_auto_lprobe/",
+    "experiments/r116_suite_pq16_aris_20260520_072453/exp4_recalibrate_tau_prefilter_graph/",
+    "experiments/r116_suite_pq16_aris_20260520_072453/exp6_demand3_worst_auto_lprobe_thread_sweep/",
+    "experiments/r116_suite_pq16_aris_20260520_072453/exp6_recalibrated_demand3_worst_thread_sweep/"
+  ],
+  "repo": "/mnt/bak3/lzg/PipeANN-github",
+  "updated_utc": "2026-05-23T02:45:11Z"
+}

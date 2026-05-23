@@ -40,7 +40,7 @@ DEFAULT_BUCKETS = [
     "u100",
 ]
 
-DEFAULT_L_SWEEP = [50, 75, 100, 150, 200, 250, 300, 400]
+DEFAULT_L_SWEEP = [50, 75, 100, 150, 200, 250, 300, 400, 450, 470]
 
 
 def now_stamp() -> str:
@@ -70,6 +70,15 @@ def append_jsonl(path: Path, obj: dict[str, Any]) -> None:
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return aris.read_jsonl(path)
+
+
+def parse_l_sweep(value: str) -> list[int]:
+    parsed = sorted({int(item) for item in value.split(",") if item.strip()})
+    if not parsed:
+        raise argparse.ArgumentTypeError("--l-sweep must contain at least one integer")
+    if parsed[0] <= 0:
+        raise argparse.ArgumentTypeError("--l-sweep values must be positive")
+    return parsed
 
 
 def sha256_text(text: str) -> str:
@@ -165,7 +174,7 @@ def scale_status(args: argparse.Namespace, *, needs_cycles: bool = False, all_se
 def write_env(paths: aris.Paths, args: argparse.Namespace) -> None:
     aris.phase0_inventory(paths, args)
     write_json(paths.evidence / "runner_config.json", jsonable(vars(args) | {
-        "l_sweep": DEFAULT_L_SWEEP,
+        "l_sweep": args.l_sweep,
         "script": str(Path(__file__).resolve()),
         "script_sha256": aris.sha256_file(Path(__file__).resolve()),
         "note": "This runner uses BigANN/SIFT 6M prefix as a segment source; it must not be described as full SIFT100M.",
@@ -659,6 +668,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--delete-fraction", type=float, default=0.60)
     parser.add_argument("--buckets", default=",".join(DEFAULT_BUCKETS))
     parser.add_argument("--selector-types", default="intersect,range")
+    parser.add_argument("--l-sweep", type=parse_l_sweep, default=DEFAULT_L_SWEEP,
+                        help="Comma-separated search L candidates used during route/L calibration.")
     parser.add_argument("--insert-threads", type=int, default=16)
     parser.add_argument("--merge-threads", type=int, default=16)
     parser.add_argument("--pq-core-sweep", type=lambda s: [int(x) for x in s.split(",") if x], default=[1, 4, 8, 16])
@@ -668,7 +679,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    aris.DEFAULT_L_SWEEP[:] = DEFAULT_L_SWEEP
+    aris.DEFAULT_L_SWEEP[:] = args.l_sweep
     # Compatibility for imported helpers that expect these argparse attributes.
     args.base_bin = args.bigann_bin
     args.phase3_buckets = args.buckets
