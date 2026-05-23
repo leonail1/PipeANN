@@ -21,9 +21,13 @@
 #include "linux_aligned_file_reader.h"
 
 namespace pipeann {
-  template<typename T, typename TagT>
-  int SSDIndex<T, TagT>::insert_in_place(const T *point1, const TagT &tag, tsl::robin_set<uint32_t> *deletion_set) {
-    QueryBuffer<T> *read_data = this->pop_query_buf(point1);
+	  template<typename T, typename TagT>
+	  int SSDIndex<T, TagT>::insert_in_place(const T *point1, const TagT &tag, tsl::robin_set<uint32_t> *deletion_set) {
+	    if (meta_.uses_packed_layout()) {
+	      LOG(ERROR) << "insert_in_place is unsupported for packed serving layout; repack after v1 updates instead.";
+	      crash();
+	    }
+	    QueryBuffer<T> *read_data = this->pop_query_buf(point1);
     T *point = read_data->aligned_query_T;  // normalized point for cosine.
     void *ctx = reader->get_ctx();
 

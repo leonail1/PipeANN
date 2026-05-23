@@ -109,10 +109,10 @@ namespace pipeann {
     this->thread_data_queue.null_T = nullptr;
     for (uint64_t i = 0; i < n_buffers; i++) {
       QueryBuffer<T> *data = new QueryBuffer<T>();
-      this->init_query_buf(*data);
-      this->thread_data_bufs.push_back(data);
-      this->thread_data_queue.push(data);
-      this->reader->register_buf(data->sector_scratch, MAX_N_SECTOR_READS * SECTOR_LEN, 0);
+	      this->init_query_buf(*data);
+	      this->thread_data_bufs.push_back(data);
+	      this->thread_data_queue.push(data);
+	      this->reader->register_buf(data->sector_scratch, MAX_N_SECTOR_READS * size_per_io, 0);
     }
 
 #ifndef READ_ONLY_TESTS
@@ -181,9 +181,13 @@ namespace pipeann {
     close_rerank_vector_fd();
     this->disk_index_file = disk_index_file;
 
-    SSDIndexMetadata<T> meta;
-    meta.load_from_disk_index(disk_index_file);
-    this->init_metadata(meta);
+	    SSDIndexMetadata<T> meta;
+	    meta.load_from_disk_index(disk_index_file);
+	    if (meta.uses_packed_layout() && meta.max_node_len > SECTOR_LEN) {
+	      LOG(ERROR) << "Packed disk layout currently supports max_node_len <= 4096; found " << meta.max_node_len;
+	      return -1;
+	    }
+	    this->init_metadata(meta);
 
     // load nbrs (e.g., PQ)
     nbr_handler->load(index_prefix);
@@ -195,15 +199,19 @@ namespace pipeann {
       exit(-1);
     }
 
-    this->destroy_buffers();  // in case of re-init.
-    reader->open(disk_index_file, true, false);
-    this->init_buffers(num_threads);
-    this->max_nthreads = num_threads;
+	    this->destroy_buffers();  // in case of re-init.
+	    reader->open(disk_index_file, true, false);
+	    this->init_buffers(num_threads);
+	    this->max_nthreads = num_threads;
 
-    // load page layout.
-    this->use_page_search_ = use_page_search;
-    this->identity_page_layout_ = can_use_identity_page_layout(index_prefix);
-    this->load_page_layout(index_prefix, meta_.nnodes_per_sector, meta_.npoints);
+	    // load page layout.
+	    if (meta_.uses_packed_layout() && use_page_search) {
+	      LOG(ERROR) << "Page search is unsupported for packed disk layout.";
+	      return -1;
+	    }
+	    this->use_page_search_ = use_page_search;
+	    this->identity_page_layout_ = meta_.uses_packed_layout() ? true : can_use_identity_page_layout(index_prefix);
+	    this->load_page_layout(index_prefix, meta_.nnodes_per_sector, meta_.npoints);
 
     // load tags
     if (this->enable_tags) {
@@ -464,7 +472,7 @@ namespace pipeann {
 
       // Calculate sector range to read for [loc_st, loc_ed)
       uint64_t st_sector = loc_sector_no(loc_st);
-      uint64_t ed_sector = loc_sector_no(loc_ed > 0 ? loc_ed - 1 : 0);
+	      uint64_t ed_sector = loc_sector_no(loc_ed > 0 ? loc_ed - 1 : 0) + loc_4k_pages_to_read(loc_ed - 1) - 1;
       uint64_t n_sectors_to_read = ed_sector - st_sector + 1;
 
       std::vector<IORequest> read_reqs;
@@ -540,11 +548,10 @@ namespace pipeann {
     uint32_t pos = id;
     auto loc = id2loc(pos);
 
-    size_t num_sectors = loc_sector_no(loc);
-    std::unique_ptr<char[]> local_sector_buf;
-    if (sector_buf == nullptr) {
-      local_sector_buf = std::make_unique<char[]>(size_per_io);
-      sector_buf = local_sector_buf.get();
+	    std::unique_ptr<char[]> local_sector_buf;
+	    if (sector_buf == nullptr) {
+	      local_sector_buf = std::make_unique<char[]>(size_per_io);
+	      sector_buf = local_sector_buf.get();
     }
 
     const int fd = get_rerank_vector_fd();
@@ -552,25 +559,30 @@ namespace pipeann {
       return -1;
     }
 
-    const uint64_t offset = SECTOR_LEN * num_sectors;
-    uint64_t bytes_read = 0;
-    while (bytes_read < size_per_io) {
-      const ssize_t ret = ::pread(fd, sector_buf + bytes_read, size_per_io - bytes_read,
-                                  static_cast<off_t>(offset + bytes_read));
-      if (ret < 0) {
-        if (errno == EINTR) {
-          continue;
-        }
-        LOG(ERROR) << "Failed to read vector from " << disk_index_file << " at offset " << offset
-                   << ", errno=" << errno << " (" << std::strerror(errno) << ")";
-        return -1;
-      }
-      if (ret == 0) {
-        LOG(ERROR) << "Short read while reading vector from " << disk_index_file << " at offset " << offset;
-        return -1;
-      }
-      bytes_read += static_cast<uint64_t>(ret);
-    }
+	    const uint64_t first_sector = loc_sector_no(loc);
+	    const uint64_t pages_to_read = meta_.uses_packed_layout() ? loc_4k_pages_to_read(loc) : 1;
+	    const uint64_t bytes_per_read = meta_.uses_packed_layout() ? SECTOR_LEN : size_per_io;
+	    for (uint64_t page = 0; page < pages_to_read; ++page) {
+	      const uint64_t offset = (first_sector + page) * SECTOR_LEN;
+	      uint64_t bytes_read = 0;
+	      while (bytes_read < bytes_per_read) {
+	        const ssize_t ret = ::pread(fd, sector_buf + page * SECTOR_LEN + bytes_read, bytes_per_read - bytes_read,
+	                                    static_cast<off_t>(offset + bytes_read));
+	        if (ret < 0) {
+	          if (errno == EINTR) {
+	            continue;
+	          }
+	          LOG(ERROR) << "Failed to read vector from " << disk_index_file << " at offset " << offset
+	                     << ", errno=" << errno << " (" << std::strerror(errno) << ")";
+	          return -1;
+	        }
+	        if (ret == 0) {
+	          LOG(ERROR) << "Short read while reading vector from " << disk_index_file << " at offset " << offset;
+	          return -1;
+	        }
+	        bytes_read += static_cast<uint64_t>(ret);
+	      }
+	    }
 
     DiskNode<T> node = node_from_page(sector_buf, loc);
     memcpy((void *) vector_coords, (void *) node.coords, meta_.data_dim * sizeof(T));

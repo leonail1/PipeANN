@@ -1,0 +1,2 @@
+case,disk_index,disk_tags,hybrid_meta,labels_sidecar,pq_codes,pq_pivots,raw_vector_file_bytes,strict_excess_over_raw_x,strict_serving_bytes,strict_total_over_raw_x
+phaseC_cycle05_no_retrain_after_insert_super32k,993005568,4000008,1856,931416,16000008,136292,512000008,0.9806154924903829,1014075148,1.980615492490383

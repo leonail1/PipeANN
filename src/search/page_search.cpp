@@ -21,11 +21,15 @@
 #include "linux_aligned_file_reader.h"
 
 namespace pipeann {
-  template<typename T, typename TagT>
-  size_t SSDIndex<T, TagT>::page_search(const T *query1, const uint64_t k_search, const uint32_t mem_L,
-                                        const uint64_t l_search, TagT *res_tags, float *distances,
-                                        const uint64_t beam_width, QueryStats *stats) {
-    QueryBuffer<T> *query_buf = pop_query_buf(query1);
+	  template<typename T, typename TagT>
+	  size_t SSDIndex<T, TagT>::page_search(const T *query1, const uint64_t k_search, const uint32_t mem_L,
+	                                        const uint64_t l_search, TagT *res_tags, float *distances,
+	                                        const uint64_t beam_width, QueryStats *stats) {
+	    if (meta_.uses_packed_layout()) {
+	      LOG(ERROR) << "page_search is unsupported for packed serving layout.";
+	      crash();
+	    }
+	    QueryBuffer<T> *query_buf = pop_query_buf(query1);
     void *ctx = reader->get_ctx();
 
     if (beam_width > MAX_N_SECTOR_READS) {

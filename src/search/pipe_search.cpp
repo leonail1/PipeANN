@@ -22,10 +22,11 @@
 namespace pipeann {
   struct io_t {
     Neighbor nbr;
-    unsigned page_id;
-    unsigned loc;
-    IORequest *read_req;
-    bool operator>(const io_t &rhs) const {
+	    unsigned page_id;
+	    unsigned loc;
+	    IORequest *read_reqs;
+	    uint32_t n_read_reqs;
+	    bool operator>(const io_t &rhs) const {
       return nbr.distance > rhs.nbr.distance;
     }
 
@@ -33,9 +34,14 @@ namespace pipeann {
       return nbr.distance < rhs.nbr.distance;
     }
 
-    bool finished() {
-      return read_req->finished;
-    }
+	    bool finished() {
+	      for (uint32_t i = 0; i < n_read_reqs; ++i) {
+	        if (!read_reqs[i].finished) {
+	          return false;
+	        }
+	      }
+	      return true;
+	    }
   };
 
   template<typename T, typename TagT>
@@ -207,21 +213,22 @@ namespace pipeann {
         item.visited = true;
         return false;
       }
-      const unsigned pid = loc_sector_no(loc);
+	      const unsigned pid = loc_sector_no(loc);
 
-      uint64_t &cur_buf_idx = query_buf->sector_idx;
-      auto buf = sector_scratch + cur_buf_idx * size_per_io;
-      auto &req = query_buf->reqs[cur_buf_idx];
-      req = IORequest(static_cast<uint64_t>(pid) * SECTOR_LEN, size_per_io, buf, u_loc_offset(loc), meta_.max_node_len,
-                      sector_scratch);
-      reader->send_read_no_alloc(req, ctx);
+	      uint64_t &cur_buf_idx = query_buf->sector_idx;
+	      auto buf = sector_scratch + cur_buf_idx * size_per_io;
+	      auto *reqs = query_buf->reqs + cur_buf_idx * MAX_N_NODE_READ_PAGES;
+	      const uint64_t n_reqs = fill_node_read_requests(loc, buf, reqs);
+	      for (uint64_t req_idx = 0; req_idx < n_reqs; ++req_idx) {
+	        reader->send_read_no_alloc(reqs[req_idx], ctx);
+	      }
 
-      on_flight_ios.push(io_t{item, pid, loc, &req});
-      cur_buf_idx = (cur_buf_idx + 1) % MAX_N_SECTOR_READS;
+	      on_flight_ios.push(io_t{item, pid, loc, reqs, static_cast<uint32_t>(n_reqs)});
+	      cur_buf_idx = (cur_buf_idx + 1) % MAX_N_SECTOR_READS;
 
-      if (stats != nullptr) {
-        stats->n_ios++;
-      }
+	      if (stats != nullptr) {
+	        stats->n_ios += n_reqs;
+	      }
       return true;
     };
 
@@ -232,7 +239,7 @@ namespace pipeann {
       unsigned n_in = 0, n_out = 0;
       while (!on_flight_ios.empty() && on_flight_ios.front().finished()) {
         io_t &io = on_flight_ios.front();
-        id_buf_map.insert(std::make_pair(io.nbr.id, node_from_page((char *) io.read_req->buf, io.loc)));
+	        id_buf_map.insert(std::make_pair(io.nbr.id, node_from_page((char *) io.read_reqs[0].buf, io.loc)));
         io.nbr.distance <= retset[cur_list_size - 1].distance ? ++n_in : ++n_out;
         // unlock the corresponding page.
         this->unlock_idx(idx_lock_table, io.nbr.id);
@@ -378,7 +385,7 @@ namespace pipeann {
         reader->poll_all(ctx);
         while (!on_flight_ios.empty() && on_flight_ios.front().finished()) {
           io_t &io = on_flight_ios.front();
-          id_buf_map.insert(std::make_pair(io.nbr.id, node_from_page((char *) io.read_req->buf, io.loc)));
+	          id_buf_map.insert(std::make_pair(io.nbr.id, node_from_page((char *) io.read_reqs[0].buf, io.loc)));
           this->unlock_idx(idx_lock_table, io.nbr.id);
           on_flight_ios.pop();
         }

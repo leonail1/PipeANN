@@ -1,0 +1,1 @@
+{"case": "phaseC_cycle05_no_retrain_after_insert_super32k", "disk_index": 993005568, "disk_tags": 4000008, "hybrid_meta": 1856, "labels_sidecar": 931416, "pq_codes": 16000008, "pq_pivots": 136292, "raw_vector_file_bytes": 512000008, "strict_excess_over_raw_x": 0.9806154924903829, "strict_serving_bytes": 1014075148, "strict_total_over_raw_x": 1.980615492490383}

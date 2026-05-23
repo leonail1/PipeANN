@@ -58,40 +58,101 @@ namespace pipeann {
       return meta_.label_size;
     }
 
-    // Unaligned offset to location.
-    inline uint64_t u_loc_offset(uint64_t loc) {
-      return loc * meta_.max_node_len;  // compacted store.
-    }
+	    // Unaligned offset to location.
+	    inline uint64_t u_loc_offset(uint64_t loc) {
+	      return meta_.uses_packed_layout() ? loc_sector_offset(loc) : loc * meta_.max_node_len;
+	    }
 
-    inline uint64_t u_loc_offset_nbr(uint64_t loc) {
-      return loc * meta_.max_node_len + meta_.data_dim * sizeof(T);
-    }
+	    inline uint64_t u_loc_offset_nbr(uint64_t loc) {
+	      return u_loc_offset(loc) + meta_.data_dim * sizeof(T);
+	    }
 
-    // Avoid integer overflow when * SECTOR_LEN.
-    inline uint64_t loc_sector_no(uint64_t loc) {
-      return 1 + (meta_.nnodes_per_sector > 0 ? loc / meta_.nnodes_per_sector
-                                              : loc * DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN));
-    }
+	    inline uint64_t loc_record_file_offset(uint64_t loc) const {
+		      if (meta_.uses_packed_layout()) {
+		        const uint64_t block_id = loc / meta_.layout_nodes_per_block;
+		        const uint64_t in_block = loc % meta_.layout_nodes_per_block;
+		        return SECTOR_LEN + block_id * meta_.layout_block_bytes + meta_.packed_slot_offset(in_block);
+		      }
+	      return SECTOR_LEN + (meta_.nnodes_per_sector > 0
+	                               ? (loc / meta_.nnodes_per_sector) * SECTOR_LEN
+	                                     + (loc % meta_.nnodes_per_sector) * meta_.max_node_len
+	                               : loc * ROUND_UP(meta_.max_node_len, SECTOR_LEN));
+	    }
 
-    inline uint64_t sector_to_loc(uint64_t sector_no, uint32_t sector_off) {
-      return meta_.nnodes_per_sector == 0
-                 ? (sector_no - 1) / DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN)  // sector_off == 0.
-                 : (sector_no - 1) * meta_.nnodes_per_sector + sector_off;
+	    // Avoid integer overflow when * SECTOR_LEN.
+	    inline uint64_t loc_sector_no(uint64_t loc) {
+	      return loc_record_file_offset(loc) / SECTOR_LEN;
+	    }
+
+	    inline uint64_t loc_sector_offset(uint64_t loc) const {
+	      return loc_record_file_offset(loc) % SECTOR_LEN;
+	    }
+
+	    inline uint64_t loc_4k_pages_to_read(uint64_t loc) const {
+	      if (!meta_.uses_packed_layout()) {
+	        return meta_.nnodes_per_sector > 0 ? 1 : DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN);
+	      }
+	      const uint64_t pages = DIV_ROUND_UP(loc_sector_offset(loc) + meta_.max_node_len, SECTOR_LEN);
+	      assert(pages > 0 && pages <= MAX_N_NODE_READ_PAGES);
+	      return pages;
+	    }
+
+	    inline uint64_t append_node_read_requests(uint64_t loc, char *slot_buf, std::vector<IORequest> &read_reqs) {
+	      const uint64_t first_sector = loc_sector_no(loc);
+	      if (!meta_.uses_packed_layout()) {
+	        read_reqs.emplace_back(IORequest(first_sector * SECTOR_LEN, size_per_io, slot_buf, 0, 0));
+	        return 1;
+	      }
+	      const uint64_t pages = loc_4k_pages_to_read(loc);
+	      for (uint64_t page = 0; page < pages; ++page) {
+	        read_reqs.emplace_back(IORequest((first_sector + page) * SECTOR_LEN, SECTOR_LEN,
+	                                         slot_buf + page * SECTOR_LEN, 0, 0));
+	      }
+	      return pages;
+	    }
+
+	    inline uint64_t fill_node_read_requests(uint64_t loc, char *slot_buf, IORequest *read_reqs) {
+	      const uint64_t first_sector = loc_sector_no(loc);
+	      if (!meta_.uses_packed_layout()) {
+	        read_reqs[0] = IORequest(first_sector * SECTOR_LEN, size_per_io, slot_buf, 0, 0);
+	        return 1;
+	      }
+	      const uint64_t pages = loc_4k_pages_to_read(loc);
+	      for (uint64_t page = 0; page < pages; ++page) {
+	        read_reqs[page] = IORequest((first_sector + page) * SECTOR_LEN, SECTOR_LEN,
+	                                    slot_buf + page * SECTOR_LEN, 0, 0);
+	      }
+	      return pages;
+	    }
+
+	    inline uint64_t sector_to_loc(uint64_t sector_no, uint32_t sector_off) {
+	      if (meta_.uses_packed_layout()) {
+	        LOG(ERROR) << "sector_to_loc is unsupported for packed disk layout.";
+	        crash();
+	      }
+	      return meta_.nnodes_per_sector == 0
+	                 ? (sector_no - 1) / DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN)  // sector_off == 0.
+	                 : (sector_no - 1) * meta_.nnodes_per_sector + sector_off;
     }
 
     void init_metadata(const SSDIndexMetadata<T> &meta) {
       meta.print();
       this->meta_ = meta;
-      this->cur_id = this->cur_loc = meta.npoints;
-      this->aligned_dim = ROUND_UP(meta_.data_dim, 8);
-      this->params.R = meta.range;
-      this->size_per_io = SECTOR_LEN * (meta_.nnodes_per_sector > 0 ? 1 : DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN));
-      LOG(INFO) << "Size per IO: " << size_per_io;
+	      this->cur_id = this->cur_loc = meta.npoints;
+	      this->aligned_dim = ROUND_UP(meta_.data_dim, 8);
+	      this->params.R = meta.range;
+	      this->size_per_io =
+	          meta_.uses_packed_layout()
+	              ? MAX_N_NODE_READ_PAGES * SECTOR_LEN
+	              : SECTOR_LEN * (meta_.nnodes_per_sector > 0 ? 1 : DIV_ROUND_UP(meta_.max_node_len, SECTOR_LEN));
+	      LOG(INFO) << "Size per IO: " << size_per_io;
 
-      // Aligned.
-      if (meta_.nnodes_per_sector != 0 && meta_.npoints % meta_.nnodes_per_sector != 0) {
-        cur_loc += meta_.nnodes_per_sector - (meta_.npoints % meta_.nnodes_per_sector);
-      }
+	      // Aligned.
+	      const uint64_t loc_alignment =
+	          meta_.uses_packed_layout() ? meta_.layout_nodes_per_block : meta_.nnodes_per_sector;
+	      if (loc_alignment != 0 && meta_.npoints % loc_alignment != 0) {
+	        cur_loc += loc_alignment - (meta_.npoints % loc_alignment);
+	      }
       LOG(INFO) << "Cur location: " << this->cur_loc;
 
       // Update-related metadata, if not initialized in constructor, initialize here.
@@ -115,7 +176,7 @@ namespace pipeann {
       buf.visited = new tsl::robin_set<uint64_t>(4096);
       buf.page_visited = new tsl::robin_set<unsigned>(4096);
 
-      memset(buf.sector_scratch, 0, MAX_N_SECTOR_READS * SECTOR_LEN);
+	      memset(buf.sector_scratch, 0, MAX_N_SECTOR_READS * size_per_io);
       memset(buf.coord_scratch, 0, this->aligned_dim * sizeof(T));
       memset(buf.aligned_query_T, 0, this->aligned_dim * sizeof(T));
     }

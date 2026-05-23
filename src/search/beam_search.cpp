@@ -124,21 +124,19 @@ namespace pipeann {
           stats->n_hops++;
         locked = this->lock_idx(idx_lock_table, kInvalidID, frontier, true);
         for (uint64_t i = 0; i < frontier.size(); i++) {
-          uint32_t id = frontier[i];
-          uint32_t loc = this->id2loc(id);
-          uint64_t offset = loc_sector_no(loc) * SECTOR_LEN;
-          auto sector_buf = sector_scratch + sector_scratch_idx * size_per_io;
-          fnhood_t fnhood = std::make_tuple(id, loc, sector_buf);
-          sector_scratch_idx++;
-          frontier_nhoods.push_back(fnhood);
-          frontier_read_reqs.emplace_back(
-              IORequest(offset, size_per_io, sector_buf, u_loc_offset(loc), meta_.max_node_len, sector_scratch));
-          if (stats != nullptr) {
-            stats->n_4k++;
-            stats->n_ios++;
-          }
-          num_ios++;
-        }
+	          uint32_t id = frontier[i];
+	          uint32_t loc = this->id2loc(id);
+	          auto sector_buf = sector_scratch + sector_scratch_idx * size_per_io;
+	          fnhood_t fnhood = std::make_tuple(id, loc, sector_buf);
+	          sector_scratch_idx++;
+	          frontier_nhoods.push_back(fnhood);
+	          const uint64_t physical_4k_reads = append_node_read_requests(loc, sector_buf, frontier_read_reqs);
+	          if (stats != nullptr) {
+	            stats->n_4k += physical_4k_reads;
+	            stats->n_ios += physical_4k_reads;
+	          }
+	          num_ios += physical_4k_reads;
+	        }
         io_timer.reset();
         reader->read_alloc(frontier_read_reqs, ctx, &page_ref);
 
