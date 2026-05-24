@@ -65,9 +65,9 @@
         动态增量混合索引 & 完成 & 10k 以内走纯内存精确近邻搜索，超过阈值后落盘为磁盘图。 \\
         查询 10@10 召回率稳定 $>$98\% & 完成 &  \\
         标量等值与范围查询 & 完成 &  \\
-        联合向量近似查询时延 $<$10ms & 完成 &  \\
+        联合向量近似查询时延 $<$10ms & 完成 & v3 packed serving 重跑后，200/200 selected 点 avg latency $<$10ms；p95 最大 10.32ms。 \\
         内存限制 30M 左右 & 完成 &  \\
-        索引膨胀率不能高于原始向量 1 倍 & 部分完成 & R=116/PQ16 下 1M 额外索引约为原始向量 1.03 倍；主要来自磁盘图。 \\
+        索引膨胀率不能高于原始向量 1 倍 & 完成 & 严格额外空间/原始向量为 0.981x；严格总 serving footprint 为 1.981x。 \\
         \bottomrule
     \end{tabular}
 \end{frame}
@@ -227,7 +227,7 @@
         \end{tikzpicture}
         }
         \vspace{0.08em}
-        \includegraphics[width=0.96\linewidth,height=0.31\textheight,keepaspectratio]{figures/exp6_recalibrated_worst_thread_latency.png}
+        \includegraphics[width=0.96\linewidth,height=0.31\textheight,keepaspectratio]{figures/ppt_v3_targeted_latency_before_after.png}
 
         \column{0.40\textwidth}
         \begin{minipage}{0.98\linewidth}
@@ -255,8 +255,8 @@
             \vspace{0.06em}
             \begin{itemize}
                 \setlength{\itemsep}{0.08em}
-                \item 重标定后 $\tau_m=500k$，50\% 及以下走 prefilter。
-                \item 最慢点 range-u50，prefilter，$L=125$；avg 最大 10.13ms。
+                \item v3 packed serving 下保留 4KB 随机读粒度。
+                \item 7 个高选择性慢点定向替换后，avg 全部 $<$10ms。
             \end{itemize}
         \end{minipage}
     \end{columns}
@@ -310,7 +310,7 @@
 
         \column{0.48\textwidth}
         \centering
-        \includegraphics[width=\linewidth,height=0.38\textheight,keepaspectratio]{../../experiments/label_space_ratio/sift1m_label_space_comparison.png}
+        \includegraphics[width=\linewidth,height=0.38\textheight,keepaspectratio]{figures/ppt_reused_label_sidecar_space.png}
         \vspace{0.2em}
         \begin{minipage}{0.96\linewidth}
             \scriptsize
@@ -320,7 +320,7 @@
             \begin{itemize}
                 \item SIFT1M/r116 原始 spmat 标签文件为 30.24 MiB。
                 \item 构建后的混合标签 sidecar 为 0.89 MiB，约为原始 spmat 的 2.94\%。
-                \item 对比口径只保留 SIFT1M/r116 原始 spmat 与构建后混合标签。
+                \item v3 主磁盘图元数据中 \texttt{label\_size=0}，标签不进入主 index record。
             \end{itemize}
             \vspace{0.08em}
             \textcolor{red}{结论：混合标签预处理在保持标签语义的同时，带来明确的磁盘空间收益。}
@@ -342,7 +342,7 @@
     \end{minipage}
     \vfill
 
-    \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{../../experiments/flat_small_search/rss_latency_qps.png}
+    \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{figures/ppt_reused_small_flat_rss_latency_qps.png}
 \end{frame}
 
 \begin{frame}[c]{需求 1：召回率对比}
@@ -350,26 +350,26 @@
     \begin{columns}[T,onlytextwidth]
         \column{0.49\textwidth}
         \scriptsize
-        \textbf{左图：无过滤 SIFT1M 前缀/全量召回。} 使用 SIFT 附带的查询文件，250k、500k、750k、1M 索引，固定 $L=200$ 进行查询，所有查询的平均延迟均$<$10ms，并且由小型索引插入向量得到的 1M 索引，和直接构建的 1M 索引在召回率上只有不到 1\% 的差距。
+        \textbf{左图：5 轮 delete/insert 后的 v3 selected 质量。} 允许重新选择 route/L 后，retrain 与 no-retrain 两类路径在每轮均保持 recall@10 $\geq$98，且每轮最慢 avg latency $<$10ms。
 
         \column{0.49\textwidth}
         \scriptsize
-        \textbf{右图：删除 / 重插入后的图质量。} 先构建 1M 索引，删除 250k 向量得到 750k 索引，再插入 250k 向量回到 1M。每次索引更新后对不同选择性在相同的搜索参数下进行搜索，整体召回率差异小于 1\%。
+        \textbf{右图：全部 200 个 selected 点。} 新存储格式下，所有选择性、intersect/range、5 轮更新后的 selected 点均满足 recall@10 $\geq$98 且 avg latency $<$10ms。
     \end{columns}
     \vspace{0.4em}
 
     \scriptsize
-    \textcolor{red}{结论：索引更新对索引的质量影响较小。}
+    \textcolor{red}{结论：按验收口径重新选择 route/L 后，v3 packed serving 下 200/200 点通过 recall 与 avg latency 门槛。}
     \vspace{0.2em}
 
     \begin{columns}[c,onlytextwidth]
         \column{0.50\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.54\textheight,keepaspectratio]{\pqexp/ppt_updates/exp2_seed_sweep_recall_L200.png}
+        \includegraphics[width=0.98\linewidth,height=0.54\textheight,keepaspectratio]{figures/ppt_v3_cycle_quality.png}
 
         \column{0.50\textwidth}
         \centering
-        \includegraphics[width=0.98\linewidth,height=0.54\textheight,keepaspectratio]{\pqexp/ppt_updates/delete_reinsert_fixed_livegt_recall.png}
+        \includegraphics[width=0.98\linewidth,height=0.54\textheight,keepaspectratio]{figures/ppt_v3_dynamic_recall_latency.png}
     \end{columns}
 \end{frame}
 
@@ -384,7 +384,7 @@
     \end{minipage}
     \vfill
 
-    \includegraphics[width=0.96\linewidth,height=0.66\textheight,keepaspectratio]{\pqexp/exp3_search_during_insert/search_during_insert_selectivity.png}
+    \includegraphics[width=0.96\linewidth,height=0.66\textheight,keepaspectratio]{figures/ppt_reused_insert_during_search.png}
 \end{frame}
 
 \begin{frame}[c]{需求 3：全选择性查询延迟/QPS}
@@ -392,13 +392,13 @@
     \begin{minipage}{0.94\textwidth}
         \centering
         \scriptsize
-        1M 索引；等值 / 范围查询；PQ code 常驻内存；重标定后 $\tau_m=500k$，图中为 auto 路由后满足 recall@10 $\geq$ 98\% 的最佳搜索参数。
+        1M 索引；等值 / 范围查询；PQ code 常驻内存；图中为 v3 packed serving 下满足 recall@10 $\geq$ 98\% 的 selected route/L。
 
-        \textcolor{red}{结论：20 个点全部满足 recall@10 $\geq$98；最大单线程 avg latency 为 5.94ms。}
+        \textcolor{red}{结论：200 个动态 selected 点全部满足 recall@10 $\geq$98；最大单线程 avg latency 为 9.96ms。}
     \end{minipage}
     \vfill
 
-    \includegraphics[width=0.98\linewidth,height=0.64\textheight,keepaspectratio]{figures/exp4_recalibrated_auto_latency_qps.png}
+    \includegraphics[width=0.98\linewidth,height=0.64\textheight,keepaspectratio]{figures/ppt_v3_dynamic_recall_latency.png}
 \end{frame}
 
 \begin{frame}[c]{需求 4：查询进程峰值内存占用}
@@ -406,7 +406,7 @@
     \begin{columns}[c,onlytextwidth]
         \column{0.66\textwidth}
         \centering
-        \includegraphics[width=1.00\linewidth,height=0.60\textheight,keepaspectratio]{\pqexp/pq16_pq_memory_adjusted_rss_vs_selectivity.png}
+        \includegraphics[width=1.00\linewidth,height=0.60\textheight,keepaspectratio]{figures/ppt_reused_pq_memory_rss.png}
 
         \column{0.32\textwidth}
         \centering
@@ -431,48 +431,60 @@
     \centering
     \begin{minipage}{0.96\textwidth}
         \scriptsize
-        R=116/PQ16 下，1M 数据规模时额外空间约为原始向量的 1.03 倍。
-        \vspace{0.35em}
+        v3 Supersector32K page-aware packing 保持 R=116，不把 4KB 随机读扩大到 32KB；主 index record 不存标签，标签位图作为 sidecar 计入 serving footprint。
+        \vspace{0.25em}
+
+        严格口径下，1M serving 总 footprint / 原始向量为 \textbf{1.981x}；额外空间 / 原始向量为 \textbf{0.981x}，低于 1x 验收线。
+        \vspace{0.25em}
 
         \begin{columns}[T,onlytextwidth]
-            \column{0.63\textwidth}
+            \column{0.52\textwidth}
             \centering
-            \tiny
-            \setlength{\tabcolsep}{2pt}
-            \renewcommand{\arraystretch}{1.02}
-            \resizebox{\linewidth}{!}{%
-            \begin{tabular}{r r r r r r r r}
-                \toprule
-                \textbf{规模} & \textcolor{red}{\textbf{原始向量}} & \textbf{磁盘图} & \textbf{PQ 压缩向量} & \textbf{PQ 码本} & \textbf{标签位图} & \textcolor{red}{\textbf{额外合计}} & \textcolor{red}{\textbf{额外/原始}} \\
-                \midrule
-                250k & \textcolor{red}{122.07} & 244.14 & 3.81 & 0.13 & 0.22 & \textcolor{red}{248.31} & \textcolor{red}{2.03x} \\
-                500k & \textcolor{red}{244.14} & 488.29 & 7.63 & 0.13 & 0.44 & \textcolor{red}{496.49} & \textcolor{red}{2.03x} \\
-                750k & \textcolor{red}{366.21} & 732.43 & 11.44 & 0.13 & 0.67 & \textcolor{red}{744.67} & \textcolor{red}{2.03x} \\
-                1M & \textcolor{red}{488.28} & 976.57 & 15.26 & 0.13 & 0.89 & \textcolor{red}{992.85} & \textcolor{red}{2.03x} \\
-                \bottomrule
-            \end{tabular}}
+            \includegraphics[width=\linewidth,height=0.52\textheight,keepaspectratio]{figures/ppt_v3_space_components.png}
 
-            \vspace{0.18em}
-            {\tiny 单位：MiB；额外/原始为额外合计与原始向量的比值。}
-
-            \column{0.34\textwidth}
+            \column{0.45\textwidth}
             \centering
-            \tiny
-            \setlength{\tabcolsep}{3pt}
-            \renewcommand{\arraystretch}{0.98}
-            \begin{tabular}{l r r}
-                \toprule
-                \textbf{SSD 节点部分} & \textbf{计算} & \textbf{大小} \\
-                \midrule
-                原始向量 & $128\times4$B & 512B \\
-                邻接表 & $(116+1)\times4$B & 468B \\
-                Label & $44$B & 44B \\
-                \midrule
-                合计 & $512+468+44$B & 1024B \\
-                \bottomrule
-            \end{tabular}
+            \includegraphics[width=\linewidth,height=0.52\textheight,keepaspectratio]{figures/ppt_v3_read_granularity.png}
         \end{columns}
     \end{minipage}
+\end{frame}
+
+\begin{frame}[c]{PQ 漂移与维护窗口}
+    \centering
+    \begin{columns}[T,onlytextwidth]
+        \column{0.50\textwidth}
+        \centering
+        \includegraphics[width=\linewidth,height=0.57\textheight,keepaspectratio]{figures/ppt_v3_pq_drift_strategy.png}
+        \vspace{0.1em}
+        \scriptsize
+        cycle5 range-u30 使用 no-retrain L420 后 recall@10 = 99.42，达到 matched-reference 目标。
+
+        \column{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth,height=0.57\textheight,keepaspectratio]{figures/ppt_mixed_maintenance_window.png}
+        \vspace{0.1em}
+        \scriptsize
+        PQ train+recode 与 merge 属于前台必须等待部分；full rebuild 与 v3 repack 可后台化，不进入 3 分钟前台窗口。
+    \end{columns}
+\end{frame}
+
+\begin{frame}[c]{最终验收结论}
+    \centering
+    \scriptsize
+    \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.16}
+    \begin{tabular}{p{0.42\textwidth}p{0.18\textwidth}p{0.30\textwidth}}
+        \toprule
+        \textbf{指标} & \textbf{v3 结果} & \textbf{备注} \\
+        \midrule
+        动态 selected recall@10 & 最小 98.00 & 允许重新选择 route/L 的验收口径。 \\
+        动态 selected avg latency & 最大 9.96ms & 200/200 点 $<$10ms。 \\
+        动态 selected p95 latency & 最大 10.32ms & 4 个点 p95 $\geq$10ms，保留 caveat。 \\
+        PQ drift matched-reference & 99.42 & cycle5 range-u30, L420。 \\
+        索引空间严格额外/原始 & 0.981x & 严格总 serving/raw 为 1.981x。 \\
+        读取粒度 & 4KB & straddling slot 使用两个 4KB 请求。 \\
+        \bottomrule
+    \end{tabular}
 \end{frame}
 
 \thanksforlistening{谢谢}

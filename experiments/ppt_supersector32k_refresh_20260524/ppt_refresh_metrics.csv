@@ -1,0 +1,13 @@
+metric,value
+selected_rows,200
+min_recall@10,98.000000
+max_avg_latency_ms,9.955252
+max_p95_latency_ms,10.320054
+avg_latency_ge_10ms,0
+p95_latency_ge_10ms,4
+strict_total_over_raw_x,1.980615
+strict_excess_over_raw_x,0.980615
+pq_l420_recall@10,99.420000
+read_page_bytes,[4096]
+straddling_slots_per_block,[5]
+avg_4k_pages_per_record,[1.151515]

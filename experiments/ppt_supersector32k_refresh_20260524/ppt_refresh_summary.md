@@ -1,0 +1,44 @@
+# PPT Supersector32K Refresh Summary
+
+- Dynamic selected rows: 200 / unique cases 200.
+- Recall/latency gate: min recall 98.000, max avg latency 9.955 ms.
+- P95 caveat: 4 selected points have p95 latency >= 10 ms; max p95 10.320 ms.
+- Space strict total/raw: 1.980615x.
+- Space strict excess/raw: 0.980615x.
+- PQ drift L420 recall: 99.420.
+- The insert-during-search and flat-threshold figures use the existing update-path evidence; v3 is a serving snapshot produced after merge/repack.
+
+## Figures
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_dynamic_recall_latency.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_dynamic_recall_latency.pdf`
+- `PPT/graduation-ppt/figures/ppt_v3_dynamic_recall_latency.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_cycle_quality.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_cycle_quality.pdf`
+- `PPT/graduation-ppt/figures/ppt_v3_cycle_quality.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_targeted_latency_before_after.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_targeted_latency_before_after.pdf`
+- `PPT/graduation-ppt/figures/ppt_v3_targeted_latency_before_after.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_pq_drift_strategy.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_pq_drift_strategy.pdf`
+- `PPT/graduation-ppt/figures/ppt_v3_pq_drift_strategy.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_space_components.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_space_components.pdf`
+- `PPT/graduation-ppt/figures/ppt_v3_space_components.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_read_granularity.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_v3_read_granularity.pdf`
+- `PPT/graduation-ppt/figures/ppt_v3_read_granularity.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_mixed_maintenance_window.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_mixed_maintenance_window.pdf`
+- `PPT/graduation-ppt/figures/ppt_mixed_maintenance_window.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_reused_small_flat_rss_latency_qps.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_reused_small_flat_rss_latency_qps.pdf`
+- `PPT/graduation-ppt/figures/ppt_reused_small_flat_rss_latency_qps.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_reused_label_sidecar_space.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_reused_label_sidecar_space.pdf`
+- `PPT/graduation-ppt/figures/ppt_reused_label_sidecar_space.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_reused_insert_during_search.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_reused_insert_during_search.pdf`
+- `PPT/graduation-ppt/figures/ppt_reused_insert_during_search.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_reused_pq_memory_rss.png`
+- `experiments/ppt_supersector32k_refresh_20260524/figures/ppt_reused_pq_memory_rss.pdf`
+- `PPT/graduation-ppt/figures/ppt_reused_pq_memory_rss.png`
