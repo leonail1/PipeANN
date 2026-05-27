@@ -59,7 +59,7 @@ void check_and_gen(char *gt_path, uint64_t index_npts, uint64_t tot_npts, uint64
 int main(int argc, char **argv) {
   if (argc < 6) {
     std::cout << "Correct usage: " << argv[0]
-              << " <file> <index_npts> <total_npts> <batch_npts> <n_batches> <target_topk> <target_dir> <insert_only>"
+              << " <file> <index_npts> <total_npts> <batch_npts> <target_topk> <target_dir> <insert_only>"
               << std::endl;
     exit(-1);
   }

@@ -40,13 +40,32 @@ namespace pipeann {
     InsertContext insert_ctx(kExpandedNodesFactor * this->params.L, this->aligned_dim);
     this->do_pipe_search(point1, 0, params.L, params.beam_width, exp_node_info, nullptr, &insert_ctx);
     std::vector<uint32_t> new_nhood;
-    pipeann::prune_neighbors(exp_node_info, new_nhood, params, metric, [this, &insert_ctx](uint32_t a, uint32_t b) {
+
+    // SPACEV1B frequently chooses entry_point as a neighbor, which causes contention.
+    auto params_copy = params; // < 100 bytes, copy should be fast.
+    params_copy.R += 1;
+    pipeann::prune_neighbors(exp_node_info, new_nhood, params_copy, metric, [this, &insert_ctx](uint32_t a, uint32_t b) {
       return this->dist_cmp->compare(insert_ctx.coord_map[a], insert_ctx.coord_map[b], this->meta_.data_dim);
     });
-    // locs[new_nhood.size()] is the target, locs[0:new_nhood.size() - 1] are the neighbors.
+
+    // Produce one more neighbor, and remove entry_point in the final results.
+    // Only points close enough to the entry point can connect to it.
+    off_t medoid_threshold = params.R / 4;
+    auto it = std::find(new_nhood.begin(), new_nhood.end(), this->meta_.entry_point_id);
+    if (it != new_nhood.end() && it - new_nhood.begin() >= medoid_threshold) {
+      *it = new_nhood.back(); // swap it with the back.
+      new_nhood.pop_back();
+    }
+
+    // Keep R neighbors. The last nbr is likely to be for saturation,
+    // so removing it does not affect graph quality.
+    if (new_nhood.size() > params.R) {
+      new_nhood.pop_back();
+    }
 
     std::set<uint64_t> pages_need_to_read;
 
+    // locs[new_nhood.size()] is the target, locs[0:new_nhood.size() - 1] are the neighbors.
 #ifdef IN_PLACE_RECORD_UPDATE
     std::vector<uint64_t> locs;
     for (auto &nbr : new_nhood) {

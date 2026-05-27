@@ -201,11 +201,11 @@ namespace pipeann {
     }
 
     virtual bool is_member(uint32_t target_id, const Attributes &query_attrs, const Attributes &target_attrs) override {
-      if (!query_attrs.find(key_) || !target_attrs.find(key_)) {
+      if (!query_attrs.find(key_) || !target_attrs.find(base_key_)) {
         return false;
       }
       Attribute query_attr = query_attrs.get(key_);
-      Attribute target_attr = target_attrs.get(key_);
+      Attribute target_attr = target_attrs.get(base_key_);
       uint32_t l = query_attr[0], r = query_attr.size() > 1 ? query_attr[1] : l + 1;
       return target_attr[0] >= l && target_attr[0] < r;
     }
