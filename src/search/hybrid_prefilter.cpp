@@ -80,9 +80,10 @@ namespace pipeann {
     exact_results.reserve(shortlist.size());
     T *vector_buf = query_buf->coord_scratch;
     char *sector_buf = query_buf->sector_scratch;
+    QueryStats rerank_io_stats{};
     for (const auto &candidate : shortlist) {
       const uint32_t point_id = candidate.second;
-      if (get_vector_by_id(point_id, vector_buf, sector_buf) != 0) {
+      if (get_vector_by_id(point_id, vector_buf, sector_buf, stats == nullptr ? nullptr : &rerank_io_stats) != 0) {
         continue;
       }
       const float exact_dist = dist_cmp->compare(query_buf->aligned_query_T, vector_buf,
@@ -104,7 +105,9 @@ namespace pipeann {
     if (stats != nullptr) {
       stats->total_us = static_cast<double>(query_timer.elapsed());
       stats->n_cmps = static_cast<double>(candidate_ids.size());
-      stats->n_ios = static_cast<double>(shortlist.size());
+      stats->n_ios = rerank_io_stats.n_ios;
+      stats->n_4k = rerank_io_stats.n_4k;
+      stats->read_size = rerank_io_stats.read_size;
       stats->n_hops = 0.0;
     }
     return result_count;

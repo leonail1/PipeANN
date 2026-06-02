@@ -119,6 +119,7 @@ def install_command_logger(paths: aris.Paths) -> None:
             "cwd": str(cwd),
             "log_path": str(log_path),
             "cpu_cap": cpu_cap,
+            "cpu_start": getattr(aris, "CPU_START", 0),
             "env_extra": env_extra or {},
             "check": check,
         }
@@ -345,6 +346,11 @@ def pq_records_for(paths: aris.Paths, args: argparse.Namespace, variant: str, pr
         "pq_recode_wall_s": aris.extract_log_seconds(recode_log, r"Compressed data written in: ([0-9.]+)s"),
         "pq_training_points": aris.extract_log_int(train_log, r"Generating PQ pivots with training data of size: ([0-9]+)"),
         "pq_training_corpus_points": training_points,
+        "insert_count": 0 if retrained else points,
+        "seed_points": training_points,
+        "flat_threshold": 0 if retrained else points - 1,
+        "flat_build_memory_gb": args.flat_build_memory_gb,
+        "zero_insert_path": "direct_build_no_flat_materialization" if retrained else "flat_until_final_materialization",
         "prefix": str(prefix),
         "pq_codebook_hash": aris.file_record(pq_pivots, f"{variant}_pq_pivots"),
         "pq_code_hash": aris.file_record(pq_codes, f"{variant}_pq_codes"),
@@ -390,6 +396,7 @@ def phase_b(paths: aris.Paths, args: argparse.Namespace, common: dict[str, Path]
         "--insert-start", "0",
         "--insert-count", str(points),
         "--flat-threshold", str(points - 1),
+        "--flat-build-memory-gb", str(args.flat_build_memory_gb),
         "--pq-bytes", str(args.pq_bytes),
         "--flat-pq-pivots", str(seed_pivots),
         "--base-label-file", str(common["labels"]),
@@ -398,7 +405,8 @@ def phase_b(paths: aris.Paths, args: argparse.Namespace, common: dict[str, Path]
                      cpu_cap=args.cpu_cap, env_extra={"PIPEANN_PQ_MMAP": "0", "PIPEANN_PQ_MMAP_DROP_CACHE": "0"})
     zero_row = aris.latest_driver_row(zero_jsonl, before, [
         "mode", "status", "final_index_prefix", "insert_count", "insert_wall_s", "merge_wall_s",
-        "live_point_count", "flat_pq_pivots", "main_index_label_size", "label_sidecar_loadable", "raw_command",
+        "live_point_count", "flat_build_memory_gb", "flat_pq_pivots", "main_index_label_size",
+        "label_sidecar_loadable", "raw_command",
     ])
     zero_final = Path(zero_row["final_index_prefix"])
     if not zero_final.is_absolute():
@@ -422,6 +430,7 @@ def phase_b(paths: aris.Paths, args: argparse.Namespace, common: dict[str, Path]
         "insert_wall_s": zero_row.get("insert_wall_s"),
         "merge_wall_s": zero_row.get("merge_wall_s"),
         "flat_threshold": points - 1,
+        "flat_build_memory_gb": zero_row.get("flat_build_memory_gb"),
         "zero_insert_path": "flat_until_final_materialization",
         "seed_points": args.seed_points,
         "seed_pivot_hash_matches_final": require_file_hash(zero_record["seed_pq_pivots_hash"], "phaseB_seed_pivots")
@@ -647,10 +656,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out-dir", type=Path, default=None)
     parser.add_argument("--phase", choices=["phaseB", "phaseC", "phaseD", "all"], default="all")
     parser.add_argument("--cpu-cap", type=int, default=16)
+    parser.add_argument("--cpu-start", type=int, default=0,
+                        help="First logical CPU used by taskset/numactl when --cpu-cap is positive.")
     parser.add_argument("--build-r", type=int, default=116)
     parser.add_argument("--build-l", type=int, default=220)
     parser.add_argument("--pq-bytes", type=int, default=16)
     parser.add_argument("--memory-gb", type=int, default=64)
+    parser.add_argument("--binary-root", type=Path, default=None,
+                        help="Directory containing PipeANN test binaries; defaults to build/tests under --repo.")
+    parser.add_argument("--flat-build-memory-gb", type=int, default=None,
+                        help="Build RAM budget for zero-insert flat materialization; defaults to --memory-gb.")
     parser.add_argument("--beamwidth", type=int, default=4)
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--metric", default="l2")
@@ -679,6 +694,18 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.cpu_start < 0:
+        raise ValueError("--cpu-start must be non-negative")
+    if args.cpu_cap < 0:
+        raise ValueError("--cpu-cap must be non-negative")
+    cpu_count = os.cpu_count() or 0
+    if args.cpu_cap > 0 and cpu_count > 0 and args.cpu_start + args.cpu_cap > cpu_count:
+        raise ValueError(f"--cpu-start + --cpu-cap exceeds available CPUs ({cpu_count})")
+    aris.CPU_START = args.cpu_start
+    if args.flat_build_memory_gb is None:
+        args.flat_build_memory_gb = args.memory_gb
+    if args.flat_build_memory_gb <= 0:
+        raise ValueError("--flat-build-memory-gb must be positive")
     aris.DEFAULT_L_SWEEP[:] = args.l_sweep
     # Compatibility for imported helpers that expect these argparse attributes.
     args.base_bin = args.bigann_bin

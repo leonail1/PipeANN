@@ -1,0 +1,122 @@
+{
+  "created_utc": "20260601T122707Z",
+  "files": {
+    "claim_registry.json": {
+      "exists": true,
+      "hash": "sha256:fee1bb537fe60aeaaa0b26c6dbbced57a104eaf8608871b8add3f0a532a5ade7",
+      "mtime_ns": 1780316827737046154,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/claim_registry.json",
+      "role": "claim_registry.json",
+      "size_bytes": 1008
+    },
+    "evidence/input_inventory.json": {
+      "exists": true,
+      "hash": "sha256:1da7341d13c9ade5c22fe464618d5a2cbddcc92ee1c9e22fee69bb63c86cb909",
+      "mtime_ns": 1780315257453618359,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/evidence/input_inventory.json",
+      "role": "evidence/input_inventory.json",
+      "size_bytes": 3259
+    },
+    "evidence/runner_config.json": {
+      "exists": true,
+      "hash": "sha256:3f2e8250e6170d3a97800260018be3ab83d6eb55a2c31d2ca635b1d6fe5566d0",
+      "mtime_ns": 1780315254101701530,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/evidence/runner_config.json",
+      "role": "evidence/runner_config.json",
+      "size_bytes": 1728
+    },
+    "raw/commands.jsonl": {
+      "exists": true,
+      "hash": "sha256:cee5a812a841362a7e0cf4e8afb4d06fdf151a3eef6d8467fd8de2754c6a2923",
+      "mtime_ns": 1780316819236721725,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/commands.jsonl",
+      "role": "raw/commands.jsonl",
+      "size_bytes": 103781
+    },
+    "raw/phaseB_penalty.jsonl": {
+      "exists": true,
+      "hash": "sha256:509c207c96fa6d1678db1b9323731f28e864713276548b9fd06bdd61324b6e65",
+      "mtime_ns": 1780316827737046154,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/phaseB_penalty.jsonl",
+      "role": "raw/phaseB_penalty.jsonl",
+      "size_bytes": 1801
+    },
+    "raw/phaseB_pq_drift.jsonl": {
+      "exists": true,
+      "hash": "sha256:ea46ad3cd574edf1ea1811af4cdfa17b52b807b65f48a4b0a070dcd2316bfcca",
+      "mtime_ns": 1780316420540781081,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/phaseB_pq_drift.jsonl",
+      "role": "raw/phaseB_pq_drift.jsonl",
+      "size_bytes": 3340
+    },
+    "raw/phaseB_selected_route_l.jsonl": {
+      "exists": true,
+      "hash": "sha256:7486e211edf9715fa0bea59d6ca274a6cceb2abd5f59511076670f252f552398",
+      "mtime_ns": 1780316827733046004,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/phaseB_selected_route_l.jsonl",
+      "role": "raw/phaseB_selected_route_l.jsonl",
+      "size_bytes": 13490
+    },
+    "raw/phaseB_zero_insert.jsonl": {
+      "exists": true,
+      "hash": "sha256:4aaf66ef88792c30d724ba0dea682efe861d4cc8011e15a5456b93cfbff90104",
+      "mtime_ns": 1780316420308786832,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/phaseB_zero_insert.jsonl",
+      "role": "raw/phaseB_zero_insert.jsonl",
+      "size_bytes": 2337
+    },
+    "raw/phaseC_cycle_inventory.jsonl": {
+      "exists": false,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/phaseC_cycle_inventory.jsonl",
+      "role": "raw/phaseC_cycle_inventory.jsonl"
+    },
+    "raw/phaseC_delete_steps.jsonl": {
+      "exists": false,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/phaseC_delete_steps.jsonl",
+      "role": "raw/phaseC_delete_steps.jsonl"
+    },
+    "raw/phaseC_no_retrain_cycles.jsonl": {
+      "exists": false,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/phaseC_no_retrain_cycles.jsonl",
+      "role": "raw/phaseC_no_retrain_cycles.jsonl"
+    },
+    "raw/phaseC_penalty.jsonl": {
+      "exists": false,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/phaseC_penalty.jsonl",
+      "role": "raw/phaseC_penalty.jsonl"
+    },
+    "raw/phaseC_selected_route_l.jsonl": {
+      "exists": false,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/phaseC_selected_route_l.jsonl",
+      "role": "raw/phaseC_selected_route_l.jsonl"
+    },
+    "raw/phaseD_pq_core_sweep.jsonl": {
+      "exists": false,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/phaseD_pq_core_sweep.jsonl",
+      "role": "raw/phaseD_pq_core_sweep.jsonl"
+    },
+    "raw/selected_route_l.jsonl": {
+      "exists": true,
+      "hash": "sha256:ecd233439ca39d43bec0ecf2307eb555e56dabd3cce83f29f8fec82f594f0c85",
+      "mtime_ns": 1780316827733046004,
+      "path": "experiments/v100_pq_seed25_explicitmat_1m_targeted_20260601T120050Z/raw/selected_route_l.jsonl",
+      "role": "raw/selected_route_l.jsonl",
+      "size_bytes": 12826
+    }
+  },
+  "phaseB_penalty.jsonl": {
+    "count": 2,
+    "max_matched_reference_recall_delta_ms": 0.20935536300000057,
+    "max_selected_feasible_delta_ms": 0.20935536300000057,
+    "median_selected_feasible_delta_ms": 0.18443658899999993,
+    "unmatched_count": 0
+  },
+  "selected": {
+    "count": 4,
+    "max_avg_latency_ms": 5.033250934,
+    "max_p95_latency_ms": 5.328383,
+    "min_recall": 98.13,
+    "pass_count": 4,
+    "selection_policy": "post_hoc_retuned_fastest_feasible_recall_ge_98"
+  }
+}

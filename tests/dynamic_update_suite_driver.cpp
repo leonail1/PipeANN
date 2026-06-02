@@ -65,6 +65,7 @@ struct Config {
   uint32_t search_l = 60;
   uint32_t mem_l = 0;
   uint32_t pq_bytes = 16;
+  uint32_t flat_build_memory_gb = 1;
   uint64_t flat_threshold = 10000;
   uint64_t query_limit = 0;
   bool final_merge = true;
@@ -98,6 +99,24 @@ struct SearchMetrics {
   uint64_t query_peak_delta_kb = 0;
   double mean_candidate_count = 0.0;
   double mean_route_overhead_us = 0.0;
+  double mean_query_total_us = 0.0;
+  double p95_query_total_us = 0.0;
+  double mean_n_ios = 0.0;
+  double p95_n_ios = 0.0;
+  double mean_n_4k = 0.0;
+  double p95_n_4k = 0.0;
+  double mean_read_size = 0.0;
+  double p95_read_size = 0.0;
+  double mean_io_us = 0.0;
+  double p95_io_us = 0.0;
+  double mean_cpu_us = 0.0;
+  double p95_cpu_us = 0.0;
+  double mean_cpu_us1 = 0.0;
+  double mean_cpu_us2 = 0.0;
+  double mean_n_cmps = 0.0;
+  double p95_n_cmps = 0.0;
+  double mean_n_hops = 0.0;
+  double p95_n_hops = 0.0;
   uint64_t prefilter_count = 0;
   uint64_t graph_count = 0;
   uint64_t fallback_count = 0;
@@ -225,6 +244,17 @@ Config parse_args(int argc, char **argv) {
     } else if (arg == "--pq-bytes") {
       mark_scalar(arg);
       config.pq_bytes = static_cast<uint32_t>(std::stoul(require_value(argc, argv, &index, arg)));
+    } else if (arg == "--flat-build-memory-gb") {
+      mark_scalar(arg);
+      const std::string value = require_value(argc, argv, &index, arg);
+      if (value.empty() || value[0] == '-') {
+        throw std::runtime_error("--flat-build-memory-gb must be positive");
+      }
+      const unsigned long parsed = std::stoul(value);
+      if (parsed == 0 || parsed > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error("--flat-build-memory-gb must be a positive uint32 value");
+      }
+      config.flat_build_memory_gb = static_cast<uint32_t>(parsed);
     } else if (arg == "--flat-threshold") {
       mark_scalar(arg);
       config.flat_threshold = std::stoull(require_value(argc, argv, &index, arg));
@@ -614,6 +644,71 @@ double percentile(std::vector<double> sorted_values, double p) {
   return sorted_values[index];
 }
 
+template<typename Getter>
+void set_query_stat_summary(const std::vector<pipeann::QueryStats> &query_stats, Getter getter, double &mean,
+                            double &p95) {
+  if (query_stats.empty()) {
+    mean = 0.0;
+    p95 = 0.0;
+    return;
+  }
+  std::vector<double> values;
+  values.reserve(query_stats.size());
+  double sum = 0.0;
+  for (const auto &stats : query_stats) {
+    const double value = getter(stats);
+    values.push_back(value);
+    sum += value;
+  }
+  mean = sum / static_cast<double>(query_stats.size());
+  p95 = percentile(values, 0.95);
+}
+
+void populate_query_stat_summaries(const std::vector<pipeann::QueryStats> &query_stats, SearchMetrics &metrics) {
+  set_query_stat_summary(query_stats, [](const pipeann::QueryStats &s) { return s.total_us; },
+                         metrics.mean_query_total_us, metrics.p95_query_total_us);
+  set_query_stat_summary(query_stats, [](const pipeann::QueryStats &s) { return s.n_ios; }, metrics.mean_n_ios,
+                         metrics.p95_n_ios);
+  set_query_stat_summary(query_stats, [](const pipeann::QueryStats &s) { return s.n_4k; }, metrics.mean_n_4k,
+                         metrics.p95_n_4k);
+  set_query_stat_summary(query_stats, [](const pipeann::QueryStats &s) { return s.read_size; },
+                         metrics.mean_read_size, metrics.p95_read_size);
+  set_query_stat_summary(query_stats, [](const pipeann::QueryStats &s) { return s.io_us; }, metrics.mean_io_us,
+                         metrics.p95_io_us);
+  set_query_stat_summary(query_stats, [](const pipeann::QueryStats &s) { return s.cpu_us; }, metrics.mean_cpu_us,
+                         metrics.p95_cpu_us);
+  double ignored_p95 = 0.0;
+  set_query_stat_summary(query_stats, [](const pipeann::QueryStats &s) { return s.cpu_us1; }, metrics.mean_cpu_us1,
+                         ignored_p95);
+  set_query_stat_summary(query_stats, [](const pipeann::QueryStats &s) { return s.cpu_us2; }, metrics.mean_cpu_us2,
+                         ignored_p95);
+  set_query_stat_summary(query_stats, [](const pipeann::QueryStats &s) { return s.n_cmps; }, metrics.mean_n_cmps,
+                         metrics.p95_n_cmps);
+  set_query_stat_summary(query_stats, [](const pipeann::QueryStats &s) { return s.n_hops; }, metrics.mean_n_hops,
+                         metrics.p95_n_hops);
+}
+
+void append_query_stat_json(std::ostringstream &out, const SearchMetrics &metrics) {
+  out << ",\"mean_query_total_us\":" << metrics.mean_query_total_us
+      << ",\"p95_query_total_us\":" << metrics.p95_query_total_us
+      << ",\"mean_n_ios\":" << metrics.mean_n_ios
+      << ",\"p95_n_ios\":" << metrics.p95_n_ios
+      << ",\"mean_n_4k\":" << metrics.mean_n_4k
+      << ",\"p95_n_4k\":" << metrics.p95_n_4k
+      << ",\"mean_read_size\":" << metrics.mean_read_size
+      << ",\"p95_read_size\":" << metrics.p95_read_size
+      << ",\"mean_io_us\":" << metrics.mean_io_us
+      << ",\"p95_io_us\":" << metrics.p95_io_us
+      << ",\"mean_cpu_us\":" << metrics.mean_cpu_us
+      << ",\"p95_cpu_us\":" << metrics.p95_cpu_us
+      << ",\"mean_cpu_us1\":" << metrics.mean_cpu_us1
+      << ",\"mean_cpu_us2\":" << metrics.mean_cpu_us2
+      << ",\"mean_n_cmps\":" << metrics.mean_n_cmps
+      << ",\"p95_n_cmps\":" << metrics.p95_n_cmps
+      << ",\"mean_n_hops\":" << metrics.mean_n_hops
+      << ",\"p95_n_hops\":" << metrics.p95_n_hops;
+}
+
 std::vector<std::vector<char>> load_filter_buffers(const Config &config, size_t query_count) {
   if (!config.query_label_csv.empty()) {
     if (query_count != 1) {
@@ -656,6 +751,7 @@ SearchMetrics run_search(const Config &config, pipeann::DynamicSSDIndex<float, u
   std::vector<uint32_t> tags(queries.count * config.k, std::numeric_limits<uint32_t>::max());
   std::vector<float> distances(queries.count * config.k, std::numeric_limits<float>::infinity());
   std::vector<double> latencies(queries.count, 0.0);
+  std::vector<pipeann::QueryStats> query_stats(queries.count);
   std::vector<pipeann::HybridQueryStats> hybrid_stats(use_filter ? queries.count : 0);
 
   std::atomic<bool> sample_rss {true};
@@ -676,7 +772,8 @@ SearchMetrics run_search(const Config &config, pipeann::DynamicSSDIndex<float, u
   const auto start = std::chrono::steady_clock::now();
 #pragma omp parallel for num_threads(config.search_threads) schedule(dynamic, 1)
   for (int64_t q = 0; q < static_cast<int64_t>(queries.count); ++q) {
-    pipeann::QueryStats stats {};
+    pipeann::QueryStats &stats = query_stats[static_cast<size_t>(q)];
+    stats = {};
     const auto query_start = std::chrono::steady_clock::now();
     index.search(queries.data.get() + static_cast<size_t>(q) * queries.dim, config.k, config.mem_l, config.search_l,
                  config.beamwidth, tags.data() + static_cast<size_t>(q) * config.k,
@@ -708,6 +805,7 @@ SearchMetrics run_search(const Config &config, pipeann::DynamicSSDIndex<float, u
   metrics.rss_after_query_kb = rss_after_query;
   metrics.query_peak_rss_kb = query_peak;
   metrics.query_peak_delta_kb = query_peak > rss_before_query ? query_peak - rss_before_query : 0;
+  populate_query_stat_summaries(query_stats, metrics);
   if (use_filter) {
     uint64_t min_threshold = std::numeric_limits<uint64_t>::max();
     uint64_t max_threshold = 0;
@@ -755,6 +853,7 @@ SearchMetrics run_static_search(const Config &config, pipeann::SSDIndex<float, u
   std::vector<uint32_t> tags(queries.count * config.k, std::numeric_limits<uint32_t>::max());
   std::vector<float> distances(queries.count * config.k, std::numeric_limits<float>::infinity());
   std::vector<double> latencies(queries.count, 0.0);
+  std::vector<pipeann::QueryStats> query_stats(queries.count);
   std::vector<pipeann::HybridQueryStats> hybrid_stats(use_filter ? queries.count : 0);
 
   std::atomic<bool> sample_rss {true};
@@ -775,7 +874,8 @@ SearchMetrics run_static_search(const Config &config, pipeann::SSDIndex<float, u
   const auto start = std::chrono::steady_clock::now();
 #pragma omp parallel for num_threads(config.search_threads) schedule(dynamic, 1)
   for (int64_t q = 0; q < static_cast<int64_t>(queries.count); ++q) {
-    pipeann::QueryStats stats {};
+    pipeann::QueryStats &stats = query_stats[static_cast<size_t>(q)];
+    stats = {};
     const auto query_start = std::chrono::steady_clock::now();
     if (use_filter) {
       index.hybrid_search(queries.data.get() + static_cast<size_t>(q) * queries.dim, config.k, config.mem_l,
@@ -813,6 +913,7 @@ SearchMetrics run_static_search(const Config &config, pipeann::SSDIndex<float, u
   metrics.rss_after_query_kb = rss_after_query;
   metrics.query_peak_rss_kb = query_peak;
   metrics.query_peak_delta_kb = query_peak > rss_before_query ? query_peak - rss_before_query : 0;
+  populate_query_stat_summaries(query_stats, metrics);
   if (use_filter) {
     uint64_t min_threshold = std::numeric_limits<uint64_t>::max();
     uint64_t max_threshold = 0;
@@ -901,6 +1002,7 @@ int run_single_query_static_rss(Config config) {
       << "\"threads\":" << config.search_threads << ","
       << "\"insert_threads\":" << config.insert_threads << ","
       << "\"pq_bytes\":" << config.pq_bytes << ","
+      << "\"flat_build_memory_gb\":" << config.flat_build_memory_gb << ","
       << "\"flat_threshold\":" << config.flat_threshold << ","
       << "\"points\":" << live_count << ","
       << "\"chosen_L\":" << config.search_l << ","
@@ -922,8 +1024,9 @@ int run_single_query_static_rss(Config config) {
       << ",\"query_peak_rss_kb\":" << metrics.query_peak_rss_kb
       << ",\"query_peak_delta_kb\":" << metrics.query_peak_delta_kb
       << ",\"mean_candidate_count\":" << metrics.mean_candidate_count
-      << ",\"mean_route_overhead_us\":" << metrics.mean_route_overhead_us
-      << ",\"prefilter_count\":" << metrics.prefilter_count
+      << ",\"mean_route_overhead_us\":" << metrics.mean_route_overhead_us;
+  append_query_stat_json(out, metrics);
+  out << ",\"prefilter_count\":" << metrics.prefilter_count
       << ",\"graph_count\":" << metrics.graph_count
       << ",\"fallback_count\":" << metrics.fallback_count
       << ",\"empty_count\":" << metrics.empty_count
@@ -1009,6 +1112,7 @@ std::string common_fields(const Config &config, const std::string &mode, uint64_
       << "\"dest_prefix\":\"" << json_escape(config.dest_prefix) << "\","
       << "\"insert_threads\":" << config.insert_threads << ","
       << "\"pq_bytes\":" << config.pq_bytes << ","
+      << "\"flat_build_memory_gb\":" << config.flat_build_memory_gb << ","
       << "\"flat_threshold\":" << config.flat_threshold << ","
       << "\"flat_pq_pivots\":\"" << json_escape(config.flat_pq_pivots) << "\","
       << "\"points\":" << live_count << ","
@@ -1030,13 +1134,24 @@ int run(Config config) {
     pipeann::IndexBuildParameters parameters;
     parameters.set(config.build_r, config.build_l, 384, 1.2, config.insert_threads, true,
                    config.beamwidth);
+    const uint64_t constructor_flat_threshold = std::max<uint64_t>(config.flat_threshold, config.insert_count);
     auto index = pipeann::DynamicSSDIndex<float, uint32_t>(
         parameters, config.source_prefix, load_bin_dim(config.data_bin), distance.get(),
-        pipeann::get_metric(config.metric), config.flat_threshold, PIPE_SEARCH, config.pq_bytes, config.flat_pq_pivots);
+        pipeann::get_metric(config.metric), constructor_flat_threshold, PIPE_SEARCH, config.pq_bytes,
+        config.flat_pq_pivots, config.flat_build_memory_gb);
 
     const std::vector<uint32_t> insert_tags_vec = load_insert_tags(config);
     const std::string inserted_tag_hash = fnv1a_tags_hex(insert_tags_vec);
     const double insert_s = insert_range(config, index, nullptr, nullptr);
+    double materialize_s = 0.0;
+    if (index.is_flat_mode()) {
+      const auto materialize_start = std::chrono::steady_clock::now();
+      const bool materialized = index.materialize_flat_to_disk();
+      materialize_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - materialize_start).count();
+      if (!materialized) {
+        throw std::runtime_error("zero-insert-only explicit materialize failed");
+      }
+    }
     if (index.is_flat_mode()) {
       throw std::runtime_error("zero-insert-only did not materialize to disk");
     }
@@ -1062,17 +1177,19 @@ int run(Config config) {
         << ",\"phase\":\"zero-insert-only\""
         << ",\"final_index_prefix\":\"" << json_escape(final_prefix) << "\""
         << ",\"flat_materialized\":true"
-        << ",\"elapsed_s\":" << std::fixed << std::setprecision(6) << (insert_s + merge_s)
+        << ",\"elapsed_s\":" << std::fixed << std::setprecision(6) << (insert_s + materialize_s + merge_s)
         << ",\"insert_count\":" << config.insert_count
         << ",\"insert_scope\":\""
         << (config.insert_tag_file.empty() ? "dense_tag_range_from_insert_start" : "insert_tag_file_tags") << "\""
         << ",\"inserted_tag_hash\":\"" << json_escape(inserted_tag_hash) << "\""
         << ",\"insert_wall_s\":" << insert_s
         << ",\"insert_elapsed_s\":" << insert_s
+        << ",\"materialize_wall_s\":" << materialize_s
+        << ",\"materialize_elapsed_s\":" << materialize_s
         << ",\"merge_wall_s\":" << merge_s
         << ",\"merge_elapsed_s\":" << merge_s
-        << ",\"wall_s\":" << (insert_s + merge_s)
-        << ",\"qps\":" << (static_cast<double>(config.insert_count) / std::max(insert_s, 1e-9))
+        << ",\"wall_s\":" << (insert_s + materialize_s + merge_s)
+        << ",\"qps\":" << (static_cast<double>(config.insert_count) / std::max(insert_s + materialize_s, 1e-9))
         << ",\"avg_latency_us\":0,\"p50_latency_us\":0,\"p95_latency_us\":0,\"p99_latency_us\":0,\"recall@10\":0"
         << ",\"main_index_label_size\":" << label_size
         << ",\"label_sidecar_loadable\":" << (sidecar_ok ? "true" : "false")
@@ -1210,8 +1327,9 @@ int run(Config config) {
         << ",\"query_peak_delta_kb\":" << metrics.query_peak_delta_kb
         << ",\"mean_candidate_count\":" << metrics.mean_candidate_count
         << ",\"candidate_count\":" << metrics.mean_candidate_count
-        << ",\"mean_route_overhead_us\":" << metrics.mean_route_overhead_us
-        << ",\"prefilter_count\":" << metrics.prefilter_count
+        << ",\"mean_route_overhead_us\":" << metrics.mean_route_overhead_us;
+    append_query_stat_json(out, metrics);
+    out << ",\"prefilter_count\":" << metrics.prefilter_count
         << ",\"graph_count\":" << metrics.graph_count
         << ",\"fallback_count\":" << metrics.fallback_count
         << ",\"empty_count\":" << metrics.empty_count

@@ -54,6 +54,7 @@ SELECTIVITY = {
 }
 
 DEFAULT_L_SWEEP = [50, 75, 100, 150, 200, 250, 300]
+CPU_START = 0
 
 DRIVER_CONTRACT: dict[str, Any] = {
     "contract_version": 1,
@@ -290,6 +291,7 @@ DRIVER_CONTRACT: dict[str, Any] = {
             "pq_training_corpus_points",
             "seed_points",
             "flat_threshold",
+            "flat_build_memory_gb",
             "variant",
             "final_index_prefix",
             "raw_command",
@@ -307,6 +309,7 @@ DRIVER_CONTRACT: dict[str, Any] = {
             "live_point_count",
             "pq_bytes",
             "flat_threshold",
+            "flat_build_memory_gb",
             "flat_pq_pivots",
             "main_index_label_size",
             "label_sidecar_loadable",
@@ -324,6 +327,22 @@ DRIVER_CONTRACT: dict[str, Any] = {
             "recall@10",
             "avg_latency_us",
             "p95_latency_us",
+            "mean_query_total_us",
+            "p95_query_total_us",
+            "mean_n_ios",
+            "p95_n_ios",
+            "mean_n_4k",
+            "p95_n_4k",
+            "mean_read_size",
+            "p95_read_size",
+            "mean_io_us",
+            "p95_io_us",
+            "mean_cpu_us",
+            "p95_cpu_us",
+            "mean_n_cmps",
+            "p95_n_cmps",
+            "mean_n_hops",
+            "p95_n_hops",
             "candidate_count",
             "prefilter_count",
             "graph_count",
@@ -337,8 +356,28 @@ DRIVER_CONTRACT: dict[str, Any] = {
         "delete_wall_s": "float seconds spent inside lazy-delete loop only",
         "merge_wall_s": "float seconds spent inside final_merge/merge_deletes only",
         "insert_wall_s": "float seconds spent inserting vectors only",
+        "insert_count": "int inserted vector count; pq-drift direct/retrained rows use 0 because they are direct builds, not insert paths",
         "avg_latency_us": "float microseconds per query",
         "p95_latency_us": "float microseconds per query",
+        "seed_points": "int seed/no-retrain PQ training corpus size; direct/retrained pq-drift rows repeat pq_training_corpus_points for schema stability",
+        "flat_threshold": "int flat materialization threshold for zero-insert; direct/retrained pq-drift rows use 0 because the flat path is not used",
+        "flat_build_memory_gb": "int GB build RAM budget configured for zero-insert flat materialization; direct/retrained rows repeat the configured value for schema stability",
+        "mean_query_total_us": "float mean QueryStats total_us per query",
+        "p95_query_total_us": "float p95 QueryStats total_us per query",
+        "mean_n_ios": "float mean IORequest count per query",
+        "p95_n_ios": "float p95 IORequest count per query",
+        "mean_n_4k": "float mean physical 4KB read requests per query",
+        "p95_n_4k": "float p95 physical 4KB read requests per query",
+        "mean_read_size": "float mean bytes read per query from QueryStats",
+        "p95_read_size": "float p95 bytes read per query from QueryStats",
+        "mean_io_us": "float mean QueryStats IO time per query",
+        "p95_io_us": "float p95 QueryStats IO time per query",
+        "mean_cpu_us": "float mean QueryStats CPU time/counter per query",
+        "p95_cpu_us": "float p95 QueryStats CPU time/counter per query",
+        "mean_n_cmps": "float mean distance/PQ comparison count per query",
+        "p95_n_cmps": "float p95 distance/PQ comparison count per query",
+        "mean_n_hops": "float mean graph/search hops per query",
+        "p95_n_hops": "float p95 graph/search hops per query",
         "candidate_count": "float or int mean candidates for this selector/query batch",
         "main_index_label_size": "int bytes of label payload embedded in main node record; must be 0 for sidecar-only claim",
     },
@@ -369,6 +408,20 @@ def mkdirs(paths: Paths) -> None:
 
 def as_repo_path(repo: Path, path: Path) -> Path:
     return path if path.is_absolute() else repo / path
+
+
+def binary_root(paths: Paths, args: argparse.Namespace) -> Path:
+    root = getattr(args, "binary_root", None)
+    if root is None:
+        root = Path("build/tests")
+    return as_repo_path(paths.repo, root)
+
+
+def binary_path(paths: Paths, args: argparse.Namespace, *parts: str) -> Path:
+    path = binary_root(paths, args)
+    for part in parts:
+        path = path / part
+    return path
 
 
 def sha256_file(path: Path, limit_bytes: int | None = None) -> str:
@@ -650,7 +703,7 @@ def update_claim_status(paths: Paths, claim_id: str, status: str, evidence: list
 def cpu_prefix(cpu_cap: int) -> list[str]:
     if cpu_cap <= 0:
         return []
-    cpu_range = f"0-{cpu_cap - 1}"
+    cpu_range = f"{CPU_START}-{CPU_START + cpu_cap - 1}"
     if shutil.which("taskset"):
         return ["taskset", "-c", cpu_range]
     if shutil.which("numactl"):
@@ -805,11 +858,11 @@ def phase0_inventory(paths: Paths, args: argparse.Namespace) -> None:
     write_driver_contract(paths)
     write_system_inventory(paths)
     binaries = [
-        paths.repo / "build/tests/dynamic_update_suite_driver",
-        paths.repo / "build/tests/build_disk_index",
-        paths.repo / "build/tests/search_disk_index_hybrid",
-        paths.repo / "build/tests/utils/compute_groundtruth",
-        paths.repo / "build/tests/calibrate_hybrid_threshold",
+        binary_path(paths, args, "dynamic_update_suite_driver"),
+        binary_path(paths, args, "build_disk_index"),
+        binary_path(paths, args, "search_disk_index_hybrid"),
+        binary_path(paths, args, "utils", "compute_groundtruth"),
+        binary_path(paths, args, "calibrate_hybrid_threshold"),
     ]
     records: list[dict[str, Any]] = []
     for binary in binaries:
@@ -829,10 +882,13 @@ def phase0_inventory(paths: Paths, args: argparse.Namespace) -> None:
     git_log = paths.logs / "phase0_git.log"
     run_command(["git", "rev-parse", "HEAD"], cwd=paths.repo, log_path=git_log, check=False)
     run_command(["git", "status", "--short"], cwd=paths.repo, log_path=paths.logs / "phase0_git_status.log", check=False)
-    run_command([str(paths.repo / "build/tests/dynamic_update_suite_driver"), "--help"],
+    run_command([str(binary_path(paths, args, "dynamic_update_suite_driver")), "--help"],
                 cwd=paths.repo, log_path=paths.logs / "phase0_driver_help.log", check=False)
     write_json(paths.evidence / "phase0_inventory.json", {
         "cpu_cap": args.cpu_cap,
+        "cpu_start": getattr(args, "cpu_start", CPU_START),
+        "cpu_range": f"{CPU_START}-{CPU_START + args.cpu_cap - 1}" if args.cpu_cap > 0 else "unbounded",
+        "binary_root": str(binary_root(paths, args)),
         "records": records,
         "hash_note": "Files larger than 512MiB use a clearly marked prefix hash for fast provenance; full hashes should be added for final paper-grade claims if runtime permits.",
         "aris_docs": [
@@ -852,7 +908,7 @@ def build_or_reuse_index(paths: Paths, args: argparse.Namespace, prefix: Path, b
         })
         return
     cmd = [
-        str(paths.repo / "build/tests/build_disk_index"),
+        str(binary_path(paths, args, "build_disk_index")),
         "float",
         str(base_bin),
         str(prefix),
@@ -904,7 +960,7 @@ def make_delete_ids(path: Path, npoints: int, fraction: float, seed: int) -> int
 def driver_base_cmd(paths: Paths, args: argparse.Namespace, mode: str, source: Path, jsonl: Path,
                     route: str | None = None, search_l: int | None = None) -> list[str]:
     cmd = [
-        str(paths.repo / "build/tests/dynamic_update_suite_driver"),
+        str(binary_path(paths, args, "dynamic_update_suite_driver")),
         "--mode",
         mode,
         "--source-prefix",
@@ -1030,7 +1086,7 @@ def compute_truth(paths: Paths, args: argparse.Namespace, base_bin: Path, query_
     if out.exists():
         return
     cmd = [
-        str(paths.repo / "build/tests/utils/compute_groundtruth"),
+        str(binary_path(paths, args, "utils", "compute_groundtruth")),
         "float",
         args.metric,
         str(base_bin),
@@ -1280,6 +1336,8 @@ def phase4_pq_drift(paths: Paths, args: argparse.Namespace) -> None:
         str(points),
         "--flat-threshold",
         str(flat_threshold),
+        "--flat-build-memory-gb",
+        str(args.flat_build_memory_gb),
         "--pq-bytes",
         str(args.pq_bytes),
         "--flat-pq-pivots",
@@ -1292,7 +1350,7 @@ def phase4_pq_drift(paths: Paths, args: argparse.Namespace) -> None:
     zero_row = latest_driver_row(zero_jsonl, zero_before, [
         "mode", "status", "cpu_cap", "cpu_cap_enforced", "source_prefix", "final_index_prefix",
         "insert_count", "insert_wall_s", "merge_wall_s", "live_point_count", "pq_bytes", "flat_threshold",
-        "flat_pq_pivots", "main_index_label_size", "label_sidecar_loadable", "raw_command",
+        "flat_build_memory_gb", "flat_pq_pivots", "main_index_label_size", "label_sidecar_loadable", "raw_command",
     ])
     zero_final_prefix = Path(zero_row["final_index_prefix"])
     if not zero_final_prefix.is_absolute():
@@ -1320,7 +1378,7 @@ def phase4_pq_drift(paths: Paths, args: argparse.Namespace) -> None:
             "cpu_cap_enforced": True,
             "requested_points": points,
             "points": live_point_count,
-            "insert_count": None if retrained else int(zero_row["insert_count"]),
+            "insert_count": 0 if retrained else int(zero_row["insert_count"]),
             "live_point_count": live_point_count,
             "code_point_count": code_point_count,
             "code_chunks": code_chunks,
@@ -1334,8 +1392,9 @@ def phase4_pq_drift(paths: Paths, args: argparse.Namespace) -> None:
             "pq_training_points": train_sample_points,
             "pq_training_corpus_points": training_points,
             "pq_training_scope": "full_final_corpus_sample" if retrained else "initial_seed_prefix",
-            "seed_points": seed_points if not retrained else None,
-            "flat_threshold": flat_threshold if not retrained else None,
+            "seed_points": seed_points if not retrained else training_points,
+            "flat_threshold": flat_threshold if not retrained else 0,
+            "flat_build_memory_gb": args.flat_build_memory_gb,
             "zero_insert_path": "flat_until_final_materialization" if not retrained else None,
             "final_index_prefix": str(prefix_path),
             "pq_codebook_hash": file_record(pq_pivots, f"{variant}_pq_pivots"),
@@ -1433,10 +1492,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--phase", choices=["phase0", "phase1", "phase2", "phase3", "phase4", "all"],
                         default="phase0")
     parser.add_argument("--cpu-cap", type=int, default=16)
+    parser.add_argument("--cpu-start", type=int, default=0,
+                        help="First logical CPU used by taskset/numactl when --cpu-cap is positive.")
     parser.add_argument("--build-r", type=int, default=116)
     parser.add_argument("--build-l", type=int, default=220)
     parser.add_argument("--pq-bytes", type=int, default=16)
     parser.add_argument("--memory-gb", type=int, default=64)
+    parser.add_argument("--binary-root", type=Path, default=None,
+                        help="Directory containing PipeANN test binaries; defaults to build/tests under --repo.")
+    parser.add_argument("--flat-build-memory-gb", type=int, default=None,
+                        help="Build RAM budget for zero-insert flat materialization; defaults to --memory-gb.")
     parser.add_argument("--beamwidth", type=int, default=4)
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--metric", default="l2")
@@ -1466,7 +1531,20 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    global CPU_START
     args = parse_args()
+    if args.cpu_start < 0:
+        raise ValueError("--cpu-start must be non-negative")
+    if args.cpu_cap < 0:
+        raise ValueError("--cpu-cap must be non-negative")
+    cpu_count = os.cpu_count() or 0
+    if args.cpu_cap > 0 and cpu_count > 0 and args.cpu_start + args.cpu_cap > cpu_count:
+        raise ValueError(f"--cpu-start + --cpu-cap exceeds available CPUs ({cpu_count})")
+    CPU_START = args.cpu_start
+    if args.flat_build_memory_gb is None:
+        args.flat_build_memory_gb = args.memory_gb
+    if args.flat_build_memory_gb <= 0:
+        raise ValueError("--flat-build-memory-gb must be positive")
     out_dir = args.out_dir
     if out_dir is None:
         out_dir = args.repo / "experiments" / f"dynamic_delete_pq_drift_aris_{now_stamp()}"

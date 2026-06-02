@@ -1,0 +1,9 @@
+metric,note,value
+selected_rows,expected 200,200
+min_recall@10,target >=98,98.010000
+max_avg_latency_ms,target <10,9.178939
+max_p95_latency_ms,target <10,9.560553
+pq_matched,matched-reference status,100/100
+read_4kb_violations,must be 0,0
+max_strict_total_over_raw_x,target <2x,1.980615
+background_during_max_avg_latency_ms,low-core maintenance interference,9.254442801

@@ -540,7 +540,8 @@ namespace pipeann {
   }
 
   template<typename T, typename TagT>
-  int SSDIndex<T, TagT>::get_vector_by_id(const uint32_t &id, T *vector_coords, char *sector_buf) {
+  int SSDIndex<T, TagT>::get_vector_by_id(const uint32_t &id, T *vector_coords, char *sector_buf,
+                                          QueryStats *stats) {
     if (!enable_tags) {
       LOG(INFO) << "Tags are disabled, cannot retrieve vector";
       return -1;
@@ -583,6 +584,13 @@ namespace pipeann {
 	        bytes_read += static_cast<uint64_t>(ret);
 	      }
 	    }
+
+    if (stats != nullptr) {
+      stats->n_ios += static_cast<double>(pages_to_read);
+      stats->n_4k += static_cast<double>(meta_.uses_packed_layout() ? pages_to_read
+                                                                    : DIV_ROUND_UP(bytes_per_read, SECTOR_LEN));
+      stats->read_size += static_cast<double>(pages_to_read * bytes_per_read);
+    }
 
     DiskNode<T> node = node_from_page(sector_buf, loc);
     memcpy((void *) vector_coords, (void *) node.coords, meta_.data_dim * sizeof(T));

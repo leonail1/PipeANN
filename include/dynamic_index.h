@@ -66,7 +66,7 @@ namespace pipeann {
     DynamicSSDIndex(IndexBuildParameters &parameters, const std::string disk_prefix_out, uint32_t data_dim,
                     Distance<T> *dist, pipeann::Metric disk_metric, uint64_t flat_threshold = 10000,
                     int search_mode = PIPE_SEARCH, uint32_t flat_pq_bytes = 32,
-                    const std::string &flat_pq_pivots_path = "");
+                    const std::string &flat_pq_pivots_path = "", uint32_t flat_build_memory_gb = 1);
 
     ~DynamicSSDIndex();
 
@@ -100,6 +100,8 @@ namespace pipeann {
     bool is_flat_mode() const {
       return flat_mode_;
     }
+
+    bool materialize_flat_to_disk();
 
     uint64_t flat_threshold() const {
       return flat_threshold_;
@@ -169,6 +171,7 @@ namespace pipeann {
     bool flat_mode_ = false;
     uint64_t flat_threshold_ = 0;
     uint32_t flat_pq_bytes_ = 32;
+    uint32_t flat_build_memory_gb_ = 1;
     std::string flat_pq_pivots_path_;
     uint32_t flat_dim_ = 0;
     std::vector<T> flat_data_;

@@ -310,8 +310,9 @@ namespace pipeann {
 
   template<typename T>
   int build_merged_vamana_index(std::string base_file, pipeann::Metric _compareMetric, unsigned L, unsigned R,
-                                double sampling_rate, double ram_budget, std::string mem_index_path,
-                                std::string medoids_file, std::string centroids_file, const char *tag_file) {
+                                double sampling_rate, double ram_budget, unsigned num_threads,
+                                std::string mem_index_path, std::string medoids_file, std::string centroids_file,
+                                const char *tag_file) {
     size_t base_num, base_dim;
     pipeann::get_bin_metadata(base_file, base_num, base_dim);
 
@@ -319,7 +320,7 @@ namespace pipeann {
     if (full_index_ram < ram_budget * 1024 * 1024 * 1024) {
       LOG(INFO) << "Full index fits in RAM, building in one shot";
       pipeann::IndexBuildParameters paras;
-      paras.set(R, L, 750, 1.2, 0, true);
+      paras.set(R, L, 750, 1.2, num_threads, true);
 
       auto _pvamanaIndex = std::make_unique<pipeann::Index<T>>(_compareMetric, base_dim);
       // For SSD index, data is pre-normalized for correct PQ initialization, so normalize should be set to false.
@@ -342,7 +343,7 @@ namespace pipeann {
       std::string shard_index_file = merged_index_prefix + "_subshard-" + std::to_string(p) + "_mem.index";
 
       pipeann::IndexBuildParameters paras;
-      paras.set(2 * R / 3, L, 750, 1.2, 0, false);
+      paras.set(2 * R / 3, L, 750, 1.2, num_threads, false);
       uint64_t shard_base_dim, shard_base_pts;
       get_bin_metadata(shard_base_file, shard_base_pts, shard_base_dim);
       auto _pvamanaIndex = std::make_unique<pipeann::Index<T>>(_compareMetric, shard_base_dim);
@@ -520,8 +521,8 @@ namespace pipeann {
 
     auto start = std::chrono::high_resolution_clock::now();
     auto p_val = nbr_handler->get_sample_p();
-    pipeann::build_merged_vamana_index<T>(normalized_file_path, _compareMetric, L, R, p_val, M, mem_index_path,
-                                          medoids_path, centroids_path, tag_file);
+    pipeann::build_merged_vamana_index<T>(normalized_file_path, _compareMetric, L, R, p_val, M, num_threads,
+                                          mem_index_path, medoids_path, centroids_path, tag_file);
     auto end = std::chrono::high_resolution_clock::now();
     LOG(INFO) << "Vamana index built in: " << std::chrono::duration<double>(end - start).count() << "s.";
 
@@ -580,14 +581,17 @@ namespace pipeann {
 
   template int build_merged_vamana_index<int8_t>(std::string base_file, pipeann::Metric _compareMetric, unsigned L,
                                                  unsigned R, double sampling_rate, double ram_budget,
-                                                 std::string mem_index_path, std::string medoids_path,
-                                                 std::string centroids_file, const char *tag_file);
+                                                 unsigned num_threads, std::string mem_index_path,
+                                                 std::string medoids_path, std::string centroids_file,
+                                                 const char *tag_file);
   template int build_merged_vamana_index<float>(std::string base_file, pipeann::Metric _compareMetric, unsigned L,
                                                 unsigned R, double sampling_rate, double ram_budget,
-                                                std::string mem_index_path, std::string medoids_path,
-                                                std::string centroids_file, const char *tag_file);
+                                                unsigned num_threads, std::string mem_index_path,
+                                                std::string medoids_path, std::string centroids_file,
+                                                const char *tag_file);
   template int build_merged_vamana_index<uint8_t>(std::string base_file, pipeann::Metric _compareMetric, unsigned L,
                                                   unsigned R, double sampling_rate, double ram_budget,
-                                                  std::string mem_index_path, std::string medoids_path,
-                                                  std::string centroids_file, const char *tag_file);
+                                                  unsigned num_threads, std::string mem_index_path,
+                                                  std::string medoids_path, std::string centroids_file,
+                                                  const char *tag_file);
 };  // namespace pipeann

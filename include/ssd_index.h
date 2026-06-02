@@ -372,7 +372,8 @@ namespace pipeann {
     // Background I/O thread function.
     void bg_io_thread();
 
-    int get_vector_by_id(const uint32_t &id, T *vector, char *sector_buf = nullptr);
+    int get_vector_by_id(const uint32_t &id, T *vector, char *sector_buf = nullptr,
+                         QueryStats *stats = nullptr);
     int get_rerank_vector_fd();
     void close_rerank_vector_fd();
 

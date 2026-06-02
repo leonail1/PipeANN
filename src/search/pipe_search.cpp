@@ -3,6 +3,8 @@
 #include "ssd_index.h"
 #include <malloc.h>
 #include <algorithm>
+#include <memory>
+#include <unordered_map>
 #ifndef USE_AIO
 #include "liburing.h"
 #endif
@@ -198,6 +200,37 @@ namespace pipeann {
 #endif
 
     std::queue<io_t> on_flight_ios;
+    std::unordered_map<uint64_t, std::unique_ptr<char[]>> query_4k_page_cache;
+    if (meta_.uses_packed_layout()) {
+      query_4k_page_cache.reserve(static_cast<size_t>(l_search * 2));
+    }
+
+    auto copy_cached_4k_page = [&](IORequest &req) -> bool {
+      if (!meta_.uses_packed_layout() || req.len != SECTOR_LEN || req.offset % SECTOR_LEN != 0) {
+        return false;
+      }
+      auto it = query_4k_page_cache.find(req.offset / SECTOR_LEN);
+      if (it == query_4k_page_cache.end()) {
+        return false;
+      }
+      memcpy(req.buf, it->second.get(), SECTOR_LEN);
+      req.finished = true;
+      return true;
+    };
+
+    auto remember_completed_4k_page = [&](const IORequest &req) {
+      if (!meta_.uses_packed_layout() || req.len != SECTOR_LEN || req.offset % SECTOR_LEN != 0 || req.buf == nullptr) {
+        return;
+      }
+      const uint64_t page_id = req.offset / SECTOR_LEN;
+      if (query_4k_page_cache.find(page_id) != query_4k_page_cache.end()) {
+        return;
+      }
+      auto page = std::make_unique<char[]>(SECTOR_LEN);
+      memcpy(page.get(), req.buf, SECTOR_LEN);
+      query_4k_page_cache.emplace(page_id, std::move(page));
+    };
+
     auto send_read_req = [&](Neighbor &item) -> bool {
       item.flag = false;
       if (item.id >= meta_.npoints) {
@@ -219,15 +252,26 @@ namespace pipeann {
 	      auto buf = sector_scratch + cur_buf_idx * size_per_io;
 	      auto *reqs = query_buf->reqs + cur_buf_idx * MAX_N_NODE_READ_PAGES;
 	      const uint64_t n_reqs = fill_node_read_requests(loc, buf, reqs);
+	      uint64_t n_physical_reqs = 0;
+	      uint64_t n_physical_4k = 0;
+	      uint64_t physical_read_size = 0;
 	      for (uint64_t req_idx = 0; req_idx < n_reqs; ++req_idx) {
-	        reader->send_read_no_alloc(reqs[req_idx], ctx);
+	        reqs[req_idx].finished = false;
+	        if (!copy_cached_4k_page(reqs[req_idx])) {
+	          reader->send_read_no_alloc(reqs[req_idx], ctx);
+	          ++n_physical_reqs;
+	          n_physical_4k += DIV_ROUND_UP(reqs[req_idx].len, SECTOR_LEN);
+	          physical_read_size += reqs[req_idx].len;
+	        }
 	      }
 
 	      on_flight_ios.push(io_t{item, pid, loc, reqs, static_cast<uint32_t>(n_reqs)});
 	      cur_buf_idx = (cur_buf_idx + 1) % MAX_N_SECTOR_READS;
 
 	      if (stats != nullptr) {
-	        stats->n_ios += n_reqs;
+	        stats->n_ios += n_physical_reqs;
+	        stats->n_4k += static_cast<double>(n_physical_4k);
+	        stats->read_size += static_cast<double>(physical_read_size);
 	      }
       return true;
     };
@@ -239,6 +283,9 @@ namespace pipeann {
       unsigned n_in = 0, n_out = 0;
       while (!on_flight_ios.empty() && on_flight_ios.front().finished()) {
         io_t &io = on_flight_ios.front();
+	        for (uint32_t req_idx = 0; req_idx < io.n_read_reqs; ++req_idx) {
+	          remember_completed_4k_page(io.read_reqs[req_idx]);
+	        }
 	        id_buf_map.insert(std::make_pair(io.nbr.id, node_from_page((char *) io.read_reqs[0].buf, io.loc)));
         io.nbr.distance <= retset[cur_list_size - 1].distance ? ++n_in : ++n_out;
         // unlock the corresponding page.
@@ -385,6 +432,9 @@ namespace pipeann {
         reader->poll_all(ctx);
         while (!on_flight_ios.empty() && on_flight_ios.front().finished()) {
           io_t &io = on_flight_ios.front();
+	          for (uint32_t req_idx = 0; req_idx < io.n_read_reqs; ++req_idx) {
+	            remember_completed_4k_page(io.read_reqs[req_idx]);
+	          }
 	          id_buf_map.insert(std::make_pair(io.nbr.id, node_from_page((char *) io.read_reqs[0].buf, io.loc)));
           this->unlock_idx(idx_lock_table, io.nbr.id);
           on_flight_ios.pop();

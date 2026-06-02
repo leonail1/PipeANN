@@ -38,8 +38,8 @@ namespace pipeann {
                    const std::string &output_vamana, const std::string &medoids_file);
 
   template<typename T>
-  int build_merged_vamana_index(std::string base_file, pipeann::Metric _compareMetric, bool single_index_file,
-                                unsigned L, unsigned R, double sampling_rate, double ram_budget,
+  int build_merged_vamana_index(std::string base_file, pipeann::Metric _compareMetric, unsigned L, unsigned R,
+                                double sampling_rate, double ram_budget, unsigned num_threads,
                                 std::string mem_index_path, std::string medoids_file, std::string centroids_file,
                                 const char *tag_file = nullptr);
 

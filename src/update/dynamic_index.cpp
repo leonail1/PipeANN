@@ -344,17 +344,16 @@ namespace pipeann {
     }
 
     void materialize_candidate_ids(HybridQueryScratch *scratch, std::vector<uint32_t> *output) {
-      scratch->candidate_ids.clear();
-      scratch->candidate_ids.reserve(static_cast<size_t>(popcount_words(scratch->bitset_words)));
+      output->clear();
+      output->reserve(static_cast<size_t>(popcount_words(scratch->bitset_words)));
       for (size_t word_idx = 0; word_idx < scratch->bitset_words.size(); ++word_idx) {
         uint64_t word = scratch->bitset_words[word_idx];
         while (word != 0) {
           const uint32_t bit = static_cast<uint32_t>(__builtin_ctzll(word));
-          scratch->candidate_ids.push_back(static_cast<uint32_t>(word_idx * 64ULL + bit));
+          output->push_back(static_cast<uint32_t>(word_idx * 64ULL + bit));
           word &= (word - 1);
         }
       }
-      *output = scratch->candidate_ids;
     }
 
     template<typename TagT>
@@ -502,7 +501,8 @@ namespace pipeann {
   DynamicSSDIndex<T, TagT>::DynamicSSDIndex(IndexBuildParameters &parameters, const std::string disk_prefix_out,
                                             uint32_t data_dim, Distance<T> *dist, pipeann::Metric dist_metric,
                                             uint64_t flat_threshold, int search_mode, uint32_t flat_pq_bytes,
-                                            const std::string &flat_pq_pivots_path) {
+                                            const std::string &flat_pq_pivots_path,
+                                            uint32_t flat_build_memory_gb) {
     this->_dist_metric = dist_metric;
     this->journal = new pipeann::Journal<TagT>(disk_prefix_out + "_journal");
 
@@ -526,6 +526,7 @@ namespace pipeann {
     flat_mode_ = true;
     flat_threshold_ = flat_threshold;
     flat_pq_bytes_ = std::max<uint32_t>(1, std::min<uint32_t>(flat_pq_bytes, data_dim));
+    flat_build_memory_gb_ = std::max<uint32_t>(1, flat_build_memory_gb);
     flat_pq_pivots_path_ = flat_pq_pivots_path;
     flat_dim_ = data_dim;
     live_point_count_.store(0);
@@ -636,6 +637,12 @@ namespace pipeann {
   }
 
   template<typename T, typename TagT>
+  bool DynamicSSDIndex<T, TagT>::materialize_flat_to_disk() {
+    std::unique_lock<std::shared_timed_mutex> lock(_merge_lock);
+    return materialize_flat_to_disk_locked();
+  }
+
+  template<typename T, typename TagT>
   bool DynamicSSDIndex<T, TagT>::materialize_flat_to_disk_locked() {
     if (!flat_mode_) {
       return true;
@@ -706,9 +713,10 @@ namespace pipeann {
     const uint32_t R = _paras_disk.R == 0 ? 64 : _paras_disk.R;
     const uint32_t L = _paras_disk.L == 0 ? R + 32 : _paras_disk.L;
     const uint32_t build_threads = _num_threads == 0 ? 1 : _num_threads;
+    const uint32_t build_memory_gb = std::max<uint32_t>(1, flat_build_memory_gb_);
     const uint32_t pq_bytes = std::max<uint32_t>(1, std::min<uint32_t>(flat_pq_bytes_, flat_dim_));
     const bool build_ok = pipeann::build_disk_index<T, TagT>(
-        data_path.c_str(), _disk_index_prefix_in.c_str(), R, L, 1, build_threads, pq_bytes, _dist_metric,
+        data_path.c_str(), _disk_index_prefix_in.c_str(), R, L, build_memory_gb, build_threads, pq_bytes, _dist_metric,
         tag_path.c_str(), nbr_handler, nullptr, label_source_file);
     if (!build_ok) {
       delete nbr_handler;
