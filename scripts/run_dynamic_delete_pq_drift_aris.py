@@ -959,6 +959,9 @@ def make_delete_ids(path: Path, npoints: int, fraction: float, seed: int) -> int
 
 def driver_base_cmd(paths: Paths, args: argparse.Namespace, mode: str, source: Path, jsonl: Path,
                     route: str | None = None, search_l: int | None = None) -> list[str]:
+    beamwidth = args.beamwidth
+    if mode == "measure-dynamic-search":
+        beamwidth = getattr(args, "query_beamwidth", args.beamwidth)
     cmd = [
         str(binary_path(paths, args, "dynamic_update_suite_driver")),
         "--mode",
@@ -978,7 +981,7 @@ def driver_base_cmd(paths: Paths, args: argparse.Namespace, mode: str, source: P
         "--build-r",
         str(args.build_r),
         "--beamwidth",
-        str(args.beamwidth),
+        str(beamwidth),
         "--k",
         str(args.k),
         "--cpu-cap",
@@ -1503,6 +1506,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--flat-build-memory-gb", type=int, default=None,
                         help="Build RAM budget for zero-insert flat materialization; defaults to --memory-gb.")
     parser.add_argument("--beamwidth", type=int, default=4)
+    parser.add_argument("--query-beamwidth", type=int, default=None,
+                        help="Beamwidth used only for measure-dynamic-search; defaults to --beamwidth.")
     parser.add_argument("--k", type=int, default=10)
     parser.add_argument("--metric", default="l2")
     parser.add_argument("--nbr-type", default="pq")
@@ -1545,6 +1550,12 @@ def main() -> int:
         args.flat_build_memory_gb = args.memory_gb
     if args.flat_build_memory_gb <= 0:
         raise ValueError("--flat-build-memory-gb must be positive")
+    if args.beamwidth <= 0:
+        raise ValueError("--beamwidth must be positive")
+    if args.query_beamwidth is None:
+        args.query_beamwidth = args.beamwidth
+    if args.query_beamwidth <= 0:
+        raise ValueError("--query-beamwidth must be positive")
     out_dir = args.out_dir
     if out_dir is None:
         out_dir = args.repo / "experiments" / f"dynamic_delete_pq_drift_aris_{now_stamp()}"
