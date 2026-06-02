@@ -349,7 +349,7 @@
     \begin{columns}[T,onlytextwidth]
         \column{0.49\textwidth}
         \scriptsize
-        \textbf{左图：5 轮 delete/insert 后的 v3 selected 质量。} 允许重新选择 route/L 后，retrain 与 no-retrain 两类路径在每轮均保持 recall@10 $\geq$98，且每轮最慢 avg/p95 latency $<$10ms。
+        \textbf{左图：5 轮 delete/insert 后的 v3 selected 质量。} 允许重新选择 route/L/beamwidth 后，retrain 与 no-retrain 两类路径在每轮均保持 recall@10 $\geq$98，且每轮最慢 avg/p95 latency $<$10ms。
 
         \column{0.49\textwidth}
         \scriptsize
@@ -358,7 +358,7 @@
     \vspace{0.4em}
 
     \scriptsize
-    \textcolor{red}{结论：按验收口径重新选择 route/L 后，v100 v3 packed serving 下 200/200 点通过 recall、avg latency 与 p95 latency 门槛。}
+    \textcolor{red}{结论：按验收口径重新选择 route/L/beamwidth 后，v100 v3 packed serving 下 200/200 点通过 recall、avg latency 与 p95 latency 门槛。}
     \vspace{0.2em}
 
     \begin{columns}[c,onlytextwidth]
@@ -391,7 +391,7 @@
     \begin{minipage}{0.94\textwidth}
         \centering
         \scriptsize
-        1M 索引；等值 / 范围查询；PQ code 常驻内存；图中为 v3 packed serving 下满足 recall@10 $\geq$ 98\% 的 selected route/L。
+        1M 索引；等值 / 范围查询；PQ code 常驻内存；图中为 v3 packed serving 下满足 recall@10 $\geq$ 98\% 的 selected route/L/beamwidth（bw 4=165, 8=35）。
 
         \textcolor{red}{结论：200 个动态 selected 点全部满足 recall@10 $\geq$98；最大 avg latency 为 9.18ms，最大 p95 latency 为 9.56ms。}
     \end{minipage}
@@ -476,7 +476,7 @@
         \toprule
         \textbf{指标} & \textbf{v3 结果} & \textbf{备注} \\
         \midrule
-        动态 selected recall@10 & 最小 98.01 & 允许重新选择 route/L 的验收口径，200/200 通过。 \\
+        动态 selected recall@10 & 最小 98.01 & route/L/beamwidth；bw 4=165, 8=35；200/200 通过。 \\
         动态 selected avg latency & 最大 9.18ms & 200/200 点 $<$10ms。 \\
         动态 selected p95 latency & 最大 9.56ms & 200/200 点 $<$10ms。 \\
         PQ drift matched-reference & 100/100 & cycle5 range-u30 no-retrain L250 matched。 \\

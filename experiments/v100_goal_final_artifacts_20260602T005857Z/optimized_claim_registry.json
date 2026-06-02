@@ -1,7 +1,7 @@
 {
   "claims": [
     {
-      "caveat": "Route/L retuning is allowed by the acceptance\u53e3\u5f84; this does not prove fixed-parameter graph quality.",
+      "caveat": "Route/L/beamwidth retuning is allowed by the selected serving-configuration acceptance\u53e3\u5f84; this does not prove fixed-parameter graph quality under identical search parameters.",
       "coverage": {
         "expected_cycles": 5,
         "extra_tuple_count": 0,
@@ -13,6 +13,12 @@
       "metrics": {
         "avg_latency_present_count": 200,
         "avg_lt_10ms_count": 200,
+        "beamwidth_distribution": {
+          "4": 165,
+          "8": 35
+        },
+        "beamwidth_present_count": 200,
+        "beamwidth_retuned_rows": 35,
         "duplicate_case_count": 0,
         "dynamic_tuple_count": 200,
         "dynamic_tuples": [
@@ -234,6 +240,7 @@
           "prefilter": 160
         },
         "selected_count": 200,
+        "serving_configuration": "selected route/L/beamwidth",
         "status_ok_count": 200,
         "unique_case_count": 200,
         "unique_prefix_count": 10

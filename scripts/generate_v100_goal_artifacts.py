@@ -168,6 +168,18 @@ def command_query_limit(row: dict[str, Any]) -> float | None:
     return None
 
 
+def command_beamwidth(row: dict[str, Any]) -> int | None:
+    for key in ["query_beamwidth", "beamwidth", "selected_beamwidth"]:
+        value = maybe_float(row.get(key))
+        if value is not None:
+            return int(value)
+    command = str(row.get("raw_command") or row.get("replay_invocation") or "")
+    matches = re.findall(r"--beamwidth\s+([0-9]+)", command)
+    if matches:
+        return int(matches[-1])
+    return None
+
+
 def copy_small_artifact(src: Path, dst: Path) -> None:
     if not src.exists():
         return
@@ -209,6 +221,29 @@ def load_selected(v3_replay_dir: Path) -> list[dict[str, Any]]:
             row.setdefault("case_id", case_id)
     return rows
 
+def annotate_serving_rows(rows: list[dict[str, Any]], selected_by_row_index: dict[int, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    annotated: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        selected_row: dict[str, Any] = {}
+        if selected_by_row_index is not None:
+            row_index = item.get("row_index")
+            if row_index not in (None, ""):
+                selected_row = selected_by_row_index.get(int(row_index), {})
+        beamwidth = command_beamwidth(item)
+        selected_beamwidth = command_beamwidth(selected_row)
+        if selected_beamwidth is not None:
+            beamwidth = selected_beamwidth
+        if beamwidth is not None:
+            item["beamwidth"] = beamwidth
+        for key in ["route", "search_l"]:
+            selected_value = selected_row.get(key)
+            if selected_value not in (None, ""):
+                item[key] = selected_value
+        item["serving_configuration"] = "selected route/L/beamwidth"
+        annotated.append(item)
+    return annotated
+
 
 def build_pq_compare(
     baseline_dir: Path, selected: list[dict[str, Any]], pq_replay_dir: Path | None
@@ -248,6 +283,7 @@ def build_pq_compare(
                 "matched_reference_avg_latency_ms": row.get("matched_reference_avg_latency_ms"),
                 "v3_route": selected_row.get("route") or selected_row.get("actual_route"),
                 "v3_L": selected_row.get("search_l") or selected_row.get("chosen_L") or selected_row.get("configured_L"),
+                "v3_beamwidth": command_beamwidth(selected_row),
                 "v3_recall@10": selected_row.get("recall@10"),
                 "v3_avg_latency_ms": (
                     fnum(selected_row, "avg_latency_us") / 1000.0 if selected_row.get("avg_latency_us") is not None else None
@@ -273,6 +309,8 @@ def selected_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     tuples = [canonical_dynamic_tuple(row) for row in rows]
     present_tuples = {item for item in tuples if item is not None}
     query_counts = [command_query_limit(row) for row in rows]
+    beamwidths = [command_beamwidth(row) for row in rows]
+    beamwidth_counts = Counter(str(value) for value in beamwidths if value is not None)
     prefix_count = len(selected_v3_prefixes(rows))
     prefix_present_count = sum(1 for row in rows if row.get("v3_source_prefix") or row.get("source_prefix"))
     return {
@@ -288,6 +326,10 @@ def selected_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "unique_prefix_count": prefix_count,
         "query_count_present_count": sum(value is not None for value in query_counts),
         "min_query_count": min((value for value in query_counts if value is not None), default=0.0),
+        "beamwidth_present_count": sum(value is not None for value in beamwidths),
+        "beamwidth_distribution": dict(sorted(beamwidth_counts.items(), key=lambda item: int(item[0]))),
+        "beamwidth_retuned_rows": sum(value is not None and value != 4 for value in beamwidths),
+        "serving_configuration": "selected route/L/beamwidth",
         "recall_present_count": len(recalls),
         "avg_latency_present_count": len(avg_ms),
         "p95_latency_present_count": len(p95_ms),
@@ -1188,7 +1230,7 @@ def render_reports(
                     "missing_tuple_count": len(missing_tuples),
                     "extra_tuple_count": len(extra_tuples),
                 },
-                "caveat": "Route/L retuning is allowed by the acceptance口径; this does not prove fixed-parameter graph quality.",
+                "caveat": "Route/L/beamwidth retuning is allowed by the selected serving-configuration acceptance口径; this does not prove fixed-parameter graph quality under identical search parameters.",
             },
             {
                 "id": "C_PQ_DRIFT_MATCHED_REFERENCE",
@@ -1261,8 +1303,22 @@ def render_reports(
         encoding="utf-8",
     )
 
+    beamwidth_dist = ", ".join(f"{key}={value}" for key, value in sm["beamwidth_distribution"].items())
+    beamwidth_dist_compact = beamwidth_dist.replace(", ", ";")
+    serving_label = str(sm["serving_configuration"]).removeprefix("selected ")
+
     ppt_rows = [
         {"metric": "selected_rows", "value": sm["selected_count"], "note": f"expected {expected_selected}"},
+        {
+            "metric": "selected_serving_configuration",
+            "value": sm["serving_configuration"],
+            "note": "selected serving config acceptance口径",
+        },
+        {
+            "metric": "selected_beamwidth_distribution",
+            "value": beamwidth_dist_compact,
+            "note": "200 selected rows",
+        },
         {"metric": "min_recall@10", "value": f"{sm['min_recall']:.6f}", "note": "target >=98"},
         {"metric": "max_avg_latency_ms", "value": f"{sm['max_avg_latency_ms']:.6f}", "note": "target <10"},
         {"metric": "max_p95_latency_ms", "value": f"{sm['max_p95_latency_ms']:.6f}", "note": "target <10"},
@@ -1283,6 +1339,7 @@ def render_reports(
     (out / "ppt_ready_conclusion_summary.md").write_text(
         "# V100 PPT-Ready Conclusion Summary\n\n"
         f"- Dynamic selected rows: `{sm['selected_count']}`; recall pass `{sm['recall_pass_count']}`, avg<10ms pass `{sm['avg_lt_10ms_count']}`, p95<10ms pass `{sm['p95_lt_10ms_count']}`.\n"
+        f"- Serving configuration口径: {sm['serving_configuration']}; beamwidth distribution {beamwidth_dist}.\n"
         f"- Worst avg latency: `{sm['max_avg_latency_ms']:.3f} ms`; worst p95 latency: `{sm['max_p95_latency_ms']:.3f} ms`.\n"
         f"- PQ matched-reference: `{len(matched)}/{len(pq_compare)}` matched; unmatched cases: `{[row.get('case_id') for row in unmatched]}`.\n"
         f"- 4KB read invariant violations: `{read_metrics['violation_count']}`; layout violations: `{layout_metrics['violation_count']}`.\n"
@@ -1295,14 +1352,14 @@ def render_reports(
         "# V100 ARIS Final Review\n\n"
         f"Overall status: `{'PASS' if primary_pass and pq_pass and read_pass and layout_pass and space_pass and background_pass and explicit_metrics.get('pass') else 'NEEDS_EVIDENCE'}`.\n\n"
         "## Evidence Checks\n"
-        f"- Dynamic selected recall/avg/p95 latency: `{claims['claims'][0]['status']}` with `{sm}`.\n"
+        f"- Dynamic selected recall/avg/p95 latency: {claims['claims'][0]['status']}; selected serving config {serving_label}; beamwidth distribution {beamwidth_dist}; {sm['recall_pass_count']}/{sm['selected_count']} recall, avg<10ms, and p95<10ms.\n"
         f"- PQ drift matched-reference: `{claims['claims'][1]['status']}` with `{len(matched)}/{len(pq_compare)}` matched; expected `{expected_pq_rows}`.\n"
         f"- 4KB read/layout invariant: `{claims['claims'][2]['status']}` with `{read_metrics}` and `{layout_metrics}`.\n"
         f"- Index space `<2x` strict total/raw: `{claims['claims'][3]['status']}` with `{xm}`.\n"
         f"- Background maintenance interference: `{claims['claims'][4]['status']}`.\n"
         f"- Explicit materialize/delete/merge evidence: `{claims['claims'][5]['status']}` with `{explicit_metrics}`.\n\n"
         "## Claim Wording Guardrails\n"
-        "- Use the selected route/L口径 for dynamic update recall; do not claim fixed-parameter graph quality unless a fixed-parameter experiment is cited.\n"
+        "- Use the selected route/L/beamwidth口径 (selected serving configuration) for dynamic update recall; do not claim fixed-parameter graph quality under identical search parameters unless a fixed-parameter experiment is cited.\n"
         "- Report total serving footprint and excess-over-raw separately.\n"
         "- Keep the 4KB random-read primitive wording: straddling records may issue two 4KB reads, not one 32KB read.\n",
         encoding="utf-8",
@@ -1362,11 +1419,17 @@ def main() -> int:
     pq_compare = build_pq_compare(baseline_dir, selected, pq_replay_dir)
 
     out.mkdir(parents=True, exist_ok=True)
+    selected_by_row_index = {
+        int(row["row_index"]): row
+        for row in selected
+        if row.get("row_index") not in (None, "")
+    }
+    for stem in ["targeted_latency_profile", "optimized_dynamic_update_results"]:
+        rows = [payload(row) for row in read_jsonl(v3_replay_dir / f"{stem}.jsonl")]
+        rows = annotate_serving_rows(rows, selected_by_row_index)
+        write_jsonl(out / f"{stem}.jsonl", rows)
+        write_csv(out / f"{stem}.csv", rows)
     for rel in [
-        "targeted_latency_profile.jsonl",
-        "targeted_latency_profile.csv",
-        "optimized_dynamic_update_results.jsonl",
-        "optimized_dynamic_update_results.csv",
         "index_space_audit.jsonl",
         "index_space_audit.csv",
     ]:

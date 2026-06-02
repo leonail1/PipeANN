@@ -1,5 +1,7 @@
 metric,note,value
 selected_rows,expected 200,200
+selected_serving_configuration,selected serving config acceptance口径,selected route/L/beamwidth
+selected_beamwidth_distribution,200 selected rows,4=165;8=35
 min_recall@10,target >=98,98.010000
 max_avg_latency_ms,target <10,9.178939
 max_p95_latency_ms,target <10,9.560553

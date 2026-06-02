@@ -441,10 +441,11 @@ def plot_maintenance(registry: dict[str, Any], out_dir: Path, ppt_dir: Path) -> 
 
 def replace_once(text: str, old: str, new: str) -> str:
     count = text.count(old)
-    if count != 1:
-        raise RuntimeError(f"expected one occurrence for replacement, found {count}: {old[:80]}")
-    return text.replace(old, new)
-
+    if count == 1:
+        return text.replace(old, new)
+    if text.count(new) == 1:
+        return text
+    raise RuntimeError(f"expected one occurrence for replacement, found {count}: {old[:80]}")
 
 def update_tex(tex_path: Path, metrics: dict[str, Any]) -> None:
     text = tex_path.read_text(encoding="utf-8")
@@ -468,14 +469,17 @@ def update_tex(tex_path: Path, metrics: dict[str, Any]) -> None:
             f"索引总 footprint 低于原始向量 2 倍 & 完成 & 严格总 serving/raw 为 {space_total:.3f}x；严格额外空间/raw 为 {space_excess:.3f}x。 \\\\"
         ),
         "\\item 7 个高选择性慢点定向替换后，avg 全部 $<$10ms。": "\\item 7 个高风险慢点定向替换后，avg/p95 全部 $<$10ms。",
-        "        \\textbf{左图：5 轮 delete/insert 后的 v3 selected 质量。} 允许重新选择 route/L 后，retrain 与 no-retrain 两类路径在每轮均保持 recall@10 $\\geq$98，且每轮最慢 avg latency $<$10ms。": (
-            "        \\textbf{左图：5 轮 delete/insert 后的 v3 selected 质量。} 允许重新选择 route/L 后，retrain 与 no-retrain 两类路径在每轮均保持 recall@10 $\\geq$98，且每轮最慢 avg/p95 latency $<$10ms。"
+        "        \\textbf{左图：5 轮 delete/insert 后的 v3 selected 质量。} 允许重新选择 route/L 后，retrain 与 no-retrain 两类路径在每轮均保持 recall@10 $\\geq$98，且每轮最慢 avg/p95 latency $<$10ms。": (
+            "        \\textbf{左图：5 轮 delete/insert 后的 v3 selected 质量。} 允许重新选择 route/L/beamwidth 后，retrain 与 no-retrain 两类路径在每轮均保持 recall@10 $\\geq$98，且每轮最慢 avg/p95 latency $<$10ms。"
         ),
         "        \\textbf{右图：全部 200 个 selected 点。} 新存储格式下，所有选择性、intersect/range、5 轮更新后的 selected 点均满足 recall@10 $\\geq$98 且 avg latency $<$10ms。": (
             "        \\textbf{右图：全部 200 个 selected 点。} 新存储格式下，所有选择性、intersect/range、5 轮更新后的 selected 点均满足 recall@10 $\\geq$98 且 avg/p95 latency $<$10ms。"
         ),
-        "    \\textcolor{red}{结论：按验收口径重新选择 route/L 后，v3 packed serving 下 200/200 点通过 recall 与 avg latency 门槛。}": (
-            "    \\textcolor{red}{结论：按验收口径重新选择 route/L 后，v100 v3 packed serving 下 200/200 点通过 recall、avg latency 与 p95 latency 门槛。}"
+        "    \\textcolor{red}{结论：按验收口径重新选择 route/L 后，v100 v3 packed serving 下 200/200 点通过 recall、avg latency 与 p95 latency 门槛。}": (
+            "    \\textcolor{red}{结论：按验收口径重新选择 route/L/beamwidth 后，v100 v3 packed serving 下 200/200 点通过 recall、avg latency 与 p95 latency 门槛。}"
+        ),
+        "        1M 索引；等值 / 范围查询；PQ code 常驻内存；图中为 v3 packed serving 下满足 recall@10 $\\geq$ 98\\% 的 selected route/L。": (
+            "        1M 索引；等值 / 范围查询；PQ code 常驻内存；图中为 v3 packed serving 下满足 recall@10 $\\geq$ 98\\% 的 selected route/L/beamwidth（bw 4=165, 8=35）。"
         ),
         "        \\textcolor{red}{结论：200 个动态 selected 点全部满足 recall@10 $\\geq$98；最大单线程 avg latency 为 9.96ms。}": (
             f"        \\textcolor{{red}}{{结论：200 个动态 selected 点全部满足 recall@10 $\\geq$98；最大 avg latency 为 {max_avg:.2f}ms，最大 p95 latency 为 {max_p95:.2f}ms。}}"
@@ -489,8 +493,8 @@ def update_tex(tex_path: Path, metrics: dict[str, Any]) -> None:
         "        PQ train+recode 与 merge 属于前台必须等待部分；full rebuild 与 v3 repack 可后台化，不进入 3 分钟前台窗口。": (
             f"        1 核后台 full build/PQ retrain 并发时，前台 200/200 selected 点仍通过 10ms；during max avg/p95 = {bg_avg:.2f}/{bg_p95:.2f}ms。"
         ),
-        "        动态 selected recall@10 & 最小 98.00 & 允许重新选择 route/L 的验收口径。 \\\\\n        动态 selected avg latency & 最大 9.96ms & 200/200 点 $<$10ms。 \\\\\n        动态 selected p95 latency & 最大 10.32ms & 4 个点 p95 $\\geq$10ms，保留 caveat。 \\\\\n        PQ drift matched-reference & 99.42 & cycle5 range-u30, L420。 \\\\\n        索引空间严格额外/原始 & 0.981x & 严格总 serving/raw 为 1.981x。 \\\\\n        读取粒度 & 4KB & straddling slot 使用两个 4KB 请求。 \\\\": (
-            f"        动态 selected recall@10 & 最小 {min_recall:.2f} & 允许重新选择 route/L 的验收口径，200/200 通过。 \\\\\n"
+        "        动态 selected recall@10 & 最小 98.01 & 允许重新选择 route/L 的验收口径，200/200 通过。 \\\\\n        动态 selected avg latency & 最大 9.18ms & 200/200 点 $<$10ms。 \\\\\n        动态 selected p95 latency & 最大 9.56ms & 200/200 点 $<$10ms。 \\\\\n        PQ drift matched-reference & 100/100 & cycle5 range-u30 no-retrain L250 matched。 \\\\\n        索引空间严格 total/raw & 1.981x & 严格额外/raw 为 0.981x。 \\\\\n        后台维护干扰 & 9.25/9.54ms & 1 核 full build/PQ retrain 并发时 avg/p95 通过。 \\\\\n        读取粒度 & 4KB & straddling slot 使用两个 4KB 请求。 \\\\": (
+            f"        动态 selected recall@10 & 最小 {min_recall:.2f} & route/L/beamwidth；bw 4=165, 8=35；200/200 通过。 \\\\\n"
             f"        动态 selected avg latency & 最大 {max_avg:.2f}ms & 200/200 点 $<$10ms。 \\\\\n"
             f"        动态 selected p95 latency & 最大 {max_p95:.2f}ms & 200/200 点 $<$10ms。 \\\\\n"
             f"        PQ drift matched-reference & 100/100 & cycle5 range-u30 no-retrain L{int(pq['no_retrain_L'])} matched。 \\\\\n"
