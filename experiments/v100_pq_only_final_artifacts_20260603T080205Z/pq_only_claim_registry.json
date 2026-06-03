@@ -1,0 +1,72 @@
+{
+  "claims": [
+    {
+      "claim": "PQ-only maintenance changes only PQ pivots/codes sidecar files.",
+      "evidence": [
+        "pq_only_rebuild_design.md",
+        "pq_only_sidecar_rebuild.jsonl"
+      ],
+      "id": "P1_PQ_ONLY_DESIGN_SCOPE",
+      "note": "Smoke, chain cycles 1-3, and background-overlap rows report PQ pivots/codes changed; non-PQ staged files are hardlinked/full-hash preserved; graph/layout/live compact/tag map/tombstone flags are false.",
+      "status": "PASS"
+    },
+    {
+      "claim": "A PQ-only serving prefix loads, preserves non-PQ graph/layout files, changes PQ hashes, and searches successfully.",
+      "evidence": [
+        "pq_only_smoke_results.jsonl",
+        "pq_only_sidecar_rebuild.jsonl"
+      ],
+      "id": "P2_PQ_ONLY_SMOKE_LOADS",
+      "note": "Smoke selected row recall=98.05, avg=8.442ms, p95=8.774ms.",
+      "status": "PASS"
+    },
+    {
+      "claim": "PQ-only maintenance alone satisfies at least five 60% mark-delete/insert cycles with recall>=98 and avg/p95<10ms.",
+      "evidence": [
+        "pq_only_dynamic_update_results.jsonl",
+        "fast_fail_status.json",
+        "cycle03_intersect_u75_failure_curve.jsonl"
+      ],
+      "id": "P3_PQ_ONLY_5CYCLE_GATE",
+      "note": "Run stopped by fast-fail at cycle03_pq_only_chain_intersect_u75: recall=98.25 but avg=10.959ms and p95=12.330ms. Only 14/30 expected selected rows were produced.",
+      "status": "FAIL"
+    },
+    {
+      "claim": "If PQ-only is insufficient, residual non-PQ causes are diagnosed from route, recall, latency, IO/candidate metrics and full-rebuild comparison.",
+      "evidence": [
+        "non_pq_degradation_diagnosis.md",
+        "pq_only_vs_full_rebuild_compare.jsonl",
+        "cycle03_intersect_u75_failure_curve.jsonl"
+      ],
+      "id": "P4_NON_PQ_DEGRADATION_DIAGNOSIS",
+      "note": "Failing point needs prefilter L400 over 750k candidates; graph route reaches only 97.40 recall by L500. Full rebuild analog passes latency, so residual issue is graph/topology/incremental layout/prefilter pressure, not PQ sidecar alone.",
+      "status": "PASS_WITH_CAVEAT"
+    },
+    {
+      "claim": "Low-core PQ-only background maintenance can run without pushing a near-boundary foreground search over recall/avg/p95 gates.",
+      "evidence": [
+        "pq_only_background_interference.jsonl",
+        "pq_only_sidecar_rebuild.jsonl"
+      ],
+      "id": "P5_BACKGROUND_INTERFERENCE",
+      "note": "One background rebuild on CPU15/cap=1 took 42.687s; 5 foreground rows on CPUs0-14 had recall min 98.08, max avg 9.898ms, max p95 9.940ms. This does not prove full graph rebuild/compact/layout/space maintenance.",
+      "status": "PASS_WITH_CAVEAT"
+    },
+    {
+      "claim": "PQ-only chain does not alter or re-prove 4KB node layout, packing, label sidecar, or strict space ratio claims.",
+      "evidence": [
+        "pq_only_index_space_layout_note.md"
+      ],
+      "id": "P6_LAYOUT_SPACE_SCOPE",
+      "note": "Use previous v100 layout/space audit for strict total about 1.9806x raw vector and label sidecar violations=0; this PQ-only run only replaces same-size PQ sidecars.",
+      "status": "REUSE_PRIOR_AUDIT"
+    }
+  ],
+  "created_utc": "20260603T080205Z",
+  "source_dirs": {
+    "background_overlap": "experiments/v100_pq_only_background_overlap_bg1_20260603T075055Z",
+    "chain_fast_fail": "experiments/v100_pq_only_chain_1m_20260603T055115Z",
+    "full_rebuild_reference": "experiments/v100_early_pq_triggered_artifacts_final_lf_20260603T043152Z",
+    "smoke": "experiments/v100_pq_only_smoke_ordered_lsweep_20260603T053954Z"
+  }
+}

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -26,6 +27,7 @@
 #include "filter/label.h"
 #include "linux_aligned_file_reader.h"
 #include "nbr/nbr.h"
+#include "pq_nbr.h"
 #include "ssd_index.h"
 #include "utils.h"
 
@@ -84,6 +86,10 @@ struct Truthset {
   size_t count = 0;
   size_t dim = 0;
 };
+
+std::string normalized_path_string(const std::string &path) {
+  return std::filesystem::path(path).lexically_normal().string();
+}
 
 struct SearchMetrics {
   double elapsed_s = 0.0;
@@ -273,7 +279,7 @@ Config parse_args(int argc, char **argv) {
       config.single_query_static_rss = true;
     } else if (arg == "--help") {
       throw std::runtime_error(
-          "usage: dynamic_update_suite_driver --mode insert-only|zero-insert-only|search-during-insert|delete-batch|reinsert-batch|measure-dynamic-search|measure-delete-only|measure-delete-then-merge ... [--flat-pq-pivots <path> for zero-insert-only] [--online-flat-materialize for zero-insert-only]");
+          "usage: dynamic_update_suite_driver --mode insert-only|zero-insert-only|search-during-insert|delete-batch|reinsert-batch|measure-dynamic-search|measure-delete-only|measure-delete-then-merge|rebuild-pq-sidecar ... [--flat-pq-pivots <path> for zero-insert-only] [--online-flat-materialize for zero-insert-only]");
     } else {
       throw std::runtime_error("unknown argument: " + arg);
     }
@@ -282,9 +288,16 @@ Config parse_args(int argc, char **argv) {
     throw std::runtime_error("--mode and --source-prefix are required");
   }
   if ((config.mode == "insert-only" || config.mode == "reinsert-batch" || config.mode == "search-during-insert"
-       || config.mode == "zero-insert-only")
+       || config.mode == "zero-insert-only" || config.mode == "rebuild-pq-sidecar")
       && config.data_bin.empty()) {
-    throw std::runtime_error("--data-bin is required for insert modes");
+    throw std::runtime_error("--data-bin is required for insert/PQ sidecar modes");
+  }
+  if (config.mode == "rebuild-pq-sidecar" && config.dest_prefix.empty()) {
+    throw std::runtime_error("--dest-prefix is required for rebuild-pq-sidecar");
+  }
+  if (config.mode == "rebuild-pq-sidecar" &&
+      normalized_path_string(config.source_prefix) == normalized_path_string(config.dest_prefix)) {
+    throw std::runtime_error("rebuild-pq-sidecar requires a fresh --dest-prefix distinct from --source-prefix");
   }
   if (!config.insert_tag_file.empty() &&
       !(config.mode == "insert-only" || config.mode == "reinsert-batch" || config.mode == "search-during-insert"
@@ -483,6 +496,12 @@ uint64_t disk_index_label_size(const std::string &prefix) {
   pipeann::SSDIndexMetadata<float> meta;
   meta.load_from_disk_index(prefix + "_disk.index");
   return meta.label_size;
+}
+
+uint64_t disk_index_npoints(const std::string &prefix) {
+  pipeann::SSDIndexMetadata<float> meta;
+  meta.load_from_disk_index(prefix + "_disk.index");
+  return meta.npoints;
 }
 
 bool densebit_sidecar_loadable(const std::string &prefix, uint64_t npoints) {
@@ -1138,6 +1157,62 @@ std::string common_fields(const Config &config, const std::string &mode, uint64_
 int run(Config config) {
   if (config.mode == "measure-dynamic-search" && config.single_query_static_rss) {
     return run_single_query_static_rss(config);
+  }
+
+  if (config.mode == "rebuild-pq-sidecar") {
+    size_t points_num = 0;
+    size_t dim = 0;
+    pipeann::get_bin_metadata(config.data_bin, points_num, dim);
+    const uint64_t source_disk_points = disk_index_npoints(config.source_prefix);
+    const uint64_t dest_disk_points = disk_index_npoints(config.dest_prefix);
+    if (source_disk_points != dest_disk_points) {
+      throw std::runtime_error("PQ-only source/dest disk index npoints mismatch");
+    }
+    if (dest_disk_points != points_num) {
+      throw std::runtime_error("PQ-only live data row count does not match staged disk index npoints");
+    }
+    const auto start = std::chrono::steady_clock::now();
+    pipeann::PQNeighbor<float> pq(pipeann::get_metric(config.metric));
+    pq.build(config.dest_prefix, config.data_bin, config.pq_bytes);
+    const double wall_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    const std::string pivots_path = config.dest_prefix + "_pq_pivots.bin";
+    const std::string compressed_path = config.dest_prefix + "_pq_compressed.bin";
+    if (!file_exists(pivots_path)) {
+      throw std::runtime_error("PQ-only pivots missing after rebuild: " + pivots_path);
+    }
+    if (!file_exists(compressed_path)) {
+      throw std::runtime_error("PQ-only compressed codes missing after rebuild: " + compressed_path);
+    }
+    size_t code_points = 0;
+    size_t code_chunks = 0;
+    pipeann::get_bin_metadata(compressed_path, code_points, code_chunks);
+    if (code_points != points_num || code_chunks != config.pq_bytes) {
+      throw std::runtime_error("PQ-only compressed metadata mismatch");
+    }
+
+    std::ostringstream out;
+    out << "{" << common_fields(config, config.mode, points_num)
+        << ",\"phase\":\"rebuild-pq-sidecar\""
+        << ",\"maintenance_kind\":\"pq_only_sidecar_recode\""
+        << ",\"disk_graph_rebuild_performed\":false"
+        << ",\"tombstone_cleanup_performed\":false"
+        << ",\"live_record_compact_performed\":false"
+        << ",\"layout_rewrite_performed\":false"
+        << ",\"tag_id_map_rewrite_performed\":false"
+        << ",\"data_points\":" << points_num
+        << ",\"data_dim\":" << dim
+        << ",\"source_disk_index_points\":" << source_disk_points
+        << ",\"dest_disk_index_points\":" << dest_disk_points
+        << ",\"code_point_count\":" << code_points
+        << ",\"code_chunks\":" << code_chunks
+        << ",\"pq_sidecar_wall_s\":" << std::fixed << std::setprecision(6) << wall_s
+        << ",\"elapsed_s\":" << wall_s
+        << ",\"wall_s\":" << wall_s
+        << ",\"pq_pivots_path\":\"" << json_escape(pivots_path) << "\""
+        << ",\"pq_compressed_path\":\"" << json_escape(compressed_path) << "\""
+        << ",\"avg_latency_us\":0,\"p50_latency_us\":0,\"p95_latency_us\":0,\"p99_latency_us\":0,\"recall@10\":0}";
+    append_jsonl(config, out.str());
+    return 0;
   }
 
   if (config.mode == "zero-insert-only") {

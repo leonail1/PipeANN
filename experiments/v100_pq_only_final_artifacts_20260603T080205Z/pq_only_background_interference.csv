@@ -1,0 +1,6 @@
+avg_latency_ms,background_cpu_set,background_exitcode,background_kind,case_id,condition,foreground_cpu_set,iteration,p95_latency_ms,recall@10
+9.567158387,15,0,pq_only_sidecar_recode,cycle02_pq_only_chain_intersect_u75,during_pq_only_bg1_rebuild,0-14,1,9.940256999999999,98.08
+9.268432007,15,0,pq_only_sidecar_recode,cycle02_pq_only_chain_intersect_u75,during_pq_only_bg1_rebuild,0-14,2,9.580209,98.08
+9.5004218,15,0,pq_only_sidecar_recode,cycle02_pq_only_chain_intersect_u75,during_pq_only_bg1_rebuild,0-14,3,9.874637,98.08
+9.601657562,15,0,pq_only_sidecar_recode,cycle02_pq_only_chain_intersect_u75,during_pq_only_bg1_rebuild,0-14,4,9.93525,98.08
+9.898359342,15,0,pq_only_sidecar_recode,cycle02_pq_only_chain_intersect_u75,during_pq_only_bg1_rebuild,0-14,5,9.915443999999999,98.08
