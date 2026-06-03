@@ -6,7 +6,7 @@
     "range|*": "graph",
     "range|high_selectivity_window": "graph"
   },
-  "created_utc": "20260603T093507Z",
+  "created_utc": "20260603T094101Z",
   "features": [
     "selector_type",
     "sparse graph/prefilter latency points",

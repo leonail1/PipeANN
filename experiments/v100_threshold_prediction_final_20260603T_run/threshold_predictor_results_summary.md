@@ -7,4 +7,5 @@
 - Single-threshold max latency regret: `0.0000`; all-case max latency regret: `0.4202`; mean case latency regret: `0.0043`.
 - Single-threshold max p95 regret: `0.0000`; all-case max p95 regret: `0.4304`.
 - Multi/non-single-threshold cases: `16`.
+- All-case route-risk claim: `FAIL` because multi-crossing curves are outside the single-threshold model assumption.
 - Mean calibration fraction: `0.2859`.

@@ -235,6 +235,7 @@ def write_summary_docs(out: Path, summary: dict[str, Any], rows: list[dict[str, 
     single_max_regret = summary["single_threshold_max_latency_regret"] if summary["single_threshold_max_latency_regret"] is not None else float("nan")
     max_p95_regret = summary["max_p95_regret"] if summary["max_p95_regret"] is not None else float("nan")
     single_max_p95_regret = summary["single_threshold_max_p95_regret"] if summary["single_threshold_max_p95_regret"] is not None else float("nan")
+    all_case_status = "PASS" if summary["max_latency_regret"] is not None and summary["max_latency_regret"] <= 0.10 else "FAIL"
     (out / "threshold_predictor_results_summary.md").write_text(
         "# Threshold Predictor Results Summary\n\n"
         f"- Verdict: `{status}` for the 5% threshold-accuracy gate.\n"
@@ -244,6 +245,7 @@ def write_summary_docs(out: Path, summary: dict[str, Any], rows: list[dict[str, 
         f"- Single-threshold max latency regret: `{single_max_regret:.4f}`; all-case max latency regret: `{max_regret:.4f}`; mean case latency regret: `{summary['mean_case_latency_regret']:.4f}`.\n"
         f"- Single-threshold max p95 regret: `{single_max_p95_regret:.4f}`; all-case max p95 regret: `{max_p95_regret:.4f}`.\n"
         f"- Multi/non-single-threshold cases: `{summary['multi_or_non_single_threshold_cases']}`.\n"
+        f"- All-case route-risk claim: `{all_case_status}` because multi-crossing curves are outside the single-threshold model assumption.\n"
         f"- Mean calibration fraction: `{summary['mean_calibration_fraction']:.4f}`.\n",
         encoding="utf-8",
     )
@@ -261,7 +263,8 @@ def write_summary_docs(out: Path, summary: dict[str, Any], rows: list[dict[str, 
         f"- Main gate: 90% of crossing cases within 5% relative error; observed `{within if within is not None else 'n/a'}`.\n"
         f"- Boundary accuracy: `{boundary if boundary is not None else 'n/a'}`.\n"
         f"- Single-threshold max latency regret: `{single_max_regret:.4f}`; all-case max latency regret: `{max_regret:.4f}`.\n"
-        "- Caveat: current model is a transparent sparse cost model, not a high-capacity learned model. It should be treated as a feasibility baseline and upgraded if the 5% gate fails.\n",
+        f"- Multi/non-single-threshold cases: `{summary['multi_or_non_single_threshold_cases']}`; all-case route-risk claim: `{all_case_status}`.\n"
+        "- Caveat: the accepted claim is the single-threshold graph/prefilter crossing predictor. Multi-crossing curves violate the single-threshold assumption and need either extra calibration points, a multi-segment route policy, or a richer query/workload model before claiming all-case oracle-regret control.\n",
         encoding="utf-8",
     )
     (out / "ppt_ready_threshold_prediction_summary.md").write_text(
@@ -270,6 +273,7 @@ def write_summary_docs(out: Path, summary: dict[str, Any], rows: list[dict[str, 
         f"- Accuracy: `{summary['within_5pct_count']}/{summary['crossing_cases']}` crossing cases within 5%; rate `{within if within is not None else 'n/a'}`.\n"
         f"- Boundary accuracy: `{boundary if boundary is not None else 'n/a'}`.\n"
         f"- Single-threshold max latency regret: `{single_max_regret:.3f}`; all-case max latency regret: `{max_regret:.3f}`; mean calibration cost `{summary['mean_calibration_fraction']:.3f}` of full sweep.\n"
+        f"- Caveat: `{summary['multi_or_non_single_threshold_cases']}` multi/non-single-threshold cases keep the all-case route-risk claim at `{all_case_status}`.\n"
         "- Use: predictor can reduce sweep cost when curves are close to linear; failed cases indicate where extra calibration points or richer features are needed.\n",
         encoding="utf-8",
     )

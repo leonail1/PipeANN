@@ -38,6 +38,15 @@ selectivity threshold where graph-search latency and prefilter latency cross.
   features, but PipeANN still needs disk-graph, 4KB IO and dynamic-update
   features that are not generic DB knobs.
   Source: https://arxiv.org/abs/2404.10413
+- FastPGT targets proximity-graph construction parameter tuning and reduces
+  repeated graph-build cost by estimating multiple candidate parameter settings
+  together. It is relevant to offline graph-build tuning, while this goal is an
+  online route-threshold predictor over already-built graph/prefilter curves.
+  Source: https://arxiv.org/abs/2602.11573
+- RP-Tuning adjusts DiskANN-style graph reachability parameters by pruning
+  rather than rebuilding the whole graph. It is relevant for future graph-quality
+  maintenance, but it does not predict filter selectivity thresholds.
+  Source: https://arxiv.org/abs/2602.08097
 - Learned adaptive early termination predicts when ANN search can stop. The
   transferable idea is a learned cost/risk model over query/index state, though
   this goal predicts route thresholds across filter selectivity rather than
