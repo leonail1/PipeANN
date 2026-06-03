@@ -1,0 +1,134 @@
+{
+  "datasets": [
+    {
+      "base_bin": "/mnt/nvme1n1/PipeANN-github/data/fashion_mnist784/base.bin",
+      "case_count": 6,
+      "dataset_id": "fashion_mnist784",
+      "dtype": "float32",
+      "labels": [
+        {
+          "base_spmat": "/mnt/nvme1n1/PipeANN-github/experiments/feature_only_threshold_smoke_20260603T/labels/fashion_mnist784/random_uniform.base.spmat",
+          "dataset_id": "fashion_mnist784",
+          "label_family": "random_uniform",
+          "label_records": [
+            {
+              "label_id": 0,
+              "membership_sha1_hint": "38516-454495",
+              "target_count": 60,
+              "target_selectivity": 0.001
+            },
+            {
+              "label_id": 1,
+              "membership_sha1_hint": "2657-479084",
+              "target_count": 600,
+              "target_selectivity": 0.01
+            },
+            {
+              "label_id": 2,
+              "membership_sha1_hint": "243-479841",
+              "target_count": 6000,
+              "target_selectivity": 0.1
+            }
+          ]
+        },
+        {
+          "base_spmat": "/mnt/nvme1n1/PipeANN-github/experiments/feature_only_threshold_smoke_20260603T/labels/fashion_mnist784/contiguous_front.base.spmat",
+          "dataset_id": "fashion_mnist784",
+          "label_family": "contiguous_front",
+          "label_records": [
+            {
+              "label_id": 0,
+              "membership_sha1_hint": "28-444",
+              "target_count": 60,
+              "target_selectivity": 0.001
+            },
+            {
+              "label_id": 1,
+              "membership_sha1_hint": "28-4764",
+              "target_count": 600,
+              "target_selectivity": 0.01
+            },
+            {
+              "label_id": 2,
+              "membership_sha1_hint": "28-47964",
+              "target_count": 6000,
+              "target_selectivity": 0.1
+            }
+          ]
+        }
+      ],
+      "query_bin": "/mnt/nvme1n1/PipeANN-github/data/fashion_mnist784/query.bin"
+    },
+    {
+      "base_bin": "/mnt/nvme1n1/PipeANN-github/data/glove100/base.bin",
+      "case_count": 6,
+      "dataset_id": "glove100",
+      "dtype": "float32",
+      "labels": [
+        {
+          "base_spmat": "/mnt/nvme1n1/PipeANN-github/experiments/feature_only_threshold_smoke_20260603T/labels/glove100/random_uniform.base.spmat",
+          "dataset_id": "glove100",
+          "label_family": "random_uniform",
+          "label_records": [
+            {
+              "label_id": 0,
+              "membership_sha1_hint": "16100-9455287",
+              "target_count": 1184,
+              "target_selectivity": 0.001
+            },
+            {
+              "label_id": 1,
+              "membership_sha1_hint": "2171-9463834",
+              "target_count": 11835,
+              "target_selectivity": 0.01
+            },
+            {
+              "label_id": 2,
+              "membership_sha1_hint": "224-9467890",
+              "target_count": 118351,
+              "target_selectivity": 0.1
+            }
+          ]
+        },
+        {
+          "base_spmat": "/mnt/nvme1n1/PipeANN-github/experiments/feature_only_threshold_smoke_20260603T/labels/glove100/contiguous_front.base.spmat",
+          "dataset_id": "glove100",
+          "label_family": "contiguous_front",
+          "label_records": [
+            {
+              "label_id": 0,
+              "membership_sha1_hint": "28-9436",
+              "target_count": 1184,
+              "target_selectivity": 0.001
+            },
+            {
+              "label_id": 1,
+              "membership_sha1_hint": "28-94644",
+              "target_count": 11835,
+              "target_selectivity": 0.01
+            },
+            {
+              "label_id": 2,
+              "membership_sha1_hint": "28-946772",
+              "target_count": 118351,
+              "target_selectivity": 0.1
+            }
+          ]
+        }
+      ],
+      "query_bin": "/mnt/nvme1n1/PipeANN-github/data/glove100/query.bin"
+    }
+  ],
+  "families": [
+    "random_uniform",
+    "contiguous_front"
+  ],
+  "feature_policy": "prediction-time observable only; no target query latency/calibration/sparse probe/oracle threshold as model input",
+  "format": "pipeann.feature_only_equality_suite.v1",
+  "selectivities": [
+    0.001,
+    0.01,
+    0.1
+  ],
+  "write_spmat": true
+}

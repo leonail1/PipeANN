@@ -1,0 +1,38 @@
+{
+  "claims": [
+    {
+      "claim": "Calibration-assisted threshold predictor artifacts were removed before starting the feature-only goal.",
+      "evidence": [
+        "../feature_only_threshold_20260603T_cleanup/cleanup_previous_threshold_predictor.md"
+      ],
+      "id": "F0_CLEANUP_PREVIOUS_PREDICTOR",
+      "status": "PASS"
+    },
+    {
+      "claim": "Generated feature table contains only prediction-time observable feature names.",
+      "evidence": [
+        "dataset_label_feature_table.jsonl",
+        "leakage_audit.md"
+      ],
+      "id": "F1_FEATURE_ONLY_INPUTS",
+      "note": "No leakage-token feature names found.",
+      "status": "PASS"
+    },
+    {
+      "claim": "Equality-label benchmark suite covers multiple label distribution families.",
+      "evidence": [
+        "equality_label_distribution_suite.md",
+        "dataset_label_feature_table.jsonl"
+      ],
+      "id": "F2_EQUALITY_LABEL_SUITE",
+      "note": "families=['random_uniform', 'contiguous_front']",
+      "status": "INSUFFICIENT"
+    },
+    {
+      "claim": "Held-out feature-only model reaches >=90% cases within 5% threshold error.",
+      "evidence": [],
+      "id": "F3_HELD_OUT_THRESHOLD_ACCURACY",
+      "status": "PENDING"
+    }
+  ]
+}

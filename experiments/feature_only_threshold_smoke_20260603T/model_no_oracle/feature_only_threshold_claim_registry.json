@@ -1,0 +1,9 @@
+{
+  "claims": [
+    {
+      "claim": "Requires post-prediction oracle sweep.",
+      "id": "F3_HELD_OUT_THRESHOLD_ACCURACY",
+      "status": "PENDING"
+    }
+  ]
+}
