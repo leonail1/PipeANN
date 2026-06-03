@@ -852,48 +852,50 @@ namespace pipeann {
     std::shared_lock<std::shared_timed_mutex> recalibration_mutation_guard(hybrid_recalibration_mutation_lock_);
     if (flat_mode_) {
       std::unique_lock<std::shared_timed_mutex> lock(_merge_lock);
-      journal->append(pipeann::TxType::kInsert, tag);
+      if (flat_mode_) {
+        journal->append(pipeann::TxType::kInsert, tag);
 
-      auto existing = live_ids_by_tag_.find(tag);
-      uint32_t target_id = 0;
-      if (existing != live_ids_by_tag_.end()) {
-        target_id = existing->second;
-      } else {
-        target_id = static_cast<uint32_t>(flat_tags_.size());
-        flat_tags_.push_back(tag);
-        flat_deleted_.push_back(0);
-        flat_data_.resize(static_cast<size_t>(target_id + 1) * flat_dim_);
-      }
-
-      T *dst = flat_data_.data() + static_cast<size_t>(target_id) * flat_dim_;
-      if (_dist_metric == pipeann::Metric::COSINE) {
-        pipeann::normalize_data(dst, point, flat_dim_);
-      } else {
-        std::memcpy(dst, point, static_cast<size_t>(flat_dim_) * sizeof(T));
-      }
-
-      {
-        std::unique_lock<std::shared_timed_mutex> live_lock(live_state_lock_);
-        live_ids_by_tag_[tag] = target_id;
-        flat_deleted_[target_id] = 0;
-        ensure_live_filter_capacity_locked(target_id);
-        live_present_bitset_[static_cast<size_t>(target_id >> 6U)] |= (1ULL << (target_id & 63U));
-        live_labels_by_id_.erase(target_id);
-        auto label_iter = live_labels_by_tag_.find(tag);
-        if (label_iter != live_labels_by_tag_.end()) {
-          live_labels_by_id_[target_id] = label_iter->second;
-          apply_live_labels_locked(target_id, label_iter->second, true);
+        auto existing = live_ids_by_tag_.find(tag);
+        uint32_t target_id = 0;
+        if (existing != live_ids_by_tag_.end()) {
+          target_id = existing->second;
+        } else {
+          target_id = static_cast<uint32_t>(flat_tags_.size());
+          flat_tags_.push_back(tag);
+          flat_deleted_.push_back(0);
+          flat_data_.resize(static_cast<size_t>(target_id + 1) * flat_dim_);
         }
-        live_point_count_.store(live_ids_by_tag_.size());
-      }
 
-      deletion_sets[0].erase(tag);
-      deletion_sets[1].erase(tag);
+        T *dst = flat_data_.data() + static_cast<size_t>(target_id) * flat_dim_;
+        if (_dist_metric == pipeann::Metric::COSINE) {
+          pipeann::normalize_data(dst, point, flat_dim_);
+        } else {
+          std::memcpy(dst, point, static_cast<size_t>(flat_dim_) * sizeof(T));
+        }
 
-      if (flat_threshold_ != 0 && live_point_count_.load() > flat_threshold_) {
-        materialize_flat_to_disk_locked();
+        {
+          std::unique_lock<std::shared_timed_mutex> live_lock(live_state_lock_);
+          live_ids_by_tag_[tag] = target_id;
+          flat_deleted_[target_id] = 0;
+          ensure_live_filter_capacity_locked(target_id);
+          live_present_bitset_[static_cast<size_t>(target_id >> 6U)] |= (1ULL << (target_id & 63U));
+          live_labels_by_id_.erase(target_id);
+          auto label_iter = live_labels_by_tag_.find(tag);
+          if (label_iter != live_labels_by_tag_.end()) {
+            live_labels_by_id_[target_id] = label_iter->second;
+            apply_live_labels_locked(target_id, label_iter->second, true);
+          }
+          live_point_count_.store(live_ids_by_tag_.size());
+        }
+
+        deletion_sets[0].erase(tag);
+        deletion_sets[1].erase(tag);
+
+        if (flat_threshold_ != 0 && live_point_count_.load() > flat_threshold_) {
+          materialize_flat_to_disk_locked();
+        }
+        return static_cast<int>(target_id);
       }
-      return static_cast<int>(target_id);
     }
 
     std::shared_lock<std::shared_timed_mutex> lock(_merge_lock);  // prevent merge during insert

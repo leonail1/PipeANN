@@ -69,6 +69,7 @@ struct Config {
   uint64_t flat_threshold = 10000;
   uint64_t query_limit = 0;
   bool final_merge = true;
+  bool online_flat_materialize = false;
   bool single_query_static_rss = false;
 };
 
@@ -264,12 +265,15 @@ Config parse_args(int argc, char **argv) {
     } else if (arg == "--skip-final-merge") {
       mark_scalar(arg);
       config.final_merge = false;
+    } else if (arg == "--online-flat-materialize") {
+      mark_scalar(arg);
+      config.online_flat_materialize = true;
     } else if (arg == "--single-query-static-rss") {
       mark_scalar(arg);
       config.single_query_static_rss = true;
     } else if (arg == "--help") {
       throw std::runtime_error(
-          "usage: dynamic_update_suite_driver --mode insert-only|zero-insert-only|search-during-insert|delete-batch|reinsert-batch|measure-dynamic-search|measure-delete-only|measure-delete-then-merge ... [--flat-pq-pivots <path> for zero-insert-only]");
+          "usage: dynamic_update_suite_driver --mode insert-only|zero-insert-only|search-during-insert|delete-batch|reinsert-batch|measure-dynamic-search|measure-delete-only|measure-delete-then-merge ... [--flat-pq-pivots <path> for zero-insert-only] [--online-flat-materialize for zero-insert-only]");
     } else {
       throw std::runtime_error("unknown argument: " + arg);
     }
@@ -292,6 +296,12 @@ Config parse_args(int argc, char **argv) {
   }
   if (!config.flat_pq_pivots.empty() && !file_exists(config.flat_pq_pivots)) {
     throw std::runtime_error("--flat-pq-pivots file does not exist: " + config.flat_pq_pivots);
+  }
+  if (config.online_flat_materialize && config.mode != "zero-insert-only") {
+    throw std::runtime_error("--online-flat-materialize is only valid for zero-insert-only");
+  }
+  if (config.online_flat_materialize && config.flat_threshold == 0) {
+    throw std::runtime_error("--online-flat-materialize requires a positive --flat-threshold");
   }
   if (config.mode == "zero-insert-only" && config.insert_count <= config.flat_threshold) {
     throw std::runtime_error("--insert-count must exceed --flat-threshold so PQ materialization occurs");
@@ -1114,6 +1124,7 @@ std::string common_fields(const Config &config, const std::string &mode, uint64_
       << "\"pq_bytes\":" << config.pq_bytes << ","
       << "\"flat_build_memory_gb\":" << config.flat_build_memory_gb << ","
       << "\"flat_threshold\":" << config.flat_threshold << ","
+      << "\"online_flat_materialize\":" << (config.online_flat_materialize ? "true" : "false") << ","
       << "\"flat_pq_pivots\":\"" << json_escape(config.flat_pq_pivots) << "\","
       << "\"points\":" << live_count << ","
       << "\"chosen_L\":" << config.search_l << ","
@@ -1134,7 +1145,9 @@ int run(Config config) {
     pipeann::IndexBuildParameters parameters;
     parameters.set(config.build_r, config.build_l, 384, 1.2, config.insert_threads, true,
                    config.beamwidth);
-    const uint64_t constructor_flat_threshold = std::max<uint64_t>(config.flat_threshold, config.insert_count);
+    const uint64_t constructor_flat_threshold = config.online_flat_materialize
+        ? config.flat_threshold
+        : std::max<uint64_t>(config.flat_threshold, config.insert_count);
     auto index = pipeann::DynamicSSDIndex<float, uint32_t>(
         parameters, config.source_prefix, load_bin_dim(config.data_bin), distance.get(),
         pipeann::get_metric(config.metric), constructor_flat_threshold, PIPE_SEARCH, config.pq_bytes,
@@ -1144,7 +1157,10 @@ int run(Config config) {
     const std::string inserted_tag_hash = fnv1a_tags_hex(insert_tags_vec);
     const double insert_s = insert_range(config, index, nullptr, nullptr);
     double materialize_s = 0.0;
+    bool explicit_materialize_called = false;
+    const bool materialized_during_insert = !index.is_flat_mode();
     if (index.is_flat_mode()) {
+      explicit_materialize_called = true;
       const auto materialize_start = std::chrono::steady_clock::now();
       const bool materialized = index.materialize_flat_to_disk();
       materialize_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - materialize_start).count();
@@ -1177,6 +1193,14 @@ int run(Config config) {
         << ",\"phase\":\"zero-insert-only\""
         << ",\"final_index_prefix\":\"" << json_escape(final_prefix) << "\""
         << ",\"flat_materialized\":true"
+        << ",\"constructor_flat_threshold\":" << constructor_flat_threshold
+        << ",\"explicit_materialize_called\":" << (explicit_materialize_called ? "true" : "false")
+        << ",\"materialized_during_insert\":" << (materialized_during_insert ? "true" : "false")
+        << ",\"materialize_trigger\":\""
+        << (materialized_during_insert ? "online_threshold_crossing" : "explicit_after_insert") << "\""
+        << ",\"materialize_wall_accounting\":\""
+        << (materialized_during_insert ? "online_materialize_cost_included_in_insert_wall_s" : "explicit_materialize_wall_s")
+        << "\""
         << ",\"elapsed_s\":" << std::fixed << std::setprecision(6) << (insert_s + materialize_s + merge_s)
         << ",\"insert_count\":" << config.insert_count
         << ",\"insert_scope\":\""

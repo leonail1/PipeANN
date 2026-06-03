@@ -1,0 +1,210 @@
+{
+  "background_interference_metrics": {
+    "avg_lt_latency_ms_pass": 30,
+    "background_cpu_cap": 1,
+    "background_cpu_range": "16",
+    "background_elapsed_wall_s": 3061.1461205482483,
+    "background_interference_dir": "experiments/v100_early_pq_background_interference_fg16_bg1_20260603T024355Z",
+    "background_pq_recode_wall_s": 8.5351,
+    "background_pq_train_wall_s": 29.2842,
+    "foreground_cpu_range": "20-35",
+    "foreground_overlap_status": "PASS",
+    "layout_gate_caveat": true,
+    "max_avg_latency_ms": 9.346175584000001,
+    "max_p95_latency_ms": 9.633237,
+    "p95_lt_latency_ms_pass": 30,
+    "raw_foreground_rows_present": true,
+    "recall_pass": 30,
+    "required_rows": 30,
+    "rows": 30,
+    "source_claim_status": "FAIL",
+    "source_four_k_read_size_status": "FAIL",
+    "status": "PASS_WITH_CAVEAT"
+  },
+  "baseline_metrics": {
+    "avg_latency_present": 12,
+    "avg_lt_latency_ms": 0,
+    "cycles": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "fail_row_count": 12,
+    "fail_rows": [
+      "cycle00_no_retrain_baseline_intersect_u75",
+      "cycle00_no_retrain_baseline_range_u75",
+      "cycle01_no_retrain_baseline_intersect_u100",
+      "cycle01_no_retrain_baseline_intersect_u75",
+      "cycle01_no_retrain_baseline_range_u100",
+      "cycle01_no_retrain_baseline_range_u75",
+      "cycle02_no_retrain_baseline_intersect_u75",
+      "cycle02_no_retrain_baseline_range_u75",
+      "cycle03_no_retrain_baseline_intersect_u100",
+      "cycle03_no_retrain_baseline_intersect_u75",
+      "cycle03_no_retrain_baseline_range_u100",
+      "cycle03_no_retrain_baseline_range_u75"
+    ],
+    "max_avg_latency_ms": 13.616331015,
+    "max_p95_latency_ms": 14.014262,
+    "min_recall": 98.0,
+    "p95_latency_present": 12,
+    "p95_lt_latency_ms": 0,
+    "recall_pass": 12,
+    "recall_present": 12,
+    "rows": 12
+  },
+  "baseline_summary": {
+    "avg_lt_10ms_count": 0,
+    "count": 12,
+    "fail_count": 12,
+    "max_avg_latency_ms": 13.616331015,
+    "max_p95_latency_ms": 14.014262,
+    "min_recall": 98.0,
+    "p95_lt_limit_count": null,
+    "recall_pass_count": 12
+  },
+  "chain_metrics": {
+    "avg_latency_present": 30,
+    "avg_lt_latency_ms": 30,
+    "cycles": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "fail_row_count": 0,
+    "fail_rows": [],
+    "max_avg_latency_ms": 9.420427214,
+    "max_p95_latency_ms": 9.628272,
+    "min_recall": 98.01,
+    "p95_latency_present": 30,
+    "p95_lt_latency_ms": 30,
+    "recall_pass": 30,
+    "recall_present": 30,
+    "rows": 30
+  },
+  "chain_summary": {
+    "chain_cycles": 5,
+    "completed_cycles": 5,
+    "created_utc": "20260602T180825Z",
+    "maintenance_rows": 5,
+    "max_delete_merge_s": 42.167358,
+    "max_delete_ms_per_vector": 0.0038095083333333332,
+    "max_insert_merge_s": 23.029911,
+    "max_maintenance_build_wall_s": 314.5484344959259,
+    "max_pq_recode_wall_s": 3.47131,
+    "max_pq_train_wall_s": 2.97561,
+    "phase": "chain",
+    "selector_types": [
+      "intersect",
+      "range"
+    ],
+    "sentinel_buckets": [
+      "u50",
+      "u75",
+      "u100"
+    ],
+    "strategy_summary": {
+      "avg_lt_10ms_count": 30,
+      "count": 30,
+      "fail_count": 0,
+      "max_avg_latency_ms": 9.420427214,
+      "max_p95_latency_ms": 9.628272,
+      "min_recall": 98.01,
+      "p95_lt_limit_count": null,
+      "recall_pass_count": 30
+    }
+  },
+  "claim_statuses": {
+    "E1_EARLY_PQ_NO_RETRAIN_FAST_FAIL_BASELINE": "PASS",
+    "E2_TRIGGERED_RETRAIN_TARGETED_SENTINELS": "PASS",
+    "E3_TRIGGERED_RETRAIN_1M_5CYCLE_CHAIN": "PASS",
+    "E4_MAINTENANCE_TIMING_AND_LOW_CORE_INTERFERENCE": "PASS_WITH_CAVEAT",
+    "E5_SPACE_AND_LABEL_LAYOUT_REUSED": "PASS"
+  },
+  "created_utc": "20260603T043152Z",
+  "figures": [
+    "experiments/v100_early_pq_triggered_artifacts_final_lf_20260603T043152Z/figures/early_pq_latency_recall_targeted.svg",
+    "experiments/v100_early_pq_triggered_artifacts_final_lf_20260603T043152Z/figures/early_pq_chain_latency_by_cycle.svg",
+    "experiments/v100_early_pq_triggered_artifacts_final_lf_20260603T043152Z/figures/early_pq_maintenance_costs.svg"
+  ],
+  "maintenance_metrics": {
+    "cycles": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "max_delete_merge_s": 42.167358,
+    "max_delete_ms_per_vector": 0.0038095083333333332,
+    "max_insert_merge_s": 23.029911,
+    "max_maintenance_build_wall_s": 314.5484344959259,
+    "max_pq_recode_wall_s": 3.47131,
+    "max_pq_train_wall_s": 2.97561,
+    "rows": 5
+  },
+  "phase": "early_pq_triggered_artifact_synthesis",
+  "smoke_summary": {
+    "chain_cycles": 1,
+    "completed_cycles": 1,
+    "created_utc": "20260602T141801Z",
+    "maintenance_rows": 1,
+    "max_delete_merge_s": 0.956368,
+    "max_delete_ms_per_vector": 0.0022279166666666667,
+    "max_insert_merge_s": 0.4643,
+    "max_maintenance_build_wall_s": 16.919752597808838,
+    "max_pq_recode_wall_s": 0.159694,
+    "max_pq_train_wall_s": 0.0887374,
+    "phase": "chain",
+    "selector_types": [
+      "intersect",
+      "range"
+    ],
+    "sentinel_buckets": [
+      "u75"
+    ],
+    "strategy_summary": {
+      "avg_lt_10ms_count": 2,
+      "count": 2,
+      "fail_count": 0,
+      "max_avg_latency_ms": 0.61780449,
+      "max_p95_latency_ms": 0.693868,
+      "min_recall": 99.85,
+      "p95_lt_limit_count": null,
+      "recall_pass_count": 2
+    }
+  },
+  "targeted_metrics": {
+    "avg_latency_present": 24,
+    "avg_lt_latency_ms": 24,
+    "cycles": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "fail_row_count": 0,
+    "fail_rows": [],
+    "max_avg_latency_ms": 9.236334451000001,
+    "max_p95_latency_ms": 9.497236999999998,
+    "min_recall": 98.1,
+    "p95_latency_present": 24,
+    "p95_lt_latency_ms": 24,
+    "recall_pass": 24,
+    "recall_present": 24,
+    "rows": 24
+  },
+  "targeted_summary": {
+    "avg_lt_10ms_count": 24,
+    "count": 24,
+    "fail_count": 0,
+    "max_avg_latency_ms": 9.236334451000001,
+    "max_p95_latency_ms": 9.497236999999998,
+    "min_recall": 98.1,
+    "p95_lt_limit_count": null,
+    "recall_pass_count": 24
+  }
+}
