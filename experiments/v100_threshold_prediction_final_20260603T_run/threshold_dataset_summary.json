@@ -1,0 +1,10 @@
+{
+  "boundary_cases": 4,
+  "calibration_files_scanned": 817,
+  "crossing_cases": 61,
+  "curve_count": 81,
+  "source_roots": [
+    "experiments"
+  ],
+  "training_rows": 701
+}

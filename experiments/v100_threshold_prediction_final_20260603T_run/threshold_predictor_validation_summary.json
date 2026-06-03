@@ -1,0 +1,21 @@
+{
+  "boundary_accuracy": 1.0,
+  "boundary_cases": 4,
+  "boundary_correct_count": 4,
+  "cases_with_avg_lt_10_all_points": 75,
+  "cases_with_p95_lt_10_all_points": 66,
+  "cases_with_recall_pass_all_points": 12,
+  "crossing_cases": 61,
+  "crossing_max_latency_regret": 0.0,
+  "evaluated_cases": 81,
+  "max_latency_regret": 0.4201807614629969,
+  "max_p95_regret": 0.43042049496484824,
+  "mean_calibration_fraction": 0.2858710562414264,
+  "mean_case_latency_regret": 0.004270933050857264,
+  "multi_or_non_single_threshold_cases": 16,
+  "single_threshold_cases": 65,
+  "single_threshold_max_latency_regret": 0.0,
+  "single_threshold_max_p95_regret": 0.0,
+  "within_5pct_count": 59,
+  "within_5pct_rate": 0.9672131147540983
+}

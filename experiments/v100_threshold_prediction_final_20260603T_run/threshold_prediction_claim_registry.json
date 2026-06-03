@@ -1,0 +1,51 @@
+{
+  "claims": [
+    {
+      "claim": "Ground-truth graph/prefilter latency-vs-selectivity curves were extracted from original-query calibration artifacts.",
+      "evidence": [
+        "threshold_ground_truth_curves.jsonl",
+        "threshold_training_dataset.jsonl"
+      ],
+      "id": "T1_GROUND_TRUTH_CURVES",
+      "note": "Evaluated 81 cases.",
+      "status": "PASS"
+    },
+    {
+      "claim": "At least 90% of held-out crossing cases are within 5% relative threshold error.",
+      "evidence": [
+        "threshold_predictor_validation.jsonl",
+        "threshold_predictor_results_summary.md"
+      ],
+      "id": "T2_THRESHOLD_PREDICTION_ACCURACY",
+      "note": "within_5pct_rate=0.967.",
+      "status": "PASS"
+    },
+    {
+      "claim": "Boundary cases are classified with at least 90% accuracy.",
+      "evidence": [
+        "threshold_predictor_validation.jsonl"
+      ],
+      "id": "T3_BOUNDARY_ACCURACY",
+      "note": "boundary_accuracy=1.000.",
+      "status": "PASS"
+    },
+    {
+      "claim": "Route decisions from predicted thresholds have <=10% max latency regret versus oracle on single-threshold crossing/boundary cases.",
+      "evidence": [
+        "threshold_predictor_validation.jsonl"
+      ],
+      "id": "T4_SINGLE_THRESHOLD_LATENCY_REGRET",
+      "note": "single_threshold_max_latency_regret=0.000.",
+      "status": "PASS"
+    },
+    {
+      "claim": "All extracted cases, including multi-crossing curves, stay within <=10% max latency regret versus oracle.",
+      "evidence": [
+        "threshold_predictor_validation.jsonl"
+      ],
+      "id": "T5_ALL_CASE_ROUTE_RISK",
+      "note": "all_case_max_latency_regret=0.420; multi_or_non_single_threshold_cases=16.",
+      "status": "FAIL"
+    }
+  ]
+}
