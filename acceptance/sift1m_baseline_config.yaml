@@ -1,0 +1,29 @@
+adapter_manifest: /mnt/nvme1n1/PipeANN-github/acceptance/adapter_manifest.pipeann.yaml
+results_dir: /mnt/nvme1n1/PipeANN-github/acceptance/results/sift1m_baseline
+work_dir: /mnt/nvme1n1/PipeANN-github/acceptance/work/sift1m_baseline
+target_npoints: 1000000
+dynamic_cycles: 0
+delete_fraction: 0.60
+pilot_query_limit: 50
+full_query_limit: 1000
+foreground_search_threads: [1, 8]
+k: 10
+datasets:
+  - name: sift1m
+    base_vectors: /mnt/nvme1n1/PipeANN-github/data/sift1m/sift_base.bin
+    query_file: /mnt/nvme1n1/PipeANN-github/data/sift1m/sift_query.bin
+    vector_format: fbin
+    dimensions: 128
+    build_threads: 1
+    search_threads: [1]
+    insert_batches:
+      - name: base_initial
+        vectors: /mnt/nvme1n1/PipeANN-github/data/sift1m/sift_base.bin
+        count: 1000000
+thresholds:
+  expansion_ratio_lt: 2.0
+  recall_at_10_min: 0.98
+  avg_latency_ms_lt: 10.0
+  pilot_skip_latency_ms: 20.0
+  delete_ms_per_vector_max: 0.5
+  selectivity_abs_tolerance: 1.0e-9

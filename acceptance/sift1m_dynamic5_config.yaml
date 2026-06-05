@@ -1,0 +1,49 @@
+adapter_manifest: /mnt/nvme1n1/PipeANN-github/acceptance/adapter_manifest.pipeann.yaml
+results_dir: /mnt/nvme1n1/PipeANN-github/acceptance/results/sift1m_dynamic5
+work_dir: /mnt/nvme1n1/PipeANN-github/acceptance/work/sift1m_dynamic5
+target_npoints: 1000000
+dynamic_cycles: 5
+delete_fraction: 0.60
+pilot_query_limit: 50
+full_query_limit: 1000
+foreground_search_threads: [1, 8]
+k: 10
+datasets:
+  - name: sift1m
+    base_vectors: /mnt/nvme1n1/PipeANN-github/data/sift1m/sift_base.bin
+    query_file: /mnt/nvme1n1/PipeANN-github/data/sift1m/sift_query.bin
+    vector_format: fbin
+    dimensions: 128
+    build_threads: 1
+    search_threads: [1]
+    insert_batches:
+      - name: base_initial
+        vectors: /mnt/nvme1n1/PipeANN-github/data/sift1m/sift_base.bin
+        count: 1000000
+      - name: cycle1_replacement
+        vectors: /mnt/nvme1n1/PipeANN-github/acceptance/work/dynamic_batches/cycle1_600k.fbin
+        ids: /mnt/nvme1n1/PipeANN-github/acceptance/work/dynamic_batches/cycle1_600k.ids
+        count: 600000
+      - name: cycle2_replacement
+        vectors: /mnt/nvme1n1/PipeANN-github/acceptance/work/dynamic_batches/cycle2_600k.fbin
+        ids: /mnt/nvme1n1/PipeANN-github/acceptance/work/dynamic_batches/cycle2_600k.ids
+        count: 600000
+      - name: cycle3_replacement
+        vectors: /mnt/nvme1n1/PipeANN-github/acceptance/work/dynamic_batches/cycle3_600k.fbin
+        ids: /mnt/nvme1n1/PipeANN-github/acceptance/work/dynamic_batches/cycle3_600k.ids
+        count: 600000
+      - name: cycle4_replacement
+        vectors: /mnt/nvme1n1/PipeANN-github/acceptance/work/dynamic_batches/cycle4_600k.fbin
+        ids: /mnt/nvme1n1/PipeANN-github/acceptance/work/dynamic_batches/cycle4_600k.ids
+        count: 600000
+      - name: cycle5_replacement
+        vectors: /mnt/nvme1n1/PipeANN-github/acceptance/work/dynamic_batches/cycle5_600k.fbin
+        ids: /mnt/nvme1n1/PipeANN-github/acceptance/work/dynamic_batches/cycle5_600k.ids
+        count: 600000
+thresholds:
+  expansion_ratio_lt: 2.0
+  recall_at_10_min: 0.98
+  avg_latency_ms_lt: 10.0
+  pilot_skip_latency_ms: 20.0
+  delete_ms_per_vector_max: 0.5
+  selectivity_abs_tolerance: 1.0e-9

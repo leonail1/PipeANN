@@ -1,0 +1,10 @@
+{
+  "artifacts": [
+    "build_resource.jsonl",
+    "static_filtered_search_resource.jsonl",
+    "static_filtered_search_results.jsonl"
+  ],
+  "exitstatus": 0,
+  "failure_files": [],
+  "pass": true
+}

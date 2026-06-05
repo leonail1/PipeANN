@@ -1,0 +1,4 @@
+work/
+logs/
+*.pid
+__pycache__/

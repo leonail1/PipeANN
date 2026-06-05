@@ -1,0 +1,89 @@
+commands:
+  ann_build_index:
+    command:
+      - /mnt/nvme1n1/OpenHarmony-ANNS-Test/.venv/bin/python
+      - /mnt/nvme1n1/PipeANN-github/scripts/openharmony_anns_adapter.py
+      - build
+      - --vectors
+      - "{vectors_path}"
+      - --ids
+      - "{ids_path}"
+      - --labels
+      - "{labels_path}"
+      - --label-schema
+      - "{label_schema_path}"
+      - --threads
+      - "{threads}"
+      - --output-manifest
+      - "{output_manifest_path}"
+      - --state-dir
+      - "{state_dir}"
+      - --index-dir
+      - "{index_dir}"
+    timeout_seconds: 7200
+  ann_filter_search:
+    command:
+      - /mnt/nvme1n1/OpenHarmony-ANNS-Test/.venv/bin/python
+      - /mnt/nvme1n1/PipeANN-github/scripts/openharmony_anns_adapter.py
+      - search
+      - --queries
+      - "{query_file}"
+      - --selector
+      - "{selector_file}"
+      - --k
+      - "{k}"
+      - --limit
+      - "{query_limit}"
+      - --threads
+      - "{threads}"
+      - --output
+      - "{output_path}"
+      - --state-dir
+      - "{state_dir}"
+    timeout_seconds: 7200
+  ann_apply_insert:
+    command:
+      - /mnt/nvme1n1/OpenHarmony-ANNS-Test/.venv/bin/python
+      - /mnt/nvme1n1/PipeANN-github/scripts/openharmony_anns_adapter.py
+      - insert
+      - --vectors
+      - "{insert_vectors_path}"
+      - --ids
+      - "{insert_ids_path}"
+      - --labels
+      - "{labels_path}"
+      - --threads
+      - "{threads}"
+      - --output
+      - "{output_path}"
+      - --state-dir
+      - "{state_dir}"
+    timeout_seconds: 7200
+  ann_apply_delete:
+    command:
+      - /mnt/nvme1n1/OpenHarmony-ANNS-Test/.venv/bin/python
+      - /mnt/nvme1n1/PipeANN-github/scripts/openharmony_anns_adapter.py
+      - delete
+      - --ids
+      - "{delete_ids_path}"
+      - --threads
+      - "{threads}"
+      - --output
+      - "{output_path}"
+      - --state-dir
+      - "{state_dir}"
+    timeout_seconds: 7200
+  ann_label_selectivity:
+    command:
+      - /mnt/nvme1n1/OpenHarmony-ANNS-Test/.venv/bin/python
+      - /mnt/nvme1n1/PipeANN-github/scripts/openharmony_anns_adapter.py
+      - selectivity
+      - --selector
+      - "{selector_file}"
+      - --threads
+      - "{threads}"
+      - --output
+      - "{output_path}"
+      - --state-dir
+      - "{state_dir}"
+    timeout_seconds: 7200

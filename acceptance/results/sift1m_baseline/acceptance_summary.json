@@ -1,0 +1,15 @@
+{
+  "artifacts": [
+    "build_resource.jsonl",
+    "label_selectivity_results.jsonl",
+    "single_query_latency.jsonl",
+    "single_query_resource.jsonl",
+    "space_audit.csv",
+    "space_audit.json",
+    "static_filtered_search_resource.jsonl",
+    "static_filtered_search_results.jsonl"
+  ],
+  "exitstatus": 0,
+  "failure_files": [],
+  "pass": true
+}
