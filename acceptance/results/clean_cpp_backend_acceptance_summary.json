@@ -1,0 +1,394 @@
+{
+  "runs": {
+    "sift_smoke_cpp": {
+      "acceptance_summary": {
+        "artifacts": [
+          "build_resource.jsonl",
+          "delete_api_timing.jsonl",
+          "dynamic_update_chain_results.jsonl",
+          "dynamic_update_foreground_latency.jsonl",
+          "insert_api_timing.jsonl",
+          "label_selectivity_results.jsonl",
+          "single_query_latency.jsonl",
+          "single_query_resource.jsonl",
+          "space_audit.csv",
+          "space_audit.json",
+          "static_filtered_search_resource.jsonl",
+          "static_filtered_search_results.jsonl"
+        ],
+        "exitstatus": 0,
+        "failure_files": [],
+        "pass": true
+      },
+      "space": {
+        "pass": true,
+        "max_expansion_ratio": 0.19281729972969172
+      },
+      "dynamic": {
+        "rows": 38,
+        "pass": true,
+        "min_recall_at_10": 0.985,
+        "max_avg_latency_ms": 0.17777910000000002,
+        "max_p95_latency_ms": 0.2060013,
+        "max_p99_latency_ms": 0.21235946,
+        "worst_avg": {
+          "avg_latency_ms": 0.17777910000000002,
+          "backend": "faiss_exact_subset",
+          "candidate_count": 1000,
+          "checkpoint": "cycle0",
+          "dataset": "sift1m_smoke",
+          "max_rss_bytes": 4096,
+          "p50_latency_ms": 0.178928,
+          "p95_latency_ms": 0.1864938,
+          "p99_latency_ms": 0.19665955999999996,
+          "pass": true,
+          "query_limit": 20,
+          "read_bytes": null,
+          "recall_at_10": 1.0,
+          "selector_id": "equality_s100",
+          "selector_type": "equality",
+          "system_cpu_s": null,
+          "target_selectivity": 1.0,
+          "threads": 1,
+          "user_cpu_s": null,
+          "wall_time_s": 0.07680166512727737,
+          "write_bytes": null
+        },
+        "worst_recall": {
+          "avg_latency_ms": 0.15911685,
+          "backend": "faiss_exact_subset",
+          "candidate_count": 1000,
+          "checkpoint": "cycle1",
+          "dataset": "sift1m_smoke",
+          "max_rss_bytes": 4096,
+          "p50_latency_ms": 0.156457,
+          "p95_latency_ms": 0.17954795,
+          "p99_latency_ms": 0.19198078999999998,
+          "pass": true,
+          "query_limit": 20,
+          "read_bytes": null,
+          "recall_at_10": 0.985,
+          "selector_id": "match_all_s100",
+          "selector_type": "match_all",
+          "system_cpu_s": null,
+          "target_selectivity": 1.0,
+          "threads": 1,
+          "user_cpu_s": null,
+          "wall_time_s": 0.07449589623138309,
+          "write_bytes": null
+        }
+      },
+      "static": {
+        "rows": 25,
+        "pass": true,
+        "min_recall_at_10": 1.0,
+        "max_avg_latency_ms": 0.1798826,
+        "max_p95_latency_ms": 0.21109745,
+        "max_p99_latency_ms": 0.21519167999999997,
+        "worst_avg": {
+          "avg_latency_ms": 0.1798826,
+          "backend": "faiss_exact_subset",
+          "candidate_count": 1000,
+          "dataset": "sift1m_smoke",
+          "max_rss_bytes": 4096,
+          "p50_latency_ms": 0.176825,
+          "p95_latency_ms": 0.20801920000000002,
+          "p99_latency_ms": 0.20809824,
+          "pass": true,
+          "query_limit": 20,
+          "read_bytes": null,
+          "recall_at_10": 1.0,
+          "selector_id": "match_all_s100",
+          "selector_type": "match_all",
+          "system_cpu_s": null,
+          "target_selectivity": 1.0,
+          "threads": 1,
+          "user_cpu_s": null,
+          "wall_time_s": 0.07692362694069743,
+          "write_bytes": null
+        },
+        "worst_recall": {
+          "avg_latency_ms": 0.1798826,
+          "backend": "faiss_exact_subset",
+          "candidate_count": 1000,
+          "dataset": "sift1m_smoke",
+          "max_rss_bytes": 4096,
+          "p50_latency_ms": 0.176825,
+          "p95_latency_ms": 0.20801920000000002,
+          "p99_latency_ms": 0.20809824,
+          "pass": true,
+          "query_limit": 20,
+          "read_bytes": null,
+          "recall_at_10": 1.0,
+          "selector_id": "match_all_s100",
+          "selector_type": "match_all",
+          "system_cpu_s": null,
+          "target_selectivity": 1.0,
+          "threads": 1,
+          "user_cpu_s": null,
+          "wall_time_s": 0.07692362694069743,
+          "write_bytes": null
+        }
+      },
+      "single": {
+        "rows": 6,
+        "pass": true,
+        "max_avg_latency_ms": 0.138403
+      },
+      "foreground": {
+        "rows": 2,
+        "pass": true,
+        "max_avg_latency_ms": 0.191853
+      },
+      "delete": {
+        "rows": 1,
+        "pass": true,
+        "max_delete_ms_per_vector": 0.25569066327686113,
+        "total_deleted": 600
+      },
+      "insert": {
+        "rows": 2,
+        "pass": true,
+        "max_wall_time_s": 0.1525852968916297
+      },
+      "selectivity": {
+        "rows": 48,
+        "pass": true
+      },
+      "failure_files": []
+    },
+    "sift1m_baseline_cpp": {
+      "acceptance_summary": {
+        "artifacts": [
+          "build_resource.jsonl",
+          "dynamic_update_chain_results.jsonl",
+          "insert_api_timing.jsonl",
+          "label_selectivity_results.jsonl",
+          "single_query_latency.jsonl",
+          "single_query_resource.jsonl",
+          "space_audit.csv",
+          "space_audit.json",
+          "static_filtered_search_resource.jsonl",
+          "static_filtered_search_results.jsonl"
+        ],
+        "exitstatus": 0,
+        "failure_files": [],
+        "pass": true
+      },
+      "space": {
+        "pass": true,
+        "max_expansion_ratio": 1.2092425123555857
+      },
+      "dynamic": {
+        "rows": 25,
+        "pass": true,
+        "min_recall_at_10": 0.9891,
+        "max_avg_latency_ms": 8.920653745,
+        "max_p95_latency_ms": 11.14983275,
+        "max_p99_latency_ms": 16.79242059,
+        "worst_avg": {
+          "avg_latency_ms": 8.920653745,
+          "backend": "faiss_ivf_exact_hybrid",
+          "candidate_count": 250000,
+          "checkpoint": "cycle0",
+          "dataset": "sift1m",
+          "max_rss_bytes": 1087299584,
+          "p50_latency_ms": 8.803326,
+          "p95_latency_ms": 11.14983275,
+          "p99_latency_ms": 15.04476528,
+          "pass": true,
+          "query_limit": 1000,
+          "read_bytes": null,
+          "recall_at_10": 0.9947999999999999,
+          "selector_id": "range_s25",
+          "selector_type": "range",
+          "system_cpu_s": null,
+          "target_selectivity": 0.25,
+          "threads": 1,
+          "user_cpu_s": null,
+          "wall_time_s": 9.941553907934576,
+          "write_bytes": null
+        },
+        "worst_recall": {
+          "avg_latency_ms": 8.560912409,
+          "backend": "faiss_ivf_exact_hybrid",
+          "candidate_count": 50000,
+          "checkpoint": "cycle0",
+          "dataset": "sift1m",
+          "max_rss_bytes": 1074077696,
+          "p50_latency_ms": 8.509360999999998,
+          "p95_latency_ms": 10.7305756,
+          "p99_latency_ms": 11.83511648,
+          "pass": true,
+          "query_limit": 1000,
+          "read_bytes": null,
+          "recall_at_10": 0.9891,
+          "selector_id": "range_s05",
+          "selector_type": "range",
+          "system_cpu_s": null,
+          "target_selectivity": 0.05,
+          "threads": 1,
+          "user_cpu_s": null,
+          "wall_time_s": 9.585996100213379,
+          "write_bytes": null
+        }
+      },
+      "static": {
+        "rows": 25,
+        "pass": true,
+        "min_recall_at_10": 0.9891,
+        "max_avg_latency_ms": 9.240591823,
+        "max_p95_latency_ms": 12.026699299999972,
+        "max_p99_latency_ms": 22.418343459999992,
+        "worst_avg": {
+          "avg_latency_ms": 9.240591823,
+          "backend": "faiss_ivf_exact_hybrid",
+          "candidate_count": 250000,
+          "dataset": "sift1m",
+          "max_rss_bytes": 1087307776,
+          "p50_latency_ms": 8.9206605,
+          "p95_latency_ms": 12.026699299999972,
+          "p99_latency_ms": 22.418343459999992,
+          "pass": true,
+          "query_limit": 1000,
+          "read_bytes": null,
+          "recall_at_10": 0.9947999999999999,
+          "selector_id": "range_s25",
+          "selector_type": "range",
+          "system_cpu_s": null,
+          "target_selectivity": 0.25,
+          "threads": 1,
+          "user_cpu_s": null,
+          "wall_time_s": 10.43298025522381,
+          "write_bytes": null
+        },
+        "worst_recall": {
+          "avg_latency_ms": 8.570164504000001,
+          "backend": "faiss_ivf_exact_hybrid",
+          "candidate_count": 50000,
+          "dataset": "sift1m",
+          "max_rss_bytes": 1074024448,
+          "p50_latency_ms": 8.535817999999999,
+          "p95_latency_ms": 10.7139609,
+          "p99_latency_ms": 11.66960181,
+          "pass": true,
+          "query_limit": 1000,
+          "read_bytes": null,
+          "recall_at_10": 0.9891,
+          "selector_id": "range_s05",
+          "selector_type": "range",
+          "system_cpu_s": null,
+          "target_selectivity": 0.05,
+          "threads": 1,
+          "user_cpu_s": null,
+          "wall_time_s": 9.60212739603594,
+          "write_bytes": null
+        }
+      },
+      "single": {
+        "rows": 6,
+        "pass": true,
+        "max_avg_latency_ms": 2.021573
+      },
+      "insert": {
+        "rows": 1,
+        "pass": true,
+        "max_wall_time_s": 16.189867722801864
+      },
+      "selectivity": {
+        "rows": 32,
+        "pass": true
+      },
+      "failure_files": []
+    },
+    "sift1m_dynamic5_cpp": {
+      "acceptance_summary": {
+        "artifacts": [
+          "delete_api_timing.jsonl",
+          "dynamic_update_chain_results.jsonl",
+          "dynamic_update_foreground_latency.jsonl",
+          "insert_api_timing.jsonl",
+          "label_selectivity_results.jsonl"
+        ],
+        "exitstatus": 0,
+        "failure_files": [],
+        "pass": true
+      },
+      "dynamic": {
+        "rows": 150,
+        "pass": true,
+        "min_recall_at_10": 0.981,
+        "max_avg_latency_ms": 9.651487273999999,
+        "max_p95_latency_ms": 12.9280905,
+        "max_p99_latency_ms": 22.971658759999993,
+        "worst_avg": {
+          "avg_latency_ms": 9.651487273999999,
+          "backend": "faiss_ivf_exact_hybrid",
+          "candidate_count": 500000,
+          "checkpoint": "cycle0",
+          "dataset": "sift1m",
+          "max_rss_bytes": 1104232448,
+          "p50_latency_ms": 9.4166465,
+          "p95_latency_ms": 12.9280905,
+          "p99_latency_ms": 21.414219659999997,
+          "pass": true,
+          "query_limit": 1000,
+          "read_bytes": null,
+          "recall_at_10": 0.9976,
+          "selector_id": "intersect_s50",
+          "selector_type": "intersect",
+          "system_cpu_s": null,
+          "target_selectivity": 0.5,
+          "threads": 1,
+          "user_cpu_s": null,
+          "wall_time_s": 11.686329185962677,
+          "write_bytes": null
+        },
+        "worst_recall": {
+          "avg_latency_ms": 5.246109323,
+          "backend": "faiss_ivf_exact_hybrid",
+          "candidate_count": 50000,
+          "checkpoint": "cycle2",
+          "dataset": "sift1m",
+          "max_rss_bytes": 1073893376,
+          "p50_latency_ms": 4.023948000000001,
+          "p95_latency_ms": 11.292413250000001,
+          "p99_latency_ms": 22.179337049999997,
+          "pass": true,
+          "query_limit": 1000,
+          "read_bytes": null,
+          "recall_at_10": 0.981,
+          "selector_id": "equality_s05",
+          "selector_type": "equality",
+          "system_cpu_s": null,
+          "target_selectivity": 0.05,
+          "threads": 1,
+          "user_cpu_s": null,
+          "wall_time_s": 6.24777017114684,
+          "write_bytes": null
+        }
+      },
+      "foreground": {
+        "rows": 79,
+        "pass": true,
+        "max_avg_latency_ms": 2.014857
+      },
+      "delete": {
+        "rows": 5,
+        "pass": true,
+        "max_delete_ms_per_vector": 0.00250868270949771,
+        "total_deleted": 3000000
+      },
+      "insert": {
+        "rows": 6,
+        "pass": true,
+        "max_wall_time_s": 22.187074136920273
+      },
+      "selectivity": {
+        "rows": 96,
+        "pass": true
+      },
+      "failure_files": []
+    }
+  }
+}

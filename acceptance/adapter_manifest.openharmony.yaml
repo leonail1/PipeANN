@@ -1,8 +1,7 @@
 commands:
   ann_build_index:
     command:
-      - /mnt/nvme1n1/OpenHarmony-ANNS-Test/.venv/bin/python
-      - /mnt/nvme1n1/PipeANN-github/scripts/openharmony_anns_adapter.py
+      - /mnt/nvme1n1/PipeANN-github/build/openharmony_anns_adapter
       - build
       - --vectors
       - "{vectors_path}"
@@ -23,8 +22,7 @@ commands:
     timeout_seconds: 7200
   ann_filter_search:
     command:
-      - /mnt/nvme1n1/OpenHarmony-ANNS-Test/.venv/bin/python
-      - /mnt/nvme1n1/PipeANN-github/scripts/openharmony_anns_adapter.py
+      - /mnt/nvme1n1/PipeANN-github/build/openharmony_anns_adapter
       - search
       - --queries
       - "{query_file}"
@@ -43,8 +41,7 @@ commands:
     timeout_seconds: 7200
   ann_apply_insert:
     command:
-      - /mnt/nvme1n1/OpenHarmony-ANNS-Test/.venv/bin/python
-      - /mnt/nvme1n1/PipeANN-github/scripts/openharmony_anns_adapter.py
+      - /mnt/nvme1n1/PipeANN-github/build/openharmony_anns_adapter
       - insert
       - --vectors
       - "{insert_vectors_path}"
@@ -61,8 +58,7 @@ commands:
     timeout_seconds: 7200
   ann_apply_delete:
     command:
-      - /mnt/nvme1n1/OpenHarmony-ANNS-Test/.venv/bin/python
-      - /mnt/nvme1n1/PipeANN-github/scripts/openharmony_anns_adapter.py
+      - /mnt/nvme1n1/PipeANN-github/build/openharmony_anns_adapter
       - delete
       - --ids
       - "{delete_ids_path}"
@@ -75,8 +71,7 @@ commands:
     timeout_seconds: 7200
   ann_label_selectivity:
     command:
-      - /mnt/nvme1n1/OpenHarmony-ANNS-Test/.venv/bin/python
-      - /mnt/nvme1n1/PipeANN-github/scripts/openharmony_anns_adapter.py
+      - /mnt/nvme1n1/PipeANN-github/build/openharmony_anns_adapter
       - selectivity
       - --selector
       - "{selector_file}"

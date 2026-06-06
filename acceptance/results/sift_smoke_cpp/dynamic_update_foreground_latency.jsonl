@@ -1,0 +1,2 @@
+{"avg_latency_ms": 0.07467, "dataset": "sift1m_smoke", "max_rss_bytes": 4096, "pass": true, "phase": "cycle1_delete", "read_bytes": null, "selector_id": "match_all_s100", "system_cpu_s": null, "threads": 1, "user_cpu_s": null, "wall_time_s": 0.07512392709031701, "write_bytes": null}
+{"avg_latency_ms": 0.191853, "dataset": "sift1m_smoke", "max_rss_bytes": 4096, "pass": true, "phase": "cycle1_insert", "read_bytes": null, "selector_id": "match_all_s100", "system_cpu_s": null, "threads": 1, "user_cpu_s": null, "wall_time_s": 0.07576455594971776, "write_bytes": null}

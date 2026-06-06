@@ -1,6 +1,6 @@
 adapter_manifest: /mnt/nvme1n1/PipeANN-github/acceptance/adapter_manifest.openharmony.yaml
-results_dir: /mnt/nvme1n1/PipeANN-github/acceptance/results/sift1m_dynamic5
-work_dir: /mnt/nvme1n1/PipeANN-github/acceptance/work/sift1m_dynamic5
+results_dir: /mnt/nvme1n1/PipeANN-github/acceptance/results/sift1m_dynamic5_cpp
+work_dir: /mnt/nvme1n1/PipeANN-github/acceptance/work/sift1m_dynamic5_cpp
 target_npoints: 1000000
 dynamic_cycles: 5
 delete_fraction: 0.60
@@ -14,7 +14,7 @@ datasets:
     query_file: /mnt/nvme1n1/PipeANN-github/data/sift1m/sift_query.bin
     vector_format: fbin
     dimensions: 128
-    build_threads: 1
+    build_threads: 8
     search_threads: [1]
     insert_batches:
       - name: base_initial

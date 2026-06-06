@@ -11,7 +11,7 @@ C++ utilities.
 
 ## Backend
 
-`scripts/openharmony_anns_adapter.py` implements:
+`build/openharmony_anns_adapter` implements:
 
 - `ann_build_index`
 - `ann_filter_search`
@@ -19,9 +19,10 @@ C++ utilities.
 - `ann_apply_delete`
 - `ann_label_selectivity`
 
-Search uses exact filtered evaluation for small candidate sets and FAISS
-IVFFlat plus exact rerank for large candidate sets. Labels and live/deleted
-state are stored as sidecar arrays.
+The search-system implementation is C++. Python is used only by the independent
+test harness. Search uses FAISS C++ exact filtered evaluation for small
+candidate sets and FAISS C++ IVFFlat plus FAISS exact rerank for large
+candidate sets. Labels and live/deleted state are stored as sidecar arrays.
 
 ## Required Local Inputs
 
@@ -38,6 +39,10 @@ tracked by git.
 ## Run
 
 ```bash
+cd /mnt/nvme1n1/PipeANN-github
+cmake -S . -B build
+cmake --build build -j
+
 cd /mnt/nvme1n1/OpenHarmony-ANNS-Test
 source .venv/bin/activate
 ./tools/build_groundtruth.sh

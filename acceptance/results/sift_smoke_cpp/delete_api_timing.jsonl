@@ -1,0 +1,1 @@
+{"cycle": 1, "dataset": "sift1m_smoke", "delete_ms_per_vector": 0.25569066327686113, "deleted_count": 600, "expected_live_count": 400, "max_rss_bytes": 4096, "observed_live_count": 400, "pass": true, "read_bytes": null, "system_cpu_s": null, "user_cpu_s": null, "wall_time_ms": 153.41439796611667, "wall_time_s": 0.15292361518368125, "write_bytes": null}
