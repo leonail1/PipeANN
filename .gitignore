@@ -1,70 +1,26 @@
-build/
 .venv/
-experiments/**
-!experiments/**/
-!experiments/**/*.json
-!experiments/**/*.jsonl
-!experiments/**/*.csv
-!experiments/**/*.png
-!experiments/**/*.md
-!experiments/**/*.sh
-!experiments/**/aris_cpu_exp6_runner.py
-!experiments/**/measure_label_space.py
-experiments/*_backup*/
-experiments/*_backup*/**
+build/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pid
 
-# Large/generated experiment artifacts. Keep only compact result files above.
-experiments/**/*.bin
-experiments/**/*.densebit
-experiments/**/*.index
-experiments/**/*.index.tags
-experiments/**/*.log
-experiments/**/*.meta
-experiments/**/*.spmat
-experiments/**/*.tags
-experiments/**/tmp/*tau_calibration*.json
-experiments/**/tmp/*tau_calibration*.jsonl
-
-# Bulky generated scan/detail JSONL files; keep compact summaries/results instead.
-experiments/**/single_label_label_stats.jsonl
-experiments/**/runtime/*_label_summary.jsonl
-
-# Per-run qps_4sets details are reproducible; keep thread_sweep aggregate files only.
-experiments/qps_4sets/**/thread_sweep/*/
-
-
-# IO representative rerun generated details. Keep compact top-level summaries and figures only.
-experiments/io_representative_*/**/thread_sweep/**
-experiments/io_representative_*/fio/**
-# Recall-aware qps_4sets generated workdirs. Keep final summary artifacts only.
-experiments/qps_4sets/**/recall_workloads/**
-experiments/qps_4sets/**/recall_calibration/**
-experiments/qps_4sets/summary/qps_4sets_recall98_partial_*
-experiments/qps_4sets/summary/bucket_plan_recall98.json.before_l_bump_*
-.vscode/
-indices/
-.cache/
 data/*
 data-example/*
-figures/*
-scripts/tests-pipeann/drop_cache
-pipeann/*.so
-__pycache__/
-pipeann.egg-info/
+indices/
+.cache/
 dist/
-docs/**/.*
-assets/
-.codex
+*.egg-info/
 
-# PPT outputs: keep LaTeX source, compiled PDFs, and checked-in template assets.
-PPT/**/*
-!PPT/
-!PPT/**/
-!PPT/**/*.tex
-!PPT/**/*.pdf
-!PPT/**/*.md
-!PPT/**/*.cls
-!PPT/**/*.ttf
-!PPT/**/*.jpg
-!PPT/**/*.jpeg
-!PPT/**/*.png
+acceptance/work/
+acceptance/logs/
+
+# Large/generated runtime artifacts.
+*.bin
+*.fbin
+*.npy
+*.index
+*.tags
+*.log
+
+# Keep lightweight acceptance summaries/results tracked explicitly.

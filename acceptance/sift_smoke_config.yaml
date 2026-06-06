@@ -1,4 +1,4 @@
-adapter_manifest: /mnt/nvme1n1/PipeANN-github/acceptance/adapter_manifest.pipeann.yaml
+adapter_manifest: /mnt/nvme1n1/PipeANN-github/acceptance/adapter_manifest.openharmony.yaml
 results_dir: /mnt/nvme1n1/PipeANN-github/acceptance/results/sift_smoke
 work_dir: /mnt/nvme1n1/PipeANN-github/acceptance/work/sift_smoke
 target_npoints: 1000

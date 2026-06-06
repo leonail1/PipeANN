@@ -1,7 +1,0 @@
-{
-  "git": "/usr/bin/git",
-  "lscpu": "/usr/bin/lscpu",
-  "nproc": "/usr/bin/nproc",
-  "numactl": "/usr/bin/numactl",
-  "taskset": "/usr/bin/taskset"
-}

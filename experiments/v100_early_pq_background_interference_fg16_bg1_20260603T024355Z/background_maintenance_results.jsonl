@@ -1,1 +1,0 @@
-{"background_cpu_cap": 1, "background_cpu_range": "16", "background_elapsed_wall_s": 3061.1461205482483, "background_kind": "full_build_pq_retrain", "overlap_samples": 30, "pq_recode_wall_s": 8.5351, "pq_train_wall_s": 29.2842, "required_overlap_samples": 30, "status": "ok"}

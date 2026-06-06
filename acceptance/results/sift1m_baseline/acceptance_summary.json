@@ -1,6 +1,8 @@
 {
   "artifacts": [
     "build_resource.jsonl",
+    "dynamic_update_chain_results.jsonl",
+    "insert_api_timing.jsonl",
     "label_selectivity_results.jsonl",
     "single_query_latency.jsonl",
     "single_query_resource.jsonl",

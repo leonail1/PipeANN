@@ -1,9 +1,0 @@
-{
-  "exp4_pq_bytes": 16,
-  "fixed_graph_rows": 15,
-  "min_calibrated_recall": 98.120003,
-  "min_fixed_graph_recall": 82.480003,
-  "repair_note": "Filled missing 1m_after_reinsert/u100 row and rebuilt fixed graph table from clean 15-row rerun.",
-  "rows": 30,
-  "status": "ok"
-}

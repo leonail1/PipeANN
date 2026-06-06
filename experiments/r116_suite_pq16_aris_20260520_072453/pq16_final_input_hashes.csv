@@ -1,7 +1,0 @@
-path,exists
-/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/data/sift_base_1m.bin,False
-/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/data/sift_base_750k.bin,False
-/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/data/sift_query_1000.bin,False
-/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/base_1m.spmat,False
-/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/base_750k.spmat,False
-/mnt/bak3/lzg/PipeANN-github/experiments/r116_suite/labels/query_1000_u1e-03.spmat,False

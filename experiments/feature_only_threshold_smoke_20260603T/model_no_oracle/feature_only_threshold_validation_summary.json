@@ -1,5 +1,0 @@
-{
-  "feature_rows": 12,
-  "note": "Feature extraction/model-search scaffold is ready, but no post-prediction oracle threshold file was supplied.",
-  "status": "PENDING_ORACLE"
-}

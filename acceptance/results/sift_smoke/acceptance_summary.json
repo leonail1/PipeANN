@@ -1,6 +1,15 @@
 {
   "artifacts": [
     "build_resource.jsonl",
+    "delete_api_timing.jsonl",
+    "dynamic_update_chain_results.jsonl",
+    "dynamic_update_foreground_latency.jsonl",
+    "insert_api_timing.jsonl",
+    "label_selectivity_results.jsonl",
+    "single_query_latency.jsonl",
+    "single_query_resource.jsonl",
+    "space_audit.csv",
+    "space_audit.json",
     "static_filtered_search_resource.jsonl",
     "static_filtered_search_results.jsonl"
   ],

@@ -1,8 +1,8 @@
 [
   {
     "dataset": "sift1m",
-    "expansion_ratio": 0.18946461227399045,
-    "index_bytes": 97005883,
+    "expansion_ratio": 0.1894646142271154,
+    "index_bytes": 97005884,
     "index_output_paths": [
       "/mnt/nvme1n1/PipeANN-github/acceptance/work/sift1m_baseline/static/sift1m/index/adapter_index_manifest.json",
       "/mnt/nvme1n1/PipeANN-github/acceptance/work/sift1m_baseline/static/sift1m/state/adapter_state.json",

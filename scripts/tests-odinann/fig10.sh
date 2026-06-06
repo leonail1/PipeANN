@@ -1,1 +1,0 @@
-echo "Please run fig6.sh and fig7.sh"

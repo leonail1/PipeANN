@@ -1,8 +1,0 @@
-slide,metric,value,note
-Executive conclusion,Dynamic selected recall/avg,200/200 recall@10>=98 and avg<10ms,after v3 page-aware packing + targeted route/L + one triggered retrain fallback
-Latency,Max avg latency,9.955 ms,cycle03_no_retrain_across_cycles_range_u75
-Latency,Max p95 latency,10.320 ms,p95 not all <10ms; residual caveat
-PQ drift,cycle05 range-u30 L420 recall,99.42,matched-reference threshold >=99.41
-Space,Strict total / raw,1.980615x,"total serving footprint, not the acceptance excess metric"
-Space,Strict excess / raw,0.980615x,acceptance metric: extra space <1x raw
-IO layout,Straddling slots per 33-node block,5/33,down from dense 7/33; 4KB read primitive preserved

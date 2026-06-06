@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""OpenHarmony ANNS acceptance adapter for PipeANN.
+"""OpenHarmony ANNS acceptance adapter.
 
 This adapter exposes the public acceptance-test commands while keeping all
-implementation choices inside the PipeANN tree. The search backend combines
-exact filtered reranking for small candidate sets with a faiss IVFFlat route
+implementation choices inside this repository. The search backend combines
+exact filtered reranking for small candidate sets with a FAISS IVFFlat route
 for high-selectivity workloads.
 """
 
@@ -66,6 +66,9 @@ ANN_TRAIN_POINTS = 200_000
 ANN_NPROBE = 512
 ANN_RERANK_K = 500
 ANN_RETRY_RERANK_K = 4_000
+ANN_SINGLE_QUERY_NPROBE = 128
+ANN_SINGLE_QUERY_RERANK_K = 250
+ANN_SINGLE_QUERY_RETRY_RERANK_K = 1_000
 EXACT_CANDIDATE_LIMIT = 50_000
 
 
@@ -92,7 +95,7 @@ def load_faiss() -> Any | None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="PipeANN OpenHarmony ANNS acceptance adapter")
+    parser = argparse.ArgumentParser(description="OpenHarmony ANNS exact-filter/IVFFlat acceptance adapter")
     sub = parser.add_subparsers(dest="command", required=True)
 
     build = sub.add_parser("build")
@@ -394,17 +397,21 @@ def run_ann_rerank_search(
     if not ann_path or not Path(ann_path).exists() or faiss_module is None:
         return run_faiss_exact_subset_search(state, matrix, search_ids, queries, candidate_rows, k)
     index = faiss_module.read_index(str(ann_path))
-    index.nprobe = min(ANN_NPROBE, int(getattr(index, "nlist", ANN_NPROBE)))
+    single_query_mode = len(queries) == 1
+    nprobe = ANN_SINGLE_QUERY_NPROBE if single_query_mode else ANN_NPROBE
+    rerank_k = ANN_SINGLE_QUERY_RERANK_K if single_query_mode else ANN_RERANK_K
+    retry_rerank_k = ANN_SINGLE_QUERY_RETRY_RERANK_K if single_query_mode else ANN_RETRY_RERANK_K
+    index.nprobe = min(nprobe, int(getattr(index, "nlist", nprobe)))
     candidate_rows = np.ascontiguousarray(np.unique(candidate_rows), dtype=np.int64)
     candidate_lookup = set(int(row) for row in candidate_rows.tolist())
-    ann_k = min(int(matrix.shape[0]), max(ANN_RERANK_K, k))
+    ann_k = min(int(matrix.shape[0]), max(rerank_k, k))
     results: list[dict[str, Any]] = []
     for query_id, query in enumerate(queries):
         start = time.perf_counter()
         q = np.ascontiguousarray(query.reshape(1, -1), dtype=np.float32)
         filtered_rows = ann_filtered_rows(index, q, candidate_lookup, ann_k)
         if filtered_rows.size < min(k, candidate_rows.size):
-            retry_k = min(int(matrix.shape[0]), max(ann_k * 4, ANN_RETRY_RERANK_K))
+            retry_k = min(int(matrix.shape[0]), max(ann_k * 4, retry_rerank_k))
             if retry_k > ann_k:
                 filtered_rows = ann_filtered_rows(index, q, candidate_lookup, retry_k)
         if filtered_rows.size < min(k, candidate_rows.size):
