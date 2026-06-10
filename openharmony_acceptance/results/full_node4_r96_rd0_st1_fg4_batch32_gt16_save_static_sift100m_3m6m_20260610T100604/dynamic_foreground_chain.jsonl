@@ -1,0 +1,1 @@
+{"cycle":1,"delete_begin":400000,"delete_end":1000000,"deleted_count":600000,"delete_ms":56.5579,"delete_ms_per_vector":9.42632e-05,"merge_ms":82551.5,"insert_ms":897423,"post_insert_save_ms":0,"search_threads":1,"live_count":1000000}
