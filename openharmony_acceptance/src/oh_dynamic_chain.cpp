@@ -7,6 +7,9 @@
 #include "dynamic_index.h"
 #include "filter/attribute.h"
 #include "filter/selector.h"
+#include "linux_aligned_file_reader.h"
+#include "nbr/nbr.h"
+#include "ssd_index.h"
 #include "utils.h"
 #include "utils/picojson.h"
 
@@ -49,6 +52,25 @@ struct CheckpointMetrics {
   double pre_filter_ratio = 0.0;
   double in_filter_ratio = 0.0;
   double post_filter_ratio = 0.0;
+};
+
+template<typename T>
+struct StaticCheckpointIndex {
+  std::shared_ptr<AlignedFileReader> reader;
+  std::unique_ptr<pipeann::AbstractNeighbor<T>> nbr_handler;
+  std::unique_ptr<pipeann::SSDIndex<T>> index;
+
+  StaticCheckpointIndex(pipeann::Metric metric, const std::string &nbr_type, uint32_t threads,
+                        const std::string &index_prefix) {
+    reader.reset(new LinuxAlignedFileReader());
+    nbr_handler.reset(pipeann::get_nbr_handler<T>(metric, nbr_type));
+    pipeann::IndexBuildParameters params;
+    params.max_nthreads = threads;
+    index.reset(new pipeann::SSDIndex<T>(metric, reader, nbr_handler.get(), true, &params));
+    if (index->load(index_prefix.c_str(), false) != 0) {
+      throw std::runtime_error("Failed to load static checkpoint index: " + index_prefix);
+    }
+  }
 };
 
 void wait_for_gt_file(const std::filesystem::path &gt_path) {
@@ -235,6 +257,82 @@ void write_progress(std::ofstream &out, uint32_t cycle, const std::string &phase
 }
 
 template<typename T>
+CheckpointMetrics checkpoint_search_once_static(pipeann::SSDIndex<T> &index, T *query, size_t query_num,
+                                                size_t query_dim, const ManifestRow &row,
+                                                const LiveAttrIndexes &live_indexes,
+                                                const std::filesystem::path &gt_dir, uint32_t cycle, uint32_t k,
+                                                uint32_t L, uint32_t search_threads) {
+  LoadedSelector loaded;
+  if (row.selector_type != "match_all" && row.label_config != "null" && !row.label_config.empty()) {
+    loaded = load_selector_from_live_indexes(row.label_config, live_indexes);
+    if (loaded.selector && loaded.attrs.size() != query_num) {
+      throw std::runtime_error("Query attr count mismatch for selector " + row.selector_id);
+    }
+  }
+
+  std::vector<uint32_t> result_tags(query_num * k);
+  std::vector<float> result_dists(query_num * k);
+  std::vector<pipeann::QueryStats> stats(query_num);
+  omp_set_num_threads(search_threads);
+#pragma omp parallel for schedule(dynamic, 1)
+  for (int64_t i = 0; i < static_cast<int64_t>(query_num); ++i) {
+    if (loaded.selector) {
+      index.spec_filter_search(query + static_cast<size_t>(i) * query_dim, k, L, loaded.selector.get(),
+                               loaded.attrs[static_cast<size_t>(i)],
+                               result_tags.data() + static_cast<size_t>(i) * k,
+                               result_dists.data() + static_cast<size_t>(i) * k, 32,
+                               &stats[static_cast<size_t>(i)]);
+    } else {
+      index.pipe_search(query + static_cast<size_t>(i) * query_dim, k, 0, L,
+                        result_tags.data() + static_cast<size_t>(i) * k,
+                        result_dists.data() + static_cast<size_t>(i) * k, 32, &stats[static_cast<size_t>(i)]);
+    }
+  }
+
+  std::vector<double> latencies(query_num);
+  std::vector<double> ios(query_num);
+  std::vector<double> pre(query_num), in(query_num), post(query_num);
+  for (size_t i = 0; i < query_num; ++i) {
+    latencies[i] = stats[i].total_us / 1000.0;
+    ios[i] = stats[i].n_ios;
+    pre[i] = stats[i].n_filter[pipeann::PRE_FILTER];
+    in[i] = stats[i].n_filter[pipeann::IN_FILTER];
+    post[i] = stats[i].n_filter[pipeann::POST_FILTER];
+  }
+  auto sorted = oh::sorted_copy(latencies);
+
+  CheckpointMetrics metrics;
+  metrics.L = L;
+  metrics.avg_latency_ms = oh::mean(latencies);
+  metrics.p95_latency_ms = oh::percentile(sorted, 0.95);
+  metrics.p99_latency_ms = oh::percentile(sorted, 0.99);
+  metrics.avg_ios = oh::mean(ios);
+  metrics.pre_filter_ratio = oh::mean(pre);
+  metrics.in_filter_ratio = oh::mean(in);
+  metrics.post_filter_ratio = oh::mean(post);
+  auto gt_path = gt_dir / ("cycle" + std::to_string(cycle) + "_" + row.selector_id + ".bin");
+  if (!gt_dir.empty()) {
+    wait_for_gt_file(gt_path);
+  }
+  if (std::filesystem::exists(gt_path)) {
+    unsigned *gt_ids = nullptr;
+    float *gt_dists = nullptr;
+    uint32_t *gt_tags = nullptr;
+    size_t gt_num = 0, gt_dim = 0;
+    pipeann::load_truthset(gt_path.string(), gt_ids, gt_dists, gt_num, gt_dim, &gt_tags);
+    if (gt_num == query_num) {
+      metrics.recall =
+          pipeann::calculate_recall(static_cast<uint32_t>(query_num), gt_ids, gt_dists, static_cast<uint32_t>(gt_dim),
+                                    result_tags.data(), k, k);
+    }
+    delete[] gt_ids;
+    delete[] gt_dists;
+    delete[] gt_tags;
+  }
+  return metrics;
+}
+
+template<typename T>
 CheckpointMetrics checkpoint_search_once(DynamicIndex<T> &index, T *query, size_t query_num, size_t query_dim,
                                          const ManifestRow &row, const LiveAttrIndexes &live_indexes,
                                          const std::filesystem::path &gt_dir, uint32_t cycle, uint32_t k,
@@ -302,6 +400,52 @@ CheckpointMetrics checkpoint_search_once(DynamicIndex<T> &index, T *query, size_
 }
 
 template<typename T>
+void checkpoint_search_static(pipeann::SSDIndex<T> &index, T *query, size_t query_num, size_t query_dim,
+                              const ManifestRow &row, const LiveAttrIndexes &live_indexes,
+                              const std::filesystem::path &gt_dir, uint32_t cycle, uint32_t k,
+                              const std::vector<uint32_t> &l_candidates, double recall_min,
+                              uint32_t search_threads, std::ofstream &out) {
+  std::vector<CheckpointMetrics> sweep;
+  sweep.reserve(l_candidates.size());
+  CheckpointMetrics selected;
+  bool selected_set = false;
+  for (uint32_t candidate_l : l_candidates) {
+    auto metrics = checkpoint_search_once_static(index, query, query_num, query_dim, row, live_indexes, gt_dir, cycle,
+                                                 k, candidate_l, search_threads);
+    sweep.push_back(metrics);
+    if (metrics.recall >= recall_min) {
+      selected = metrics;
+      selected_set = true;
+      break;
+    }
+  }
+  if (!selected_set) {
+    selected = sweep.back();
+  }
+
+  out << "{\"cycle\":" << cycle << ",\"selector_id\":\"" << oh::json_escape(row.selector_id)
+      << "\",\"selector_type\":\"" << oh::json_escape(row.selector_type)
+      << "\",\"checkpoint_mode\":\"static\",\"L\":" << selected.L
+      << ",\"selected_L\":" << selected.L << ",\"threads\":" << search_threads
+      << ",\"recall_at_10\":" << selected.recall << ",\"avg_latency_ms\":"
+      << selected.avg_latency_ms << ",\"p95_latency_ms\":" << selected.p95_latency_ms << ",\"p99_latency_ms\":"
+      << selected.p99_latency_ms << ",\"avg_ios\":" << selected.avg_ios << ",\"pre_filter_ratio\":"
+      << selected.pre_filter_ratio << ",\"in_filter_ratio\":" << selected.in_filter_ratio
+      << ",\"post_filter_ratio\":" << selected.post_filter_ratio << ",\"l_sweep\":[";
+  for (size_t i = 0; i < sweep.size(); ++i) {
+    if (i != 0) {
+      out << ",";
+    }
+    out << "{\"L\":" << sweep[i].L << ",\"recall_at_10\":" << sweep[i].recall << ",\"avg_latency_ms\":"
+        << sweep[i].avg_latency_ms << ",\"avg_ios\":" << sweep[i].avg_ios << ",\"pre_filter_ratio\":"
+        << sweep[i].pre_filter_ratio << ",\"in_filter_ratio\":" << sweep[i].in_filter_ratio
+        << ",\"post_filter_ratio\":" << sweep[i].post_filter_ratio << "}";
+  }
+  out << "]}\n";
+  out.flush();
+}
+
+template<typename T>
 void checkpoint_search(DynamicIndex<T> &index, T *query, size_t query_num, size_t query_dim, const ManifestRow &row,
                        const LiveAttrIndexes &live_indexes, const std::filesystem::path &gt_dir, uint32_t cycle,
                        uint32_t k, const std::vector<uint32_t> &l_candidates, double recall_min,
@@ -325,7 +469,8 @@ void checkpoint_search(DynamicIndex<T> &index, T *query, size_t query_num, size_
   }
 
   out << "{\"cycle\":" << cycle << ",\"selector_id\":\"" << oh::json_escape(row.selector_id)
-      << "\",\"selector_type\":\"" << oh::json_escape(row.selector_type) << "\",\"L\":" << selected.L
+      << "\",\"selector_type\":\"" << oh::json_escape(row.selector_type)
+      << "\",\"checkpoint_mode\":\"dynamic\",\"L\":" << selected.L
       << ",\"selected_L\":" << selected.L << ",\"threads\":" << search_threads
       << ",\"recall_at_10\":" << selected.recall << ",\"avg_latency_ms\":"
       << selected.avg_latency_ms << ",\"p95_latency_ms\":" << selected.p95_latency_ms << ",\"p99_latency_ms\":"
@@ -355,6 +500,7 @@ int run_dynamic(int argc, char **argv) {
   const std::string label_index = args.get("label-index", index_prefix + ".label.0");
   const std::string range_index = args.get("range-index", index_prefix + ".label.1");
   const auto metric = pipeann::get_metric(args.get("metric", "l2"));
+  const std::string nbr_type = args.get("nbr-type", "pq");
   const uint32_t npoints = args.u32("npoints", 1000000);
   const uint32_t cycles = args.u32("cycles", 5);
   const uint32_t k = args.u32("k", 10);
@@ -371,6 +517,8 @@ int run_dynamic(int argc, char **argv) {
   const uint32_t foreground_interval_ms = args.u32("foreground-interval-ms", 1000);
   const bool foreground_enabled = args.get("foreground-enabled", "1") != "0";
   const bool checkpoint_enabled = args.get("checkpoint-enabled", "1") != "0";
+  const bool save_after_insert = args.get("save-after-insert", "0") != "0";
+  const std::string checkpoint_mode = args.get("checkpoint-mode", "dynamic");
   const auto out_dynamic = std::filesystem::path(args.get("out-jsonl", "results/dynamic_chain.jsonl"));
   const auto out_foreground = std::filesystem::path(args.get("out-foreground-jsonl", "results/foreground_latency.jsonl"));
   const auto out_progress = std::filesystem::path(args.get("out-progress-jsonl", "results/dynamic_progress.jsonl"));
@@ -381,6 +529,12 @@ int run_dynamic(int argc, char **argv) {
 
   if (index_prefix.empty() || updates_path.empty() || query_path.empty()) {
     throw std::runtime_error("--index-prefix, --updates and --query are required");
+  }
+  if (checkpoint_enabled && checkpoint_mode == "static" && !save_after_insert) {
+    throw std::runtime_error("--checkpoint-mode static requires --save-after-insert 1");
+  }
+  if (checkpoint_mode != "dynamic" && checkpoint_mode != "static") {
+    throw std::runtime_error("Unsupported --checkpoint-mode: " + checkpoint_mode);
   }
 
   QueryBundle<T> queries;
@@ -503,21 +657,41 @@ int run_dynamic(int argc, char **argv) {
     auto t3 = std::chrono::high_resolution_clock::now();
     double insert_ms = std::chrono::duration<double, std::milli>(t3 - t2).count();
     write_progress(progress, cycle, "insert_done", count, count, insert_ms);
+
+    double post_insert_save_ms = 0.0;
+    if (save_after_insert) {
+      write_progress(progress, cycle, "post_insert_save_start", 0, 0, 0.0);
+      auto save_start = std::chrono::high_resolution_clock::now();
+      index.save(index.index_prefix(), merge_threads);
+      auto save_done = std::chrono::high_resolution_clock::now();
+      post_insert_save_ms = std::chrono::duration<double, std::milli>(save_done - save_start).count();
+      write_progress(progress, cycle, "post_insert_save_done", 0, 0, post_insert_save_ms);
+    }
+
     if (foreground_enabled) {
       foreground_search(*foreground_index, queries, k, L, foreground_rounds, search_threads, "after_insert", cycle, fg);
     }
     if (checkpoint_enabled) {
+      std::unique_ptr<StaticCheckpointIndex<T>> static_checkpoint;
+      if (checkpoint_mode == "static") {
+        static_checkpoint.reset(new StaticCheckpointIndex<T>(metric, nbr_type, search_threads, index.index_prefix()));
+      }
       for (const auto &row : manifest_rows) {
-        checkpoint_search(index, queries.data, queries.n, queries.dim, row, live_indexes, gt_dir, cycle, k, l_candidates,
-                          recall_min, search_threads, checkpoint);
+        if (checkpoint_mode == "static") {
+          checkpoint_search_static(*static_checkpoint->index, queries.data, queries.n, queries.dim, row, live_indexes,
+                                   gt_dir, cycle, k, l_candidates, recall_min, search_threads, checkpoint);
+        } else {
+          checkpoint_search(index, queries.data, queries.n, queries.dim, row, live_indexes, gt_dir, cycle, k,
+                            l_candidates, recall_min, search_threads, checkpoint);
+        }
       }
     }
 
     dyn << "{\"cycle\":" << cycle << ",\"delete_begin\":" << begin << ",\"delete_end\":" << end
         << ",\"deleted_count\":" << count << ",\"delete_ms\":" << delete_ms
         << ",\"delete_ms_per_vector\":" << (delete_ms / static_cast<double>(count)) << ",\"merge_ms\":" << merge_ms
-        << ",\"insert_ms\":" << insert_ms << ",\"search_threads\":" << search_threads
-        << ",\"live_count\":" << npoints << "}\n";
+        << ",\"insert_ms\":" << insert_ms << ",\"post_insert_save_ms\":" << post_insert_save_ms
+        << ",\"search_threads\":" << search_threads << ",\"live_count\":" << npoints << "}\n";
     dyn.flush();
   }
   return 0;

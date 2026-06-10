@@ -21,8 +21,10 @@ Dynamic update acceptance is split into two independent tests.
    - Runs five cycles by default.
    - Uses `BATCH_UPDATE_THREADS=32` by default.
    - Does not run foreground search during update.
-   - After each cycle returns to 1M live vectors, runs the full filtered search
-     matrix and checks recall and average latency.
+   - After each cycle returns to 1M live vectors, publishes the post-insert
+     state with `save()` so the checkpoint is a consistent disk snapshot.
+   - Then runs the full filtered search matrix and checks recall and average
+     latency.
 
 The two tests produce separate artifacts:
 

@@ -259,6 +259,8 @@ echo "Running batch dynamic quality test: cycles=${BATCH_CYCLES} update_threads=
   --gt-dir "${WORK_DIR}/gt" \
   --foreground-enabled 0 \
   --checkpoint-enabled 1 \
+  --save-after-insert 1 \
+  --checkpoint-mode static \
   --out-jsonl "${RESULTS_DIR}/dynamic_batch_chain.jsonl" \
   --out-foreground-jsonl "${RESULTS_DIR}/dynamic_batch_foreground_latency.jsonl" \
   --out-progress-jsonl "${RESULTS_DIR}/dynamic_batch_progress.jsonl" \
