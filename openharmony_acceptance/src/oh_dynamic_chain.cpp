@@ -366,6 +366,69 @@ struct QueryBundle {
   }
 };
 
+void copy_optional_snapshot_file(const std::string &source, const std::string &target) {
+  if (std::filesystem::exists(source)) {
+    oh::ensure_parent(target);
+    std::filesystem::copy_file(source, target, std::filesystem::copy_options::overwrite_existing);
+  } else {
+    std::filesystem::remove(target);
+  }
+}
+
+const std::vector<std::string> &snapshot_suffixes() {
+  static const std::vector<std::string> suffixes = {
+      "_disk.index",        "_disk.index.tags", "_pq_compressed.bin", "_pq_pivots.bin",
+      "_partition.bin.aligned", ".label.0",         ".label.0.filter",   ".label.0.quantize",
+      ".label.1",          ".label.1.filter",   ".label.1.quantize"};
+  return suffixes;
+}
+
+void remove_index_family_snapshot(const std::string &snapshot_prefix) {
+  for (const auto &suffix : snapshot_suffixes()) {
+    std::filesystem::remove(snapshot_prefix + suffix);
+  }
+}
+
+void copy_index_family_for_snapshot(const std::string &source_prefix, const std::string &snapshot_prefix) {
+  for (const auto &suffix : snapshot_suffixes()) {
+    copy_optional_snapshot_file(source_prefix + suffix, snapshot_prefix + suffix);
+  }
+}
+
+template<typename T>
+void reload_foreground_snapshot(std::unique_ptr<StaticCheckpointIndex<T>> &foreground_snapshot,
+                                LiveAttrIndexes &foreground_indexes, QueryBundle<T> &queries, pipeann::Metric metric,
+                                const std::string &nbr_type, const std::string &source_prefix,
+                                const std::string &snapshot_base_prefix, uint32_t &snapshot_version,
+                                const std::string &label_config, uint32_t search_threads) {
+  if (nbr_type != "pq") {
+    throw std::runtime_error("Foreground snapshot currently supports only --nbr-type pq");
+  }
+  if (snapshot_version > 1) {
+    remove_index_family_snapshot(snapshot_base_prefix + "_v" + std::to_string(snapshot_version - 2));
+  }
+  const std::string snapshot_prefix = snapshot_base_prefix + "_v" + std::to_string(snapshot_version++);
+  copy_index_family_for_snapshot(source_prefix, snapshot_prefix);
+
+  auto next_snapshot = std::make_unique<StaticCheckpointIndex<T>>(metric, nbr_type, search_threads, snapshot_prefix);
+  const uint32_t snapshot_npoints = static_cast<uint32_t>(next_snapshot->index->meta_.npoints);
+
+  foreground_indexes.label = load_attr_index_from_file(snapshot_prefix + ".label.0", "label", snapshot_npoints);
+  foreground_indexes.range = load_attr_index_from_file(snapshot_prefix + ".label.1", "range", snapshot_npoints);
+
+  queries.selector.reset();
+  queries.attrs.clear();
+  if (!label_config.empty() && label_config != "null") {
+    auto loaded = load_selector_from_live_indexes(label_config, foreground_indexes);
+    queries.selector = std::move(loaded.selector);
+    queries.attrs = std::move(loaded.attrs);
+    if (queries.selector && queries.attrs.size() != queries.n) {
+      throw std::runtime_error("Foreground query attr count mismatch");
+    }
+  }
+  foreground_snapshot = std::move(next_snapshot);
+}
+
 template<typename T>
 void zero_start_exact_probe(const std::filesystem::path &base_path, QueryBundle<T> &queries, uint32_t bootstrap_npoints,
                             const std::string &selector_id, const std::vector<uint64_t> &rank, uint32_t k,
@@ -414,7 +477,7 @@ void zero_start_exact_probe(const std::filesystem::path &base_path, QueryBundle<
 }
 
 template<typename T>
-void foreground_search(DynamicIndex<T> &index, QueryBundle<T> &queries, uint32_t k, uint32_t L, uint32_t rounds,
+void foreground_search(pipeann::SSDIndex<T> &index, QueryBundle<T> &queries, uint32_t k, uint32_t L, uint32_t rounds,
                        uint32_t search_threads, const std::string &phase, uint32_t cycle, std::ofstream &out) {
   if (queries.n == 0 || rounds == 0) {
     return;
@@ -428,10 +491,11 @@ void foreground_search(DynamicIndex<T> &index, QueryBundle<T> &queries, uint32_t
     auto t0 = std::chrono::high_resolution_clock::now();
     pipeann::QueryStats stats;
     if (queries.selector) {
-      index.search(queries.data + static_cast<size_t>(qid) * queries.dim, k, L, one_ids.data(), one_dists.data(), &stats,
-                   queries.selector.get(), &queries.attrs[qid]);
+      index.spec_filter_search(queries.data + static_cast<size_t>(qid) * queries.dim, k, L, queries.selector.get(),
+                               queries.attrs[qid], one_ids.data(), one_dists.data(), 32, &stats);
     } else {
-      index.search(queries.data + static_cast<size_t>(qid) * queries.dim, k, L, one_ids.data(), one_dists.data(), &stats);
+      index.pipe_search(queries.data + static_cast<size_t>(qid) * queries.dim, k, 0, L, one_ids.data(),
+                        one_dists.data(), 32, &stats);
     }
     auto t1 = std::chrono::high_resolution_clock::now();
     double wall_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -831,24 +895,13 @@ int run_dynamic(int argc, char **argv) {
                    std::chrono::duration<double, std::milli>(save_done - save_start).count());
   }
 
-  std::unique_ptr<DynamicIndex<T>> foreground_index;
-  if (foreground_enabled) {
-    foreground_index.reset(new DynamicIndex<T>(static_cast<uint32_t>(queries.dim), metric, &params));
-    foreground_index->load(index.index_prefix(), false);
-    foreground_index->omp_set_num_threads(search_threads);
-  }
+  std::unique_ptr<StaticCheckpointIndex<T>> foreground_snapshot;
   LiveAttrIndexes foreground_indexes;
+  uint32_t foreground_snapshot_version = 0;
+  const std::string foreground_snapshot_base = index.index_prefix() + "_foreground_snapshot";
   if (foreground_enabled) {
-    foreground_indexes.label = load_attr_index_from_file(update_label_index, "label", npoints);
-    foreground_indexes.range = load_attr_index_from_file(update_range_index, "range", npoints);
-  }
-  if (foreground_enabled && !label_config.empty() && label_config != "null") {
-    auto loaded = load_selector_from_live_indexes(label_config, foreground_indexes);
-    queries.selector = std::move(loaded.selector);
-    queries.attrs = std::move(loaded.attrs);
-    if (queries.selector && queries.attrs.size() != queries.n) {
-      throw std::runtime_error("Foreground query attr count mismatch");
-    }
+    reload_foreground_snapshot(foreground_snapshot, foreground_indexes, queries, metric, nbr_type, index.index_prefix(),
+                               foreground_snapshot_base, foreground_snapshot_version, label_config, search_threads);
   }
 
   const uint64_t update_rows_per_cycle = static_cast<uint64_t>(npoints) * 6 / 10;
@@ -865,7 +918,7 @@ int run_dynamic(int argc, char **argv) {
     double delete_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     write_progress(progress, cycle, "mark_delete_done", count, count, delete_ms);
     if (foreground_enabled) {
-      foreground_search(*foreground_index, queries, k, L, foreground_rounds, search_threads, "after_mark_delete", cycle, fg);
+      foreground_search(*foreground_snapshot->index, queries, k, L, foreground_rounds, search_threads, "after_mark_delete", cycle, fg);
     }
 
     write_progress(progress, cycle, "merge_start", 0, 0, 0.0);
@@ -876,13 +929,17 @@ int run_dynamic(int argc, char **argv) {
       write_progress(progress, cycle, "merge_running", 0, 0,
                      std::chrono::duration<double, std::milli>(now - merge_start).count());
       if (foreground_enabled) {
-        foreground_search(*foreground_index, queries, k, L, foreground_rounds, search_threads, "merge", cycle, fg);
+        foreground_search(*foreground_snapshot->index, queries, k, L, foreground_rounds, search_threads, "merge", cycle, fg);
       }
     }
     merge_future.get();
     auto t2 = std::chrono::high_resolution_clock::now();
     double merge_ms = std::chrono::duration<double, std::milli>(t2 - t1).count();
     write_progress(progress, cycle, "merge_done", 0, 0, merge_ms);
+    if (foreground_enabled) {
+      reload_foreground_snapshot(foreground_snapshot, foreground_indexes, queries, metric, nbr_type, index.index_prefix(),
+                                 foreground_snapshot_base, foreground_snapshot_version, label_config, search_threads);
+    }
 
     uint32_t update_dim = 0;
     auto update_data =
@@ -910,7 +967,7 @@ int run_dynamic(int argc, char **argv) {
       write_progress(progress, cycle, "insert_running", inserted_count.load(std::memory_order_relaxed), count,
                      std::chrono::duration<double, std::milli>(now - insert_start).count());
       if (foreground_enabled) {
-        foreground_search(*foreground_index, queries, k, L, foreground_rounds, search_threads, "insert", cycle, fg);
+        foreground_search(*foreground_snapshot->index, queries, k, L, foreground_rounds, search_threads, "insert", cycle, fg);
       }
     }
     insert_future.get();
@@ -926,10 +983,14 @@ int run_dynamic(int argc, char **argv) {
       auto save_done = std::chrono::high_resolution_clock::now();
       post_insert_save_ms = std::chrono::duration<double, std::milli>(save_done - save_start).count();
       write_progress(progress, cycle, "post_insert_save_done", 0, 0, post_insert_save_ms);
+      if (foreground_enabled) {
+        reload_foreground_snapshot(foreground_snapshot, foreground_indexes, queries, metric, nbr_type, index.index_prefix(),
+                                   foreground_snapshot_base, foreground_snapshot_version, label_config, search_threads);
+      }
     }
 
     if (foreground_enabled) {
-      foreground_search(*foreground_index, queries, k, L, foreground_rounds, search_threads, "after_insert", cycle, fg);
+      foreground_search(*foreground_snapshot->index, queries, k, L, foreground_rounds, search_threads, "after_insert", cycle, fg);
     }
     if (checkpoint_enabled) {
       std::unique_ptr<StaticCheckpointIndex<T>> static_checkpoint;
