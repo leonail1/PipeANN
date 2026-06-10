@@ -10,6 +10,7 @@ WORK_DIR=${WORK_DIR:-"${PIPEANN_ROOT}/acceptance_work/smoke"}
 RESULTS_DIR=${RESULTS_DIR:-"${PIPEANN_ROOT}/acceptance_results/smoke"}
 THREADS=${THREADS:-$(nproc)}
 SEARCH_THREADS=${SEARCH_THREADS:-1}
+SMOKE_BATCH_UPDATE_THREADS=${SMOKE_BATCH_UPDATE_THREADS:-32}
 GT_THREADS=${GT_THREADS:-16}
 
 safe_reset_dir() {
@@ -117,16 +118,42 @@ done
   --label-index "${INDEX_PREFIX}.label.0" \
   --range-index "${INDEX_PREFIX}.label.1" \
   --npoints 2000 \
-  --cycles 2 \
-  --insert-threads "${THREADS}" \
+  --cycles 1 \
+  --insert-threads 4 \
   --search-threads "${SEARCH_THREADS}" \
-  --merge-threads "${THREADS}" \
+  --merge-threads 4 \
   --foreground-rounds 4 \
   --selector-manifest "${WORK_DIR}/labels/selector_manifest.csv" \
   --gt-dir "${WORK_DIR}/gt" \
-  --out-jsonl "${RESULTS_DIR}/dynamic_chain.jsonl" \
-  --out-foreground-jsonl "${RESULTS_DIR}/foreground_latency.jsonl" \
-  --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_checkpoint_search.jsonl"
+  --foreground-enabled 1 \
+  --checkpoint-enabled 0 \
+  --out-jsonl "${RESULTS_DIR}/dynamic_foreground_chain.jsonl" \
+  --out-foreground-jsonl "${RESULTS_DIR}/dynamic_foreground_latency.jsonl" \
+  --out-progress-jsonl "${RESULTS_DIR}/dynamic_foreground_progress.jsonl" \
+  --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_foreground_checkpoint_search.jsonl"
+
+"${OH_BIN_DIR}/oh_dynamic_chain" \
+  --type float \
+  --index-prefix "${INDEX_PREFIX}" \
+  --updates "${WORK_DIR}/data/updates.bin" \
+  --query "${WORK_DIR}/data/query.bin" \
+  --label-config null \
+  --label-index "${INDEX_PREFIX}.label.0" \
+  --range-index "${INDEX_PREFIX}.label.1" \
+  --npoints 2000 \
+  --cycles 2 \
+  --insert-threads "${SMOKE_BATCH_UPDATE_THREADS}" \
+  --search-threads "${SEARCH_THREADS}" \
+  --merge-threads "${SMOKE_BATCH_UPDATE_THREADS}" \
+  --foreground-rounds 4 \
+  --selector-manifest "${WORK_DIR}/labels/selector_manifest.csv" \
+  --gt-dir "${WORK_DIR}/gt" \
+  --foreground-enabled 0 \
+  --checkpoint-enabled 1 \
+  --out-jsonl "${RESULTS_DIR}/dynamic_batch_chain.jsonl" \
+  --out-foreground-jsonl "${RESULTS_DIR}/dynamic_batch_foreground_latency.jsonl" \
+  --out-progress-jsonl "${RESULTS_DIR}/dynamic_batch_progress.jsonl" \
+  --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_batch_checkpoint_search.jsonl"
 
 /usr/bin/time -v "${OH_BIN_DIR}/oh_single_query" \
   --type float \
@@ -146,6 +173,8 @@ done
   --recall-min "${RECALL_MIN:-0.0}" \
   --latency-lt "${LATENCY_LT:-1000.0}" \
   --delete-ms-per-vector-lte "${DELETE_MS_PER_VECTOR_LTE:-1000.0}" \
-  --single-query-max-rss-bytes-lt "${SINGLE_QUERY_MAX_RSS_BYTES_LT:-100000000000}"
+  --single-query-max-rss-bytes-lt "${SINGLE_QUERY_MAX_RSS_BYTES_LT:-100000000000}" \
+  --dynamic-foreground-cycles 1 \
+  --dynamic-batch-cycles 2
 
 echo "Smoke complete: ${RESULTS_DIR}"

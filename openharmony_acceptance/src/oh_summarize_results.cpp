@@ -149,18 +149,18 @@ MetricStats check_recall_latency_jsonl(const std::filesystem::path &path, const 
   return stats;
 }
 
-MetricStats check_foreground_jsonl(const std::filesystem::path &path, double latency_lt,
+MetricStats check_foreground_jsonl(const std::filesystem::path &path, const std::string &check_name, double latency_lt,
                                    std::vector<Failure> &failures) {
   MetricStats stats;
   auto lines = read_lines(path);
   if (lines.empty()) {
-    add_failure(failures, "foreground", "missing_or_empty:" + path.string());
+    add_failure(failures, check_name, "missing_or_empty:" + path.string());
     return stats;
   }
   for (const auto &line : lines) {
     picojson::value parsed;
     if (!parse_json_value(line, parsed)) {
-      add_failure(failures, "foreground", "invalid_json_line:" + path.string());
+      add_failure(failures, check_name, "invalid_json_line:" + path.string());
       continue;
     }
     ++stats.rows;
@@ -169,25 +169,26 @@ MetricStats check_foreground_jsonl(const std::filesystem::path &path, double lat
     if (!(avg < latency_lt)) {
       std::string phase = extract_string(line, "phase", "unknown");
       std::string cycle = std::to_string(static_cast<int64_t>(extract_number(line, "cycle", -1)));
-      add_failure(failures, "foreground",
+      add_failure(failures, check_name,
                   "phase=" + phase + ",cycle=" + cycle + ",avg_latency_ms=" + std::to_string(avg));
     }
   }
   return stats;
 }
 
-MetricStats check_delete_jsonl(const std::filesystem::path &path, double delete_ms_per_vector_lte,
+MetricStats check_delete_jsonl(const std::filesystem::path &path, const std::string &check_name,
+                               double delete_ms_per_vector_lte,
                                std::vector<Failure> &failures) {
   MetricStats stats;
   auto lines = read_lines(path);
   if (lines.empty()) {
-    add_failure(failures, "delete", "missing_or_empty:" + path.string());
+    add_failure(failures, check_name, "missing_or_empty:" + path.string());
     return stats;
   }
   for (const auto &line : lines) {
     picojson::value parsed;
     if (!parse_json_value(line, parsed)) {
-      add_failure(failures, "delete", "invalid_json_line:" + path.string());
+      add_failure(failures, check_name, "invalid_json_line:" + path.string());
       continue;
     }
     ++stats.rows;
@@ -195,15 +196,23 @@ MetricStats check_delete_jsonl(const std::filesystem::path &path, double delete_
     stats.max_delete_ms_per_vector = std::max(stats.max_delete_ms_per_vector, value);
     if (!(value <= delete_ms_per_vector_lte)) {
       std::string cycle = std::to_string(static_cast<int64_t>(extract_number(line, "cycle", -1)));
-      add_failure(failures, "delete", "cycle=" + cycle + ",delete_ms_per_vector=" + std::to_string(value));
+      add_failure(failures, check_name, "cycle=" + cycle + ",delete_ms_per_vector=" + std::to_string(value));
     }
   }
   return stats;
 }
 
+void check_nonempty_artifact(const std::filesystem::path &path, const std::string &check_name,
+                             std::vector<Failure> &failures) {
+  if (read_lines(path).empty()) {
+    add_failure(failures, check_name, "missing_or_empty:" + path.string());
+  }
+}
+
 void write_summary(const std::filesystem::path &path, const std::vector<Failure> &failures, double space_ratio,
                    const MetricStats &static_stats, const MetricStats &checkpoint_stats,
-                   const MetricStats &foreground_stats, const MetricStats &delete_stats, double single_latency_ms,
+                   const MetricStats &foreground_stats, const MetricStats &foreground_delete_stats,
+                   const MetricStats &batch_delete_stats, double single_latency_ms,
                    int64_t rss_bytes, double space_lt, double recall_min, double latency_lt,
                    double delete_ms_per_vector_lte, int64_t rss_lt) {
   oh::ensure_parent(path);
@@ -218,13 +227,17 @@ void write_summary(const std::filesystem::path &path, const std::vector<Failure>
   out << "    \"static_rows\": " << static_stats.rows << ", \"static_min_recall\": "
       << json_number(static_stats.min_recall) << ", \"static_worst_avg_latency_ms\": "
       << json_number(static_stats.worst_avg_latency_ms) << ",\n";
-  out << "    \"dynamic_checkpoint_rows\": " << checkpoint_stats.rows << ", \"dynamic_checkpoint_min_recall\": "
-      << json_number(checkpoint_stats.min_recall) << ", \"dynamic_checkpoint_worst_avg_latency_ms\": "
+  out << "    \"dynamic_batch_checkpoint_rows\": " << checkpoint_stats.rows << ", \"dynamic_batch_checkpoint_min_recall\": "
+      << json_number(checkpoint_stats.min_recall) << ", \"dynamic_batch_checkpoint_worst_avg_latency_ms\": "
       << json_number(checkpoint_stats.worst_avg_latency_ms) << ",\n";
-  out << "    \"foreground_rows\": " << foreground_stats.rows << ", \"foreground_worst_avg_latency_ms\": "
+  out << "    \"dynamic_foreground_rows\": " << foreground_stats.rows << ", \"dynamic_foreground_worst_avg_latency_ms\": "
       << json_number(foreground_stats.worst_avg_latency_ms) << ",\n";
-  out << "    \"delete_rows\": " << delete_stats.rows << ", \"max_delete_ms_per_vector\": "
-      << json_number(delete_stats.max_delete_ms_per_vector) << ",\n";
+  out << "    \"dynamic_foreground_delete_rows\": " << foreground_delete_stats.rows
+      << ", \"dynamic_foreground_max_delete_ms_per_vector\": "
+      << json_number(foreground_delete_stats.max_delete_ms_per_vector) << ",\n";
+  out << "    \"dynamic_batch_delete_rows\": " << batch_delete_stats.rows
+      << ", \"dynamic_batch_max_delete_ms_per_vector\": "
+      << json_number(batch_delete_stats.max_delete_ms_per_vector) << ",\n";
   out << "    \"single_query_latency_ms\": " << json_number(single_latency_ms)
       << ", \"single_query_max_rss_bytes\": " << rss_bytes << "\n";
   out << "  },\n";
@@ -255,6 +268,8 @@ int main(int argc, char **argv) {
     const double latency_lt = args.f64("latency-lt", 10.0);
     const double delete_ms_per_vector_lte = args.f64("delete-ms-per-vector-lte", 0.5);
     const int64_t rss_lt = static_cast<int64_t>(args.u64("single-query-max-rss-bytes-lt", 30000000));
+    const uint64_t dynamic_foreground_cycles = args.u64("dynamic-foreground-cycles", 1);
+    const uint64_t dynamic_batch_cycles = args.u64("dynamic-batch-cycles", 5);
     if (results_dir.empty()) {
       throw std::runtime_error("--results-dir is required");
     }
@@ -276,10 +291,32 @@ int main(int argc, char **argv) {
 
     auto static_stats =
         check_recall_latency_jsonl(results_dir / "static_filtered.jsonl", "static", recall_min, latency_lt, failures);
-    auto checkpoint_stats = check_recall_latency_jsonl(results_dir / "dynamic_checkpoint_search.jsonl",
-                                                       "dynamic_checkpoint", recall_min, latency_lt, failures);
-    auto foreground_stats = check_foreground_jsonl(results_dir / "foreground_latency.jsonl", latency_lt, failures);
-    auto delete_stats = check_delete_jsonl(results_dir / "dynamic_chain.jsonl", delete_ms_per_vector_lte, failures);
+    auto checkpoint_stats = check_recall_latency_jsonl(results_dir / "dynamic_batch_checkpoint_search.jsonl",
+                                                       "dynamic_batch_checkpoint", recall_min, latency_lt, failures);
+    auto foreground_stats =
+        check_foreground_jsonl(results_dir / "dynamic_foreground_latency.jsonl", "dynamic_foreground", latency_lt, failures);
+    auto foreground_delete_stats = check_delete_jsonl(results_dir / "dynamic_foreground_chain.jsonl",
+                                                      "dynamic_foreground_delete", delete_ms_per_vector_lte, failures);
+    auto batch_delete_stats =
+        check_delete_jsonl(results_dir / "dynamic_batch_chain.jsonl", "dynamic_batch_delete", delete_ms_per_vector_lte,
+                           failures);
+    check_nonempty_artifact(results_dir / "dynamic_foreground_progress.jsonl", "dynamic_foreground_progress", failures);
+    check_nonempty_artifact(results_dir / "dynamic_batch_progress.jsonl", "dynamic_batch_progress", failures);
+    if (foreground_delete_stats.rows < dynamic_foreground_cycles) {
+      add_failure(failures, "dynamic_foreground_delete",
+                  "rows=" + std::to_string(foreground_delete_stats.rows) +
+                      ",expected_at_least=" + std::to_string(dynamic_foreground_cycles));
+    }
+    if (batch_delete_stats.rows < dynamic_batch_cycles) {
+      add_failure(failures, "dynamic_batch_delete",
+                  "rows=" + std::to_string(batch_delete_stats.rows) +
+                      ",expected_at_least=" + std::to_string(dynamic_batch_cycles));
+    }
+    if (static_stats.rows > 0 && checkpoint_stats.rows < static_stats.rows * dynamic_batch_cycles) {
+      add_failure(failures, "dynamic_batch_checkpoint",
+                  "rows=" + std::to_string(checkpoint_stats.rows) + ",expected_at_least=" +
+                      std::to_string(static_stats.rows * dynamic_batch_cycles));
+    }
 
     auto single_lines = read_lines(results_dir / "single_query_resource.jsonl");
     double single_latency_ms = std::numeric_limits<double>::infinity();
@@ -307,7 +344,8 @@ int main(int argc, char **argv) {
       }
     }
 
-    write_summary(out_json, failures, space_ratio, static_stats, checkpoint_stats, foreground_stats, delete_stats,
+    write_summary(out_json, failures, space_ratio, static_stats, checkpoint_stats, foreground_stats,
+                  foreground_delete_stats, batch_delete_stats,
                   single_latency_ms, rss_bytes, space_lt, recall_min, latency_lt, delete_ms_per_vector_lte, rss_lt);
     std::cout << "Summary written to " << out_json << " pass=" << (failures.empty() ? "true" : "false") << std::endl;
     return failures.empty() ? 0 : 2;

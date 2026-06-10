@@ -45,6 +45,10 @@ struct CheckpointMetrics {
   double avg_latency_ms = 0.0;
   double p95_latency_ms = 0.0;
   double p99_latency_ms = 0.0;
+  double avg_ios = 0.0;
+  double pre_filter_ratio = 0.0;
+  double in_filter_ratio = 0.0;
+  double post_filter_ratio = 0.0;
 };
 
 void wait_for_gt_file(const std::filesystem::path &gt_path) {
@@ -255,8 +259,14 @@ CheckpointMetrics checkpoint_search_once(DynamicIndex<T> &index, T *query, size_
   }
 
   std::vector<double> latencies(query_num);
+  std::vector<double> ios(query_num);
+  std::vector<double> pre(query_num), in(query_num), post(query_num);
   for (size_t i = 0; i < query_num; ++i) {
     latencies[i] = stats[i].total_us / 1000.0;
+    ios[i] = stats[i].n_ios;
+    pre[i] = stats[i].n_filter[pipeann::PRE_FILTER];
+    in[i] = stats[i].n_filter[pipeann::IN_FILTER];
+    post[i] = stats[i].n_filter[pipeann::POST_FILTER];
   }
   auto sorted = oh::sorted_copy(latencies);
 
@@ -265,6 +275,10 @@ CheckpointMetrics checkpoint_search_once(DynamicIndex<T> &index, T *query, size_
   metrics.avg_latency_ms = oh::mean(latencies);
   metrics.p95_latency_ms = oh::percentile(sorted, 0.95);
   metrics.p99_latency_ms = oh::percentile(sorted, 0.99);
+  metrics.avg_ios = oh::mean(ios);
+  metrics.pre_filter_ratio = oh::mean(pre);
+  metrics.in_filter_ratio = oh::mean(in);
+  metrics.post_filter_ratio = oh::mean(post);
   auto gt_path = gt_dir / ("cycle" + std::to_string(cycle) + "_" + row.selector_id + ".bin");
   if (!gt_dir.empty()) {
     wait_for_gt_file(gt_path);
@@ -315,13 +329,17 @@ void checkpoint_search(DynamicIndex<T> &index, T *query, size_t query_num, size_
       << ",\"selected_L\":" << selected.L << ",\"threads\":" << search_threads
       << ",\"recall_at_10\":" << selected.recall << ",\"avg_latency_ms\":"
       << selected.avg_latency_ms << ",\"p95_latency_ms\":" << selected.p95_latency_ms << ",\"p99_latency_ms\":"
-      << selected.p99_latency_ms << ",\"l_sweep\":[";
+      << selected.p99_latency_ms << ",\"avg_ios\":" << selected.avg_ios << ",\"pre_filter_ratio\":"
+      << selected.pre_filter_ratio << ",\"in_filter_ratio\":" << selected.in_filter_ratio
+      << ",\"post_filter_ratio\":" << selected.post_filter_ratio << ",\"l_sweep\":[";
   for (size_t i = 0; i < sweep.size(); ++i) {
     if (i != 0) {
       out << ",";
     }
     out << "{\"L\":" << sweep[i].L << ",\"recall_at_10\":" << sweep[i].recall << ",\"avg_latency_ms\":"
-        << sweep[i].avg_latency_ms << "}";
+        << sweep[i].avg_latency_ms << ",\"avg_ios\":" << sweep[i].avg_ios << ",\"pre_filter_ratio\":"
+        << sweep[i].pre_filter_ratio << ",\"in_filter_ratio\":" << sweep[i].in_filter_ratio
+        << ",\"post_filter_ratio\":" << sweep[i].post_filter_ratio << "}";
   }
   out << "]}\n";
   out.flush();
@@ -351,6 +369,8 @@ int run_dynamic(int argc, char **argv) {
   const uint32_t merge_threads = args.u32("merge-threads", std::max(1u, std::thread::hardware_concurrency()));
   const uint32_t foreground_rounds = args.u32("foreground-rounds", 32);
   const uint32_t foreground_interval_ms = args.u32("foreground-interval-ms", 1000);
+  const bool foreground_enabled = args.get("foreground-enabled", "1") != "0";
+  const bool checkpoint_enabled = args.get("checkpoint-enabled", "1") != "0";
   const auto out_dynamic = std::filesystem::path(args.get("out-jsonl", "results/dynamic_chain.jsonl"));
   const auto out_foreground = std::filesystem::path(args.get("out-foreground-jsonl", "results/foreground_latency.jsonl"));
   const auto out_progress = std::filesystem::path(args.get("out-progress-jsonl", "results/dynamic_progress.jsonl"));
@@ -372,9 +392,12 @@ int run_dynamic(int argc, char **argv) {
   DynamicIndex<T> index(static_cast<uint32_t>(queries.dim), metric, &params);
   index.load(index_prefix, true);
   index.omp_set_num_threads(search_threads);
-  DynamicIndex<T> foreground_index(static_cast<uint32_t>(queries.dim), metric, &params);
-  foreground_index.load(index_prefix, false);
-  foreground_index.omp_set_num_threads(search_threads);
+  std::unique_ptr<DynamicIndex<T>> foreground_index;
+  if (foreground_enabled) {
+    foreground_index.reset(new DynamicIndex<T>(static_cast<uint32_t>(queries.dim), metric, &params));
+    foreground_index->load(index_prefix, false);
+    foreground_index->omp_set_num_threads(search_threads);
+  }
   const std::string update_label_index = index.index_prefix() + ".label.0";
   const std::string update_range_index = index.index_prefix() + ".label.1";
   copy_attr_family_for_update(label_index, update_label_index);
@@ -384,9 +407,11 @@ int run_dynamic(int argc, char **argv) {
   live_indexes.label = index.load_attr_index_from_file(0, update_label_index, "label");
   live_indexes.range = index.load_attr_index_from_file(1, update_range_index, "range");
   LiveAttrIndexes foreground_indexes;
-  foreground_indexes.label = load_attr_index_from_file(label_index, "label", npoints);
-  foreground_indexes.range = load_attr_index_from_file(range_index, "range", npoints);
-  if (!label_config.empty() && label_config != "null") {
+  if (foreground_enabled) {
+    foreground_indexes.label = load_attr_index_from_file(label_index, "label", npoints);
+    foreground_indexes.range = load_attr_index_from_file(range_index, "range", npoints);
+  }
+  if (foreground_enabled && !label_config.empty() && label_config != "null") {
     auto loaded = load_selector_from_live_indexes(label_config, foreground_indexes);
     queries.selector = std::move(loaded.selector);
     queries.attrs = std::move(loaded.attrs);
@@ -397,14 +422,20 @@ int run_dynamic(int argc, char **argv) {
 
   auto rank = oh::stable_ranks(npoints);
   oh::ensure_parent(out_dynamic);
-  oh::ensure_parent(out_foreground);
   oh::ensure_parent(out_progress);
   std::ofstream dyn(out_dynamic, std::ios::app);
-  std::ofstream fg(out_foreground, std::ios::app);
+  std::ofstream fg;
+  if (foreground_enabled) {
+    oh::ensure_parent(out_foreground);
+    fg.open(out_foreground, std::ios::app);
+  }
   std::ofstream progress(out_progress, std::ios::app);
-  oh::ensure_parent(checkpoint_out);
-  std::ofstream checkpoint(checkpoint_out, std::ios::app);
-  auto manifest_rows = load_manifest(selector_manifest);
+  std::ofstream checkpoint;
+  if (checkpoint_enabled) {
+    oh::ensure_parent(checkpoint_out);
+    checkpoint.open(checkpoint_out, std::ios::app);
+  }
+  auto manifest_rows = checkpoint_enabled ? load_manifest(selector_manifest) : std::vector<ManifestRow>();
 
   const uint64_t update_rows_per_cycle = static_cast<uint64_t>(npoints) * 6 / 10;
   for (uint32_t cycle = 1; cycle <= cycles; ++cycle) {
@@ -419,7 +450,9 @@ int run_dynamic(int argc, char **argv) {
     auto t1 = std::chrono::high_resolution_clock::now();
     double delete_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     write_progress(progress, cycle, "mark_delete_done", count, count, delete_ms);
-    foreground_search(foreground_index, queries, k, L, foreground_rounds, search_threads, "after_mark_delete", cycle, fg);
+    if (foreground_enabled) {
+      foreground_search(*foreground_index, queries, k, L, foreground_rounds, search_threads, "after_mark_delete", cycle, fg);
+    }
 
     write_progress(progress, cycle, "merge_start", 0, 0, 0.0);
     auto merge_start = std::chrono::high_resolution_clock::now();
@@ -428,7 +461,9 @@ int run_dynamic(int argc, char **argv) {
       auto now = std::chrono::high_resolution_clock::now();
       write_progress(progress, cycle, "merge_running", 0, 0,
                      std::chrono::duration<double, std::milli>(now - merge_start).count());
-      foreground_search(foreground_index, queries, k, L, foreground_rounds, search_threads, "merge", cycle, fg);
+      if (foreground_enabled) {
+        foreground_search(*foreground_index, queries, k, L, foreground_rounds, search_threads, "merge", cycle, fg);
+      }
     }
     merge_future.get();
     auto t2 = std::chrono::high_resolution_clock::now();
@@ -460,16 +495,22 @@ int run_dynamic(int argc, char **argv) {
       auto now = std::chrono::high_resolution_clock::now();
       write_progress(progress, cycle, "insert_running", inserted_count.load(std::memory_order_relaxed), count,
                      std::chrono::duration<double, std::milli>(now - insert_start).count());
-      foreground_search(foreground_index, queries, k, L, foreground_rounds, search_threads, "insert", cycle, fg);
+      if (foreground_enabled) {
+        foreground_search(*foreground_index, queries, k, L, foreground_rounds, search_threads, "insert", cycle, fg);
+      }
     }
     insert_future.get();
     auto t3 = std::chrono::high_resolution_clock::now();
     double insert_ms = std::chrono::duration<double, std::milli>(t3 - t2).count();
     write_progress(progress, cycle, "insert_done", count, count, insert_ms);
-    foreground_search(foreground_index, queries, k, L, foreground_rounds, search_threads, "after_insert", cycle, fg);
-    for (const auto &row : manifest_rows) {
-      checkpoint_search(index, queries.data, queries.n, queries.dim, row, live_indexes, gt_dir, cycle, k, l_candidates,
-                        recall_min, search_threads, checkpoint);
+    if (foreground_enabled) {
+      foreground_search(*foreground_index, queries, k, L, foreground_rounds, search_threads, "after_insert", cycle, fg);
+    }
+    if (checkpoint_enabled) {
+      for (const auto &row : manifest_rows) {
+        checkpoint_search(index, queries.data, queries.n, queries.dim, row, live_indexes, gt_dir, cycle, k, l_candidates,
+                          recall_min, search_threads, checkpoint);
+      }
     }
 
     dyn << "{\"cycle\":" << cycle << ",\"delete_begin\":" << begin << ",\"delete_end\":" << end

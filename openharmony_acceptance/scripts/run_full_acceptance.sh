@@ -10,7 +10,8 @@ WORK_DIR=${WORK_DIR:-"${PIPEANN_ROOT}/acceptance_work/full"}
 RESULTS_DIR=${RESULTS_DIR:-"${PIPEANN_ROOT}/acceptance_results/full"}
 THREADS=${THREADS:-$(nproc)}
 SEARCH_THREADS=${SEARCH_THREADS:-1}
-UPDATE_THREADS=${UPDATE_THREADS:-4}
+FOREGROUND_UPDATE_THREADS=${FOREGROUND_UPDATE_THREADS:-4}
+BATCH_UPDATE_THREADS=${BATCH_UPDATE_THREADS:-${UPDATE_THREADS:-32}}
 GT_THREADS=${GT_THREADS:-16}
 : "${PIPEANN_ATTR_DELTA_MERGE_BYTES:=${ATTR_DELTA_MERGE_BYTES:-67108864}}"
 export PIPEANN_ATTR_DELTA_MERGE_BYTES
@@ -25,7 +26,8 @@ TYPE=${TYPE:-float}
 METRIC=${METRIC:-l2}
 NPOINTS=${NPOINTS:-1000000}
 NQUERIES=${NQUERIES:-1000}
-CYCLES=${CYCLES:-5}
+FOREGROUND_CYCLES=${FOREGROUND_CYCLES:-1}
+BATCH_CYCLES=${BATCH_CYCLES:-${CYCLES:-5}}
 R=${R:-96}
 R_DENSE=${R_DENSE:-0}
 BUILD_L=${BUILD_L:-128}
@@ -65,9 +67,9 @@ mkdir -p "$(dirname "${INDEX_PREFIX}")"
 : "${PIPEANN_ATTR_TIMING_PATH:=${RESULTS_DIR}/attr_timing.csv}"
 export PIPEANN_ATTR_TIMING_PATH
 
-GT_CACHE_SCHEMA=${GT_CACHE_SCHEMA:-oh_cpp_acceptance_gt_v3_uniform_labels}
+GT_CACHE_SCHEMA=${GT_CACHE_SCHEMA:-oh_cpp_acceptance_gt_v4_split_dynamic_uniform_labels}
 GT_CACHE_ROOT=${GT_CACHE_ROOT:-"${PIPEANN_ROOT}/acceptance_gt_cache"}
-GT_CACHE_KEY=$(python3 - "${GT_CACHE_SCHEMA}" "${BASE_BIN}" "${UPDATES_BIN}" "${QUERY_BIN}" "${TYPE}" "${METRIC}" "${NPOINTS}" "${NQUERIES}" "${CYCLES}" "${K}" <<'PYGTKEY'
+GT_CACHE_KEY=$(python3 - "${GT_CACHE_SCHEMA}" "${BASE_BIN}" "${UPDATES_BIN}" "${QUERY_BIN}" "${TYPE}" "${METRIC}" "${NPOINTS}" "${NQUERIES}" "${BATCH_CYCLES}" "${K}" <<'PYGTKEY'
 import hashlib, os, sys
 parts = list(sys.argv[1:])
 for path in sys.argv[2:5]:
@@ -164,7 +166,7 @@ while IFS=, read -r selector_id selector_type target_selectivity candidate_count
 done < "${WORK_DIR}/labels/selector_manifest.csv"
 
 UPDATE_ROWS_PER_CYCLE=$((NPOINTS * 6 / 10))
-for cycle in $(seq 1 "${CYCLES}"); do
+for cycle in $(seq 1 "${BATCH_CYCLES}"); do
   CYCLE_BIN="${WORK_DIR}/cycle${cycle}.bin"
   "${OH_BIN_DIR}/oh_materialize_cycle_vectors" \
     --type "${TYPE}" \
@@ -208,6 +210,7 @@ PYFG
 )
 IFS=$'\t' read -r FOREGROUND_SELECTOR_ID FOREGROUND_L FOREGROUND_CONFIG FOREGROUND_STATIC_AVG FOREGROUND_STATIC_P99 <<< "${FOREGROUND_INFO}"
 echo "Calibrated foreground selector: ${FOREGROUND_SELECTOR_ID} L=${FOREGROUND_L} static_avg_ms=${FOREGROUND_STATIC_AVG} static_p99_ms=${FOREGROUND_STATIC_P99} config=${FOREGROUND_CONFIG}"
+echo "Running foreground interference test: cycles=${FOREGROUND_CYCLES} update_threads=${FOREGROUND_UPDATE_THREADS} search_threads=${SEARCH_THREADS}"
 "${OH_BIN_DIR}/oh_dynamic_chain" \
   --type "${TYPE}" \
   --metric "${METRIC}" \
@@ -218,19 +221,48 @@ echo "Calibrated foreground selector: ${FOREGROUND_SELECTOR_ID} L=${FOREGROUND_L
   --label-index "${INDEX_PREFIX}.label.0" \
   --range-index "${INDEX_PREFIX}.label.1" \
   --npoints "${NPOINTS}" \
-  --cycles "${CYCLES}" \
-  --insert-threads "${UPDATE_THREADS}" \
+  --cycles "${FOREGROUND_CYCLES}" \
+  --insert-threads "${FOREGROUND_UPDATE_THREADS}" \
   --search-threads "${SEARCH_THREADS}" \
-  --merge-threads "${UPDATE_THREADS}" \
+  --merge-threads "${FOREGROUND_UPDATE_THREADS}" \
   --L "${FOREGROUND_L}" \
   --L-candidates "${L_CANDIDATES}" \
   --recall-min "${RECALL_MIN:-98.0}" \
   --selector-manifest "${WORK_DIR}/labels/selector_manifest.csv" \
   --gt-dir "${WORK_DIR}/gt" \
-  --out-jsonl "${RESULTS_DIR}/dynamic_chain.jsonl" \
-  --out-foreground-jsonl "${RESULTS_DIR}/foreground_latency.jsonl" \
-  --out-progress-jsonl "${RESULTS_DIR}/dynamic_progress.jsonl" \
-  --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_checkpoint_search.jsonl"
+  --foreground-enabled 1 \
+  --checkpoint-enabled 0 \
+  --out-jsonl "${RESULTS_DIR}/dynamic_foreground_chain.jsonl" \
+  --out-foreground-jsonl "${RESULTS_DIR}/dynamic_foreground_latency.jsonl" \
+  --out-progress-jsonl "${RESULTS_DIR}/dynamic_foreground_progress.jsonl" \
+  --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_foreground_checkpoint_search.jsonl"
+
+echo "Running batch dynamic quality test: cycles=${BATCH_CYCLES} update_threads=${BATCH_UPDATE_THREADS} search_threads=${SEARCH_THREADS}"
+"${OH_BIN_DIR}/oh_dynamic_chain" \
+  --type "${TYPE}" \
+  --metric "${METRIC}" \
+  --index-prefix "${INDEX_PREFIX}" \
+  --updates "${UPDATES_BIN}" \
+  --query "${QUERY_ACTIVE}" \
+  --label-config null \
+  --label-index "${INDEX_PREFIX}.label.0" \
+  --range-index "${INDEX_PREFIX}.label.1" \
+  --npoints "${NPOINTS}" \
+  --cycles "${BATCH_CYCLES}" \
+  --insert-threads "${BATCH_UPDATE_THREADS}" \
+  --search-threads "${SEARCH_THREADS}" \
+  --merge-threads "${BATCH_UPDATE_THREADS}" \
+  --L "${SEARCH_L}" \
+  --L-candidates "${L_CANDIDATES}" \
+  --recall-min "${RECALL_MIN:-98.0}" \
+  --selector-manifest "${WORK_DIR}/labels/selector_manifest.csv" \
+  --gt-dir "${WORK_DIR}/gt" \
+  --foreground-enabled 0 \
+  --checkpoint-enabled 1 \
+  --out-jsonl "${RESULTS_DIR}/dynamic_batch_chain.jsonl" \
+  --out-foreground-jsonl "${RESULTS_DIR}/dynamic_batch_foreground_latency.jsonl" \
+  --out-progress-jsonl "${RESULTS_DIR}/dynamic_batch_progress.jsonl" \
+  --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_batch_checkpoint_search.jsonl"
 
 /usr/bin/time -v "${OH_BIN_DIR}/oh_single_query" \
   --type "${TYPE}" \
@@ -251,6 +283,8 @@ echo "Calibrated foreground selector: ${FOREGROUND_SELECTOR_ID} L=${FOREGROUND_L
   --recall-min "${RECALL_MIN:-98.0}" \
   --latency-lt "${LATENCY_LT:-10.0}" \
   --delete-ms-per-vector-lte "${DELETE_MS_PER_VECTOR_LTE:-0.5}" \
-  --single-query-max-rss-bytes-lt "${SINGLE_QUERY_MAX_RSS_BYTES_LT:-30000000}"
+  --single-query-max-rss-bytes-lt "${SINGLE_QUERY_MAX_RSS_BYTES_LT:-30000000}" \
+  --dynamic-foreground-cycles "${FOREGROUND_CYCLES}" \
+  --dynamic-batch-cycles "${BATCH_CYCLES}"
 
 echo "Full acceptance complete: ${RESULTS_DIR}"
