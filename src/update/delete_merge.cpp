@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <limits>
 #include <tuple>
+#include <stdexcept>
+#include <unordered_set>
 #include "utils/timer.h"
 #include "utils/tsl/robin_map.h"
 #include "utils.h"
@@ -256,15 +258,51 @@ namespace pipeann {
     }
     LOG(INFO) << "Write nhoods finished, totally elapsed " << delete_timer.elapsed() / 1e3 << "ms.";
 
+    auto choose_live_entry_point = [&]() -> uint32_t {
+      uint32_t candidate = static_cast<uint32_t>(meta_.entry_point);
+      std::unordered_set<uint32_t> visited_deleted;
+      while (deleted_nodes_set.find(id2tag(candidate)) != deleted_nodes_set.end()) {
+        LOG(INFO) << "Medoid deleted. Choosing another start node. Medoid ID: " << candidate
+                  << " tag: " << id2tag(candidate);
+        if (!visited_deleted.insert(candidate).second) {
+          LOG(WARNING) << "Detected loop while replacing deleted medoid; falling back to first live ID.";
+          break;
+        }
+
+        std::vector<uint32_t> nhoods;
+        if (deleted_nhoods.find(candidate, nhoods)) {
+          bool found_live_neighbor = false;
+          for (uint32_t nbr : nhoods) {
+            uint32_t mapped = 0;
+            if (deleted_nodes_set.find(id2tag(nbr)) == deleted_nodes_set.end() && id_map.find(nbr, mapped)) {
+              candidate = nbr;
+              found_live_neighbor = true;
+              break;
+            }
+          }
+          if (found_live_neighbor) {
+            continue;
+          }
+        }
+        break;
+      }
+
+      uint32_t mapped = 0;
+      if (deleted_nodes_set.find(id2tag(candidate)) == deleted_nodes_set.end() && id_map.find(candidate, mapped)) {
+        return candidate;
+      }
+      uint32_t fallback_old_id = 0;
+      if (rev_id_map.find(0, fallback_old_id)) {
+        LOG(WARNING) << "No live sampled neighbor for deleted medoid; using first live old ID " << fallback_old_id;
+        return fallback_old_id;
+      }
+      throw std::runtime_error("merge_deletes could not find a live entry point after delete merge");
+    };
+    auto new_entry_point = choose_live_entry_point();
+
     // duplicate neighbor handler.
     auto new_nbr_handler = this->nbr_handler->shuffle(rev_id_map, new_npoints, nthreads);
-
-    while (deleted_nodes_set.find(id2tag(meta_.entry_point)) != deleted_nodes_set.end()) {
-      LOG(INFO) << "Medoid deleted. Choosing another start node. Medoid ID: " << meta_.entry_point
-                << " tag: " << id2tag(meta_.entry_point);
-      const auto &nhoods = deleted_nhoods.find(meta_.entry_point);
-      meta_.entry_point = nhoods[0];
-    }
+    meta_.entry_point = new_entry_point;
     close(fd);
     // free buf
     reader->free_io_buf(rbuf);
