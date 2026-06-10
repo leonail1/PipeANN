@@ -285,7 +285,7 @@ namespace pipeann {
     bool load_flag = false;    // already loaded.
     bool enable_tags = false;  // support for tags and dynamic indexing
 
-    void init_buffers(uint64_t nthreads);
+    void init_buffers(uint64_t nthreads, bool enable_writes);
     void destroy_buffers();
 
     // Load id2loc and loc2id (i.e., page_layout), to support index reordering.

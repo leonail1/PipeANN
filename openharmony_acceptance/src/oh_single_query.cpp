@@ -6,6 +6,8 @@
 #include "ssd_index.h"
 #include "utils.h"
 
+#include <thread>
+
 namespace {
 
 uint64_t current_rss_bytes() {
@@ -47,6 +49,8 @@ int run_single(int argc, char **argv) {
   const uint64_t l_search = args.u64("L", 100);
   const auto out_jsonl = std::filesystem::path(args.get("out-jsonl", "results/single_query_resource.jsonl"));
   const std::string rss_trace_path = args.get("rss-trace", "");
+  const uint64_t pause_after_load_seconds = args.u64("pause-after-load-seconds", 0);
+  const uint64_t pause_after_search_seconds = args.u64("pause-after-search-seconds", 0);
 
   if (index_prefix.empty() || query_path.empty()) {
     throw std::runtime_error("--index-prefix and --query are required");
@@ -85,6 +89,9 @@ int run_single(int argc, char **argv) {
     query_attrs = std::move(ret.second);
   }
   write_rss_trace(rss_trace_path, "after_selector_load");
+  if (pause_after_load_seconds > 0) {
+    std::this_thread::sleep_for(std::chrono::seconds(pause_after_load_seconds));
+  }
 
   std::vector<uint32_t> result_tags(k);
   std::vector<float> result_dists(k);
@@ -98,6 +105,9 @@ int run_single(int argc, char **argv) {
   }
   auto t1 = std::chrono::high_resolution_clock::now();
   write_rss_trace(rss_trace_path, "after_search");
+  if (pause_after_search_seconds > 0) {
+    std::this_thread::sleep_for(std::chrono::seconds(pause_after_search_seconds));
+  }
   double wall_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
   double latency_ms = stats.total_us > 0 ? stats.total_us / 1000.0 : wall_ms;
 

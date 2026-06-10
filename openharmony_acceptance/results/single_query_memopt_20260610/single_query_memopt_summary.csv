@@ -3,9 +3,11 @@ original_full_run,range_s10,100,16.203,126616,129654784,fail_latency_fail_rss,gl
 selected_L_only,range_s10,40,7.479,126812,129855488,pass_latency_fail_rss,confirmed L=40 fixes latency before RSS optimizations
 skip_identity_tags,range_s10,40,8.478,112468,115167232,pass_latency_fail_rss,skips identity id->tag cuckoo entries
 hashmin_equal_mapping,range_s10,40,7.978,54952,56270848,pass_latency_fail_rss,default chosen path after empty-map and identity-layout optimizations
+readonly_single_buffer,range_s10,40,6.092,54076,55373824,pass_latency_fail_rss,read-only load uses one query buffer and skips background insert thread
 pq32_mmap,range_s10,40,10.619,53180,54456320,fail_latency_fail_rss,mmap loads cheaply but touched PQ pages accumulate in RSS
 pq32_stream,range_s10,40,19.761,23384,23945216,fail_latency_pass_rss,per-id stream reads avoid RSS but too slow
 pq32_stream_cache1024,range_s10,40,39.09,29600,30310400,fail_latency_fail_rss,4MB page cache nearly meets RSS but much slower
-pq16_mmap,range_s10,40,15.83,36812,37695488,fail_latency_fail_rss,PQ16 sidecar trial on final checkpoint
-pq16_vector,range_s10,40,14.567,36960,37847040,fail_latency_fail_rss,PQ16 without mmap remains slow and above RSS threshold
-pq8_mmap,range_s10,40,15.546,26812,27435008,fail_latency_pass_rss,PQ8 meets RSS but latency/regression risk is too high
+pq16_base_vector,range_s10,78,11.867,34172,34992128,fail_latency_fail_rss,base-matched PQ16 needs L=78 for recall>=98 and still fails single-query
+pq14_base_vector,range_s10,120,12.907,31812,32575488,fail_latency_fail_rss,base-matched PQ14 passes static recall but fails single-query RSS and latency
+pq12_base_vector,range_s10,150,13.194,29552,30261248,fail_latency_fail_rss,base-matched PQ12 nearly meets RSS but fails strict 30MB maxRSS and latency
+pq8_base_static,range_s10,200,8.058,,,fail_recall,PQ8 reaches only 96.00 recall@10 at L=200

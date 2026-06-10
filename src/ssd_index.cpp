@@ -106,9 +106,10 @@ namespace pipeann {
   }
 
   template<typename T, typename TagT>
-  void SSDIndex<T, TagT>::init_buffers(uint64_t n_threads) {
-    uint64_t n_buffers = n_threads * 2;
-    LOG(INFO) << "Init buffers for " << n_threads << " threads, setup " << n_buffers << " buffers.";
+  void SSDIndex<T, TagT>::init_buffers(uint64_t n_threads, bool enable_writes) {
+    uint64_t n_buffers = enable_writes ? n_threads * 2 : n_threads;
+    LOG(INFO) << "Init buffers for " << n_threads << " threads, setup " << n_buffers
+              << " buffers, enable_writes: " << enable_writes;
     this->thread_data_queue.null_T = nullptr;
     for (uint64_t i = 0; i < n_buffers; i++) {
       QueryBuffer *data = new QueryBuffer();
@@ -120,10 +121,14 @@ namespace pipeann {
 
 #ifndef READ_ONLY_TESTS
     // background thread.
-    LOG(INFO) << "Setup " << kBgIOThreads << " background I/O threads for insert...";
-    for (int i = 0; i < kBgIOThreads; ++i) {
-      bg_io_thread_[i] = new std::thread(&SSDIndex<T, TagT>::bg_io_thread, this);
-      bg_io_thread_[i]->detach();
+    if (enable_writes) {
+      LOG(INFO) << "Setup " << kBgIOThreads << " background I/O threads for insert...";
+      for (int i = 0; i < kBgIOThreads; ++i) {
+        bg_io_thread_[i] = new std::thread(&SSDIndex<T, TagT>::bg_io_thread, this);
+        bg_io_thread_[i]->detach();
+      }
+    } else {
+      LOG(INFO) << "Skip background I/O threads for read-only load.";
     }
 #endif
   }
@@ -186,7 +191,7 @@ namespace pipeann {
 
     this->destroy_buffers();  // in case of re-init.
     reader->open(disk_index_file, enable_writes, false);
-    this->init_buffers(params.max_nthreads);
+    this->init_buffers(params.max_nthreads, enable_writes);
 
     // load page layout.
     this->load_page_layout(index_prefix, meta_.nnodes_per_sector, meta_.npoints, enable_writes);
