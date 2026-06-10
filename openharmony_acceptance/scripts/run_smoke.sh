@@ -11,6 +11,7 @@ RESULTS_DIR=${RESULTS_DIR:-"${PIPEANN_ROOT}/acceptance_results/smoke"}
 THREADS=${THREADS:-$(nproc)}
 SEARCH_THREADS=${SEARCH_THREADS:-1}
 SMOKE_BATCH_UPDATE_THREADS=${SMOKE_BATCH_UPDATE_THREADS:-32}
+SMOKE_BOOTSTRAP_NPOINTS=${SMOKE_BOOTSTRAP_NPOINTS:-100}
 GT_THREADS=${GT_THREADS:-16}
 
 safe_reset_dir() {
@@ -46,7 +47,9 @@ mkdir -p "${WORK_DIR}" "${RESULTS_DIR}" "${WORK_DIR}/gt"
   --dim 32
 
 INDEX_PREFIX="${WORK_DIR}/index/smoke"
-mkdir -p "$(dirname "${INDEX_PREFIX}")"
+DYNAMIC_FG_INDEX_PREFIX="${WORK_DIR}/dynamic_foreground_index/smoke"
+DYNAMIC_BATCH_INDEX_PREFIX="${WORK_DIR}/dynamic_batch_index/smoke"
+mkdir -p "$(dirname "${INDEX_PREFIX}")" "$(dirname "${DYNAMIC_FG_INDEX_PREFIX}")" "$(dirname "${DYNAMIC_BATCH_INDEX_PREFIX}")"
 "${OH_BIN_DIR}/oh_generate_labels" \
   --npoints 2000 \
   --nqueries 50 \
@@ -111,17 +114,29 @@ done
 
 "${OH_BIN_DIR}/oh_dynamic_chain" \
   --type float \
-  --index-prefix "${INDEX_PREFIX}" \
+  --index-prefix "${DYNAMIC_FG_INDEX_PREFIX}" \
+  --base "${WORK_DIR}/data/base.bin" \
   --updates "${WORK_DIR}/data/updates.bin" \
   --query "${WORK_DIR}/data/query.bin" \
   --label-config "${WORK_DIR}/labels/intersect_s25.json" \
-  --label-index "${INDEX_PREFIX}.label.0" \
-  --range-index "${INDEX_PREFIX}.label.1" \
+  --label-index "${DYNAMIC_FG_INDEX_PREFIX}.label.0" \
+  --range-index "${DYNAMIC_FG_INDEX_PREFIX}.label.1" \
   --npoints 2000 \
   --cycles 1 \
   --insert-threads 4 \
   --search-threads "${SEARCH_THREADS}" \
   --merge-threads 4 \
+  --start-from-zero 1 \
+  --bootstrap-npoints "${SMOKE_BOOTSTRAP_NPOINTS}" \
+  --zero-work-dir "${WORK_DIR}/zero_start_foreground" \
+  --zero-probe-selector-id intersect_s25 \
+  --build-binary "${TEST_BIN_DIR}/build_disk_index_filtered" \
+  --build-R 32 \
+  --build-R-dense 100 \
+  --build-L 64 \
+  --build-PQ-bytes 16 \
+  --build-mem-gb 1 \
+  --build-threads "${THREADS}" \
   --foreground-rounds 4 \
   --selector-manifest "${WORK_DIR}/labels/selector_manifest.csv" \
   --gt-dir "${WORK_DIR}/gt" \
@@ -129,22 +144,34 @@ done
   --checkpoint-enabled 0 \
   --out-jsonl "${RESULTS_DIR}/dynamic_foreground_chain.jsonl" \
   --out-foreground-jsonl "${RESULTS_DIR}/dynamic_foreground_latency.jsonl" \
+  --out-zero-jsonl "${RESULTS_DIR}/zero_start_exact.jsonl" \
   --out-progress-jsonl "${RESULTS_DIR}/dynamic_foreground_progress.jsonl" \
   --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_foreground_checkpoint_search.jsonl"
 
 "${OH_BIN_DIR}/oh_dynamic_chain" \
   --type float \
-  --index-prefix "${INDEX_PREFIX}" \
+  --index-prefix "${DYNAMIC_BATCH_INDEX_PREFIX}" \
+  --base "${WORK_DIR}/data/base.bin" \
   --updates "${WORK_DIR}/data/updates.bin" \
   --query "${WORK_DIR}/data/query.bin" \
   --label-config null \
-  --label-index "${INDEX_PREFIX}.label.0" \
-  --range-index "${INDEX_PREFIX}.label.1" \
+  --label-index "${DYNAMIC_BATCH_INDEX_PREFIX}.label.0" \
+  --range-index "${DYNAMIC_BATCH_INDEX_PREFIX}.label.1" \
   --npoints 2000 \
   --cycles 2 \
   --insert-threads "${SMOKE_BATCH_UPDATE_THREADS}" \
   --search-threads "${SEARCH_THREADS}" \
   --merge-threads "${SMOKE_BATCH_UPDATE_THREADS}" \
+  --start-from-zero 1 \
+  --bootstrap-npoints "${SMOKE_BOOTSTRAP_NPOINTS}" \
+  --zero-work-dir "${WORK_DIR}/zero_start_batch" \
+  --build-binary "${TEST_BIN_DIR}/build_disk_index_filtered" \
+  --build-R 32 \
+  --build-R-dense 100 \
+  --build-L 64 \
+  --build-PQ-bytes 16 \
+  --build-mem-gb 1 \
+  --build-threads "${THREADS}" \
   --foreground-rounds 4 \
   --selector-manifest "${WORK_DIR}/labels/selector_manifest.csv" \
   --gt-dir "${WORK_DIR}/gt" \
@@ -154,6 +181,7 @@ done
   --checkpoint-mode static \
   --out-jsonl "${RESULTS_DIR}/dynamic_batch_chain.jsonl" \
   --out-foreground-jsonl "${RESULTS_DIR}/dynamic_batch_foreground_latency.jsonl" \
+  --out-zero-jsonl "${RESULTS_DIR}/zero_start_exact.jsonl" \
   --out-progress-jsonl "${RESULTS_DIR}/dynamic_batch_progress.jsonl" \
   --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_batch_checkpoint_search.jsonl"
 

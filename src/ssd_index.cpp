@@ -285,15 +285,52 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::load_tags(const std::string &tag_file_name, size_t offset) {
-    size_t tag_num, tag_dim;
-    std::vector<TagT> tag_v;
-    this->tags.clear();
+    size_t tag_num = 0, tag_dim = 0;
+    this->tags = libcuckoo::cuckoohash_map<uint32_t, TagT>(0);
 
     if (!file_exists(tag_file_name)) {
       LOG(INFO) << "Tags file not found. Using equal mapping";
       // Equal mapping are by default eliminated in tags map.
     } else {
       LOG(INFO) << "Load tags from existing file: " << tag_file_name;
+      std::ifstream reader(tag_file_name, std::ios::binary);
+      int npts_i32 = 0, dim_i32 = 0;
+      reader.seekg(offset, reader.beg);
+      reader.read((char *) &npts_i32, sizeof(int));
+      reader.read((char *) &dim_i32, sizeof(int));
+      if (!reader || npts_i32 < 0 || dim_i32 <= 0) {
+        LOG(ERROR) << "Invalid tag file header: " << tag_file_name;
+        crash();
+      }
+      tag_num = (unsigned) npts_i32;
+      tag_dim = (unsigned) dim_i32;
+
+      bool all_identity_tags = tag_dim == 1;
+      constexpr size_t kTagScanBlock = 1 << 16;
+      std::vector<TagT> tag_block(kTagScanBlock);
+      size_t next_id = 0;
+      while (all_identity_tags && next_id < tag_num) {
+        size_t block = std::min(kTagScanBlock, tag_num - next_id);
+        reader.read((char *) tag_block.data(), block * sizeof(TagT));
+        if (!reader) {
+          LOG(ERROR) << "Failed to read tag block from: " << tag_file_name;
+          crash();
+        }
+        for (size_t j = 0; j < block; ++j) {
+          if (tag_block[j] != static_cast<TagT>(next_id + j)) {
+            all_identity_tags = false;
+            break;
+          }
+        }
+        next_id += block;
+      }
+
+      if (all_identity_tags) {
+        LOG(INFO) << "All " << tag_num << " tags are identity mapping; skipped tag vector materialization.";
+        return;
+      }
+
+      std::vector<TagT> tag_v;
       pipeann::load_bin<TagT>(tag_file_name, tag_v, tag_num, tag_dim, offset);
 
       uint64_t non_identity_tags = 0;

@@ -37,6 +37,9 @@ SEARCH_L=${SEARCH_L:-100}
 L_CANDIDATES=${L_CANDIDATES:-20,40,60,80,100,150,200,300,400,600,800}
 K=${K:-10}
 INDEX_PREFIX=${INDEX_PREFIX:-"${WORK_DIR}/index/sift1m"}
+ZERO_BOOTSTRAP_NPOINTS=${ZERO_BOOTSTRAP_NPOINTS:-10000}
+DYNAMIC_FG_INDEX_PREFIX=${DYNAMIC_FG_INDEX_PREFIX:-"${WORK_DIR}/dynamic_foreground_index/sift1m"}
+DYNAMIC_BATCH_INDEX_PREFIX=${DYNAMIC_BATCH_INDEX_PREFIX:-"${WORK_DIR}/dynamic_batch_index/sift1m"}
 
 safe_reset_dir() {
   local dir="$1"
@@ -63,6 +66,7 @@ safe_reset_dir "${WORK_DIR}"
 safe_reset_dir "${RESULTS_DIR}"
 mkdir -p "${WORK_DIR}/gt" "${RESULTS_DIR}"
 mkdir -p "$(dirname "${INDEX_PREFIX}")"
+mkdir -p "$(dirname "${DYNAMIC_FG_INDEX_PREFIX}")" "$(dirname "${DYNAMIC_BATCH_INDEX_PREFIX}")"
 
 : "${PIPEANN_ATTR_TIMING_PATH:=${RESULTS_DIR}/attr_timing.csv}"
 export PIPEANN_ATTR_TIMING_PATH
@@ -214,17 +218,29 @@ echo "Running foreground interference test: cycles=${FOREGROUND_CYCLES} update_t
 "${OH_BIN_DIR}/oh_dynamic_chain" \
   --type "${TYPE}" \
   --metric "${METRIC}" \
-  --index-prefix "${INDEX_PREFIX}" \
+  --index-prefix "${DYNAMIC_FG_INDEX_PREFIX}" \
+  --base "${BASE_BIN}" \
   --updates "${UPDATES_BIN}" \
   --query "${QUERY_ACTIVE}" \
   --label-config "${FOREGROUND_CONFIG}" \
-  --label-index "${INDEX_PREFIX}.label.0" \
-  --range-index "${INDEX_PREFIX}.label.1" \
+  --label-index "${DYNAMIC_FG_INDEX_PREFIX}.label.0" \
+  --range-index "${DYNAMIC_FG_INDEX_PREFIX}.label.1" \
   --npoints "${NPOINTS}" \
   --cycles "${FOREGROUND_CYCLES}" \
   --insert-threads "${FOREGROUND_UPDATE_THREADS}" \
   --search-threads "${SEARCH_THREADS}" \
   --merge-threads "${FOREGROUND_UPDATE_THREADS}" \
+  --start-from-zero 1 \
+  --bootstrap-npoints "${ZERO_BOOTSTRAP_NPOINTS}" \
+  --zero-work-dir "${WORK_DIR}/zero_start_foreground" \
+  --zero-probe-selector-id "${FOREGROUND_SELECTOR_ID}" \
+  --build-binary "${TEST_BIN_DIR}/build_disk_index_filtered" \
+  --build-R "${R}" \
+  --build-R-dense "${R_DENSE}" \
+  --build-L "${BUILD_L}" \
+  --build-PQ-bytes "${PQ_BYTES}" \
+  --build-mem-gb "${MEM_GB}" \
+  --build-threads "${THREADS}" \
   --L "${FOREGROUND_L}" \
   --L-candidates "${L_CANDIDATES}" \
   --recall-min "${RECALL_MIN:-98.0}" \
@@ -234,6 +250,7 @@ echo "Running foreground interference test: cycles=${FOREGROUND_CYCLES} update_t
   --checkpoint-enabled 0 \
   --out-jsonl "${RESULTS_DIR}/dynamic_foreground_chain.jsonl" \
   --out-foreground-jsonl "${RESULTS_DIR}/dynamic_foreground_latency.jsonl" \
+  --out-zero-jsonl "${RESULTS_DIR}/zero_start_exact.jsonl" \
   --out-progress-jsonl "${RESULTS_DIR}/dynamic_foreground_progress.jsonl" \
   --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_foreground_checkpoint_search.jsonl"
 
@@ -241,17 +258,28 @@ echo "Running batch dynamic quality test: cycles=${BATCH_CYCLES} update_threads=
 "${OH_BIN_DIR}/oh_dynamic_chain" \
   --type "${TYPE}" \
   --metric "${METRIC}" \
-  --index-prefix "${INDEX_PREFIX}" \
+  --index-prefix "${DYNAMIC_BATCH_INDEX_PREFIX}" \
+  --base "${BASE_BIN}" \
   --updates "${UPDATES_BIN}" \
   --query "${QUERY_ACTIVE}" \
   --label-config null \
-  --label-index "${INDEX_PREFIX}.label.0" \
-  --range-index "${INDEX_PREFIX}.label.1" \
+  --label-index "${DYNAMIC_BATCH_INDEX_PREFIX}.label.0" \
+  --range-index "${DYNAMIC_BATCH_INDEX_PREFIX}.label.1" \
   --npoints "${NPOINTS}" \
   --cycles "${BATCH_CYCLES}" \
   --insert-threads "${BATCH_UPDATE_THREADS}" \
   --search-threads "${SEARCH_THREADS}" \
   --merge-threads "${BATCH_UPDATE_THREADS}" \
+  --start-from-zero 1 \
+  --bootstrap-npoints "${ZERO_BOOTSTRAP_NPOINTS}" \
+  --zero-work-dir "${WORK_DIR}/zero_start_batch" \
+  --build-binary "${TEST_BIN_DIR}/build_disk_index_filtered" \
+  --build-R "${R}" \
+  --build-R-dense "${R_DENSE}" \
+  --build-L "${BUILD_L}" \
+  --build-PQ-bytes "${PQ_BYTES}" \
+  --build-mem-gb "${MEM_GB}" \
+  --build-threads "${THREADS}" \
   --L "${SEARCH_L}" \
   --L-candidates "${L_CANDIDATES}" \
   --recall-min "${RECALL_MIN:-98.0}" \
@@ -263,6 +291,7 @@ echo "Running batch dynamic quality test: cycles=${BATCH_CYCLES} update_threads=
   --checkpoint-mode static \
   --out-jsonl "${RESULTS_DIR}/dynamic_batch_chain.jsonl" \
   --out-foreground-jsonl "${RESULTS_DIR}/dynamic_batch_foreground_latency.jsonl" \
+  --out-zero-jsonl "${RESULTS_DIR}/zero_start_exact.jsonl" \
   --out-progress-jsonl "${RESULTS_DIR}/dynamic_batch_progress.jsonl" \
   --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_batch_checkpoint_search.jsonl"
 

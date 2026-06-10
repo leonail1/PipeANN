@@ -10,14 +10,26 @@ background update threads are configured separately.
 ## Dynamic Tests
 
 Dynamic update acceptance is split into two independent tests.
+Both dynamic tests start from zero live vectors. The runner keeps the first
+`ZERO_BOOTSTRAP_NPOINTS` vectors in a ZeroStart in-memory phase, where filtered
+queries use prefilter plus exact KNN semantics. At the bootstrap threshold it
+writes PipeANN-compatible vectors and attributes, builds the initial disk index,
+then inserts the remaining base vectors through PipeANN's native dynamic insert
+path. After that point, delete, merge/save, insert, and search all use PipeANN
+native APIs; the runner does not do lazy rebuild or maintain a second index.
 
 1. Foreground interference test
-   - Runs one cycle: delete 60% live vectors, merge, then insert new vectors.
+   - Starts from zero, bootstraps at `ZERO_BOOTSTRAP_NPOINTS`, inserts to the
+     target live count, then runs one cycle: delete 60% live vectors, merge,
+     then insert new vectors.
    - Uses `FOREGROUND_UPDATE_THREADS=4` by default.
    - Runs foreground filtered search during delete/merge/insert.
    - Pass condition: foreground search average latency stays below 10 ms.
 
 2. Batch quality test
+   - Starts from zero independently from the foreground test, bootstraps at
+     `ZERO_BOOTSTRAP_NPOINTS`, and inserts to the target live count before the
+     5-cycle chain starts.
    - Runs five cycles by default.
    - Uses `BATCH_UPDATE_THREADS=32` by default.
    - Does not run foreground search during update.
@@ -31,8 +43,19 @@ The two tests produce separate artifacts:
 - `dynamic_foreground_chain.jsonl`
 - `dynamic_foreground_latency.jsonl`
 - `dynamic_foreground_progress.jsonl`
+- `zero_start_exact.jsonl`
 - `dynamic_batch_chain.jsonl`
 - `dynamic_batch_checkpoint_search.jsonl`
 - `dynamic_batch_progress.jsonl`
 
 `acceptance_summary.json` checks that both dynamic tests actually ran.
+
+Tag reuse follows PipeANN's native delete semantics: a tag deleted by
+`lazy_delete/remove` cannot be reinserted until `save()/merge_deletes()` has
+completed. The dynamic tests therefore use `delete -> save/merge -> insert same
+tag range` for every cycle.
+
+This suite intentionally does not perform PQ retraining. In a zero-start run the
+initial PQ codebook is trained at the bootstrap threshold, so later PQ drift is
+reported as an experimental risk rather than hidden by rebuilding the graph,
+disk node layout, or attribute index.
