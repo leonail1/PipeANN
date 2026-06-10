@@ -266,14 +266,79 @@ echo "Running batch dynamic quality test: cycles=${BATCH_CYCLES} update_threads=
   --out-progress-jsonl "${RESULTS_DIR}/dynamic_batch_progress.jsonl" \
   --out-checkpoint-jsonl "${RESULTS_DIR}/dynamic_batch_checkpoint_search.jsonl"
 
+SINGLE_QUERY_SELECTOR_ID=${SINGLE_QUERY_SELECTOR_ID:-range_s10}
+SINGLE_QUERY_INFO=$(python3 - "${RESULTS_DIR}/static_filtered.jsonl" "${WORK_DIR}/labels/selector_manifest.csv" "${SINGLE_QUERY_SELECTOR_ID}" "${SEARCH_L}" <<'PYSINGLEINFO'
+import csv
+import json
+import sys
+
+static_path, manifest_path, selector_id, fallback = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+selected_l = fallback
+selected_row = None
+with open(static_path, encoding="utf-8") as reader:
+    for line in reader:
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("selector_id") == selector_id:
+            selected_row = row
+            selected_l = str(int(row.get("selected_L", row.get("L", fallback))))
+            break
+if selected_row is None:
+    raise SystemExit(f"selector {selector_id} not found in {static_path}")
+manifest = {}
+with open(manifest_path, newline="", encoding="utf-8") as reader:
+    for row in csv.DictReader(reader):
+        manifest[row["selector_id"]] = row
+if selector_id not in manifest:
+    raise SystemExit(f"selector {selector_id} not found in {manifest_path}")
+label_config = manifest[selector_id].get("label_config") or "null"
+print("\t".join([
+    selector_id,
+    selected_l,
+    label_config,
+    str(selected_row.get("recall_at_10", "")),
+    str(selected_row.get("avg_latency_ms", "")),
+    str(selected_row.get("p99_latency_ms", "")),
+]))
+PYSINGLEINFO
+)
+IFS=$'\t' read -r SINGLE_QUERY_SELECTOR_ID SINGLE_QUERY_L SINGLE_QUERY_LABEL_CONFIG SINGLE_QUERY_STATIC_RECALL SINGLE_QUERY_STATIC_AVG SINGLE_QUERY_STATIC_P99 <<< "${SINGLE_QUERY_INFO}"
+if [[ "${SINGLE_QUERY_LABEL_CONFIG}" != "null" && ! -s "${SINGLE_QUERY_LABEL_CONFIG}" ]]; then
+  echo "Single-query selector config not found: ${SINGLE_QUERY_LABEL_CONFIG}" >&2
+  exit 1
+fi
+python3 - "${SINGLE_QUERY_SELECTOR_ID}" "${SINGLE_QUERY_L}" "${SINGLE_QUERY_LABEL_CONFIG}" "${SINGLE_QUERY_STATIC_RECALL}" "${SINGLE_QUERY_STATIC_AVG}" "${SINGLE_QUERY_STATIC_P99}" "${RESULTS_DIR}/single_query_config.json" <<'PYSINGLECFG'
+import json
+import sys
+
+selector_id, selected_l, label_config, recall, avg, p99, out_path = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7]
+payload = {
+    "selector_id": selector_id,
+    "selected_L": selected_l,
+    "label_config": label_config,
+    "source": "static_filtered_selected_L",
+}
+for key, value in {
+    "static_recall_at_10": recall,
+    "static_avg_latency_ms": avg,
+    "static_p99_latency_ms": p99,
+}.items():
+    if value != "":
+        payload[key] = float(value)
+with open(out_path, "w", encoding="utf-8") as writer:
+    json.dump(payload, writer, indent=2)
+    writer.write("\n")
+PYSINGLECFG
+echo "Running single-query resource test: selector=${SINGLE_QUERY_SELECTOR_ID} L=${SINGLE_QUERY_L} source=static_filtered_selected_L"
 /usr/bin/time -v "${OH_BIN_DIR}/oh_single_query" \
   --type "${TYPE}" \
   --metric "${METRIC}" \
   --index-prefix "${INDEX_PREFIX}" \
   --query "${QUERY_ACTIVE}" \
-  --label-config "${WORK_DIR}/labels/range_s10.json" \
-  --selector-id range_s10 \
-  --L "${SEARCH_L}" \
+  --label-config "${SINGLE_QUERY_LABEL_CONFIG}" \
+  --selector-id "${SINGLE_QUERY_SELECTOR_ID}" \
+  --L "${SINGLE_QUERY_L}" \
   --k "${K}" \
   --out-jsonl "${RESULTS_DIR}/single_query_resource.jsonl" \
   2> "${RESULTS_DIR}/single_query_time.txt"

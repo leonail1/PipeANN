@@ -11,6 +11,14 @@
 #include "utils/tsl/robin_map.h"
 #include "utils/kmeans_utils.h"
 #include "utils/cached_io.h"
+#include <array>
+#include <cstdlib>
+#include <cstring>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unordered_map>
+#include <unistd.h>
 
 namespace pipeann {
   template<typename T>
@@ -19,6 +27,10 @@ namespace pipeann {
 
    public:
     PQNeighbor(pipeann::Metric metric) : AbstractNeighbor<T>(metric), pq_table(metric) {
+    }
+
+    ~PQNeighbor() override {
+      release_mmap();
     }
 
     // max size of context needed for a single query.
@@ -38,10 +50,17 @@ namespace pipeann {
       abs_nbr_handler = pq_nbr_handler;
 
       pq_nbr_handler->data.resize(new_npoints * this->pq_table.n_chunks);
+      std::vector<uint8_t> src_materialized;
+      const uint8_t *src_data = this->codes();
+      if (src_data == nullptr) {
+        src_materialized.resize(this->npoints * this->pq_table.n_chunks);
+        read_codes(0, src_materialized.size(), src_materialized.data());
+        src_data = src_materialized.data();
+      }
 #pragma omp parallel for num_threads(nthreads)
       for (uint64_t i = 0; i < new_npoints; ++i) {
         memcpy(pq_nbr_handler->data.data() + i * this->pq_table.n_chunks,
-               this->data.data() + rev_id_map.find(i) * this->pq_table.n_chunks, this->pq_table.n_chunks);
+               src_data + rev_id_map.find(i) * this->pq_table.n_chunks, this->pq_table.n_chunks);
       }
       pq_nbr_handler->pq_table = std::move(this->pq_table);
       pq_nbr_handler->npoints = new_npoints;
@@ -57,20 +76,30 @@ namespace pipeann {
     // output to query_buf->aligned_dist_scratch
     void compute_dists(QueryBuffer *query_buf, const uint32_t *ids, const uint64_t n_ids) {
       pq_mu.lock_shared();
-      aggregate_coords(ids, n_ids, this->data.data(), pq_table.n_chunks, query_buf->nbr_vec_scratch);
+      aggregate_coords_for_ids(ids, n_ids, query_buf->nbr_vec_scratch);
       pq_dist_lookup(query_buf->nbr_vec_scratch, n_ids, pq_table.n_chunks, query_buf->nbr_ctx_scratch,
                      query_buf->aligned_dist_scratch);
+      release_mmap_resident_pages();
       pq_mu.unlock_shared();
     }
 
     void compute_dists(const uint32_t query_id, const uint32_t *ids, const uint64_t n_ids, float *dists_out,
                        uint8_t *aligned_scratch) {
       pq_mu.lock_shared();
-      const uint8_t *src_ptr = this->data.data() + (pq_table.n_chunks * query_id);
+      std::vector<uint8_t> src_code;
+      const uint8_t *src_ptr = nullptr;
+      if (this->codes() != nullptr) {
+        src_ptr = this->codes() + (pq_table.n_chunks * query_id);
+      } else {
+        src_code.resize(pq_table.n_chunks);
+        read_code(query_id, src_code.data());
+        src_ptr = src_code.data();
+      }
       // aggregate PQ coords into scratch
-      aggregate_coords(ids, n_ids, this->data.data(), pq_table.n_chunks, aligned_scratch);
+      aggregate_coords_for_ids(ids, n_ids, aligned_scratch);
       // compute distances
       this->pq_table.compute_distances_alltoall(src_ptr, aligned_scratch, dists_out, n_ids);
+      release_mmap_resident_pages();
       pq_mu.unlock_shared();
     }
 
@@ -85,11 +114,19 @@ namespace pipeann {
 
       LOG(INFO) << "PQ Pivots offset: " << pq_pivots_offset << " PQ Vectors offset: " << pq_vectors_offset;
 
-      size_t npts_u64, nchunks_u64;
-      pipeann::load_bin<uint8_t>(pq_compressed_vectors, data, npts_u64, nchunks_u64, pq_vectors_offset);
+      size_t npts_u64 = 0, nchunks_u64 = 0;
+      release_mmap();
+      if (pq_stream_enabled()) {
+        load_codes_stream(pq_compressed_vectors, npts_u64, nchunks_u64);
+      } else if (pq_mmap_enabled()) {
+        load_codes_mmap(pq_compressed_vectors, npts_u64, nchunks_u64);
+      } else {
+        pipeann::load_bin<uint8_t>(pq_compressed_vectors, data, npts_u64, nchunks_u64, pq_vectors_offset);
+      }
 
       LOG(INFO) << "Load compressed vectors from file: " << pq_compressed_vectors << " offset: " << pq_vectors_offset
-                << " num points: " << npts_u64 << " n_chunks: " << nchunks_u64;
+                << " num points: " << npts_u64 << " n_chunks: " << nchunks_u64
+                << " mmap: " << (mmap_codes_ != nullptr) << " stream: " << (stream_fd_ >= 0);
 
       pq_table.load_pq_centroid_bin(pq_table_bin.c_str(), nchunks_u64, pq_pivots_offset);
       this->npoints = npts_u64;
@@ -99,7 +136,10 @@ namespace pipeann {
       // write PQ pivots.
       std::string pq_out = std::string(index_prefix) + "_pq_compressed.bin";
       std::string pq_pivot_out = std::string(index_prefix) + "_pq_pivots.bin";
-      pipeann::save_bin<uint8_t>(pq_out, this->data.data(), this->npoints, pq_table.n_chunks);
+      pq_mu.lock();
+      materialize_codes_unlocked();
+      pipeann::save_bin<uint8_t>(pq_out, data.data(), this->npoints, pq_table.n_chunks);
+      pq_mu.unlock();
       pq_table.save_pq_pivots(pq_pivot_out.c_str());
     }
 
@@ -151,6 +191,7 @@ namespace pipeann {
       uint64_t pq_offset = loc * pq_table.n_chunks;
       {
         pq_mu.lock();
+        materialize_codes_unlocked();
         if (this->data.size() < pq_offset + pq_table.n_chunks) {
           this->data.resize(1.5 * (pq_offset + pq_table.n_chunks));
         }
@@ -168,7 +209,237 @@ namespace pipeann {
     // pq_tables = float* [[2^8 * [chunk_size]] * pq_table.n_chunks]
     pipeann::ReaderOptSharedMutex pq_mu;
     std::vector<uint8_t> data;
+    int mmap_fd_ = -1;
+    int stream_fd_ = -1;
+    uint8_t *mmap_base_ = nullptr;
+    const uint8_t *mmap_codes_ = nullptr;
+    size_t mmap_bytes_ = 0;
+    uint64_t stream_generation_ = 0;
     FixedChunkPQTable<T> pq_table;
+
+    bool pq_mmap_enabled() const {
+      const char *env = std::getenv("PIPEANN_PQ_MMAP_LOAD");
+      return env != nullptr && *env != '\0' && std::strcmp(env, "0") != 0 && std::strcmp(env, "false") != 0 &&
+             std::strcmp(env, "FALSE") != 0;
+    }
+
+    bool pq_stream_enabled() const {
+      const char *env = std::getenv("PIPEANN_PQ_STREAM_LOAD");
+      return env != nullptr && *env != '\0' && std::strcmp(env, "0") != 0 && std::strcmp(env, "false") != 0 &&
+             std::strcmp(env, "FALSE") != 0;
+    }
+
+    const uint8_t *codes() const {
+      if (!data.empty()) {
+        return data.data();
+      }
+      return mmap_codes_;
+    }
+
+    void release_mmap() {
+      if (mmap_base_ != nullptr) {
+        munmap(mmap_base_, mmap_bytes_);
+        mmap_base_ = nullptr;
+        mmap_codes_ = nullptr;
+        mmap_bytes_ = 0;
+      }
+      if (mmap_fd_ >= 0) {
+        close(mmap_fd_);
+        mmap_fd_ = -1;
+      }
+      if (stream_fd_ >= 0) {
+        close(stream_fd_);
+        stream_fd_ = -1;
+        stream_generation_++;
+      }
+    }
+
+    void release_mmap_resident_pages() const {
+      if (mmap_base_ != nullptr) {
+        const uint64_t interval = mmap_dontneed_interval();
+        if (interval == 0) {
+          return;
+        }
+        static thread_local uint64_t calls = 0;
+        calls++;
+        if (calls % interval == 0) {
+          madvise(mmap_base_, mmap_bytes_, MADV_DONTNEED);
+        }
+      }
+    }
+
+    uint64_t mmap_dontneed_interval() const {
+      const char *env = std::getenv("PIPEANN_PQ_MMAP_DONTNEED_EVERY");
+      if (env == nullptr || *env == '\0') {
+        return 0;
+      }
+      char *end = nullptr;
+      uint64_t value = std::strtoull(env, &end, 10);
+      return (end == env || *end != '\0') ? 0 : value;
+    }
+
+    void load_codes_mmap(const std::string &path, size_t &npts_u64, size_t &nchunks_u64) {
+      mmap_fd_ = open(path.c_str(), O_RDONLY);
+      if (mmap_fd_ < 0) {
+        LOG(ERROR) << "Failed to open PQ compressed file for mmap: " << path;
+        crash();
+      }
+      struct stat st {};
+      if (fstat(mmap_fd_, &st) != 0 || st.st_size < 8) {
+        LOG(ERROR) << "Invalid PQ compressed file for mmap: " << path;
+        crash();
+      }
+      mmap_bytes_ = static_cast<size_t>(st.st_size);
+      void *mapped = mmap(nullptr, mmap_bytes_, PROT_READ, MAP_PRIVATE, mmap_fd_, 0);
+      if (mapped == MAP_FAILED) {
+        LOG(ERROR) << "Failed to mmap PQ compressed file: " << path;
+        crash();
+      }
+      madvise(mapped, mmap_bytes_, MADV_RANDOM);
+      mmap_base_ = static_cast<uint8_t *>(mapped);
+      uint32_t npts = 0, nchunks = 0;
+      memcpy(&npts, mmap_base_, sizeof(uint32_t));
+      memcpy(&nchunks, mmap_base_ + sizeof(uint32_t), sizeof(uint32_t));
+      npts_u64 = npts;
+      nchunks_u64 = nchunks;
+      const size_t expected_bytes = 2 * sizeof(uint32_t) + npts_u64 * nchunks_u64;
+      if (expected_bytes > mmap_bytes_) {
+        LOG(ERROR) << "PQ compressed mmap size mismatch: expected " << expected_bytes << " got " << mmap_bytes_;
+        crash();
+      }
+      mmap_codes_ = mmap_base_ + 2 * sizeof(uint32_t);
+      data.clear();
+      data.shrink_to_fit();
+    }
+
+    void load_codes_stream(const std::string &path, size_t &npts_u64, size_t &nchunks_u64) {
+      stream_fd_ = open(path.c_str(), O_RDONLY);
+      if (stream_fd_ < 0) {
+        LOG(ERROR) << "Failed to open PQ compressed file for streaming: " << path;
+        crash();
+      }
+      stream_generation_++;
+      uint32_t header[2] = {0, 0};
+      if (pread(stream_fd_, header, sizeof(header), 0) != (ssize_t) sizeof(header)) {
+        LOG(ERROR) << "Failed to read PQ compressed header: " << path;
+        crash();
+      }
+      npts_u64 = header[0];
+      nchunks_u64 = header[1];
+      data.clear();
+      data.shrink_to_fit();
+    }
+
+    void materialize_codes_unlocked() {
+      if (!data.empty()) {
+        return;
+      }
+      data.resize(this->npoints * pq_table.n_chunks);
+      if (mmap_codes_ != nullptr) {
+        memcpy(data.data(), mmap_codes_, data.size());
+      } else if (stream_fd_ >= 0) {
+        read_codes(0, data.size(), data.data());
+      } else {
+        LOG(ERROR) << "No PQ codes available to materialize.";
+        crash();
+      }
+      release_mmap();
+    }
+
+    void read_codes(uint64_t byte_offset, uint64_t n_bytes, uint8_t *out) const {
+      uint64_t done = 0;
+      const uint64_t file_offset = 2 * sizeof(uint32_t) + byte_offset;
+      while (done < n_bytes) {
+        ssize_t got = pread(stream_fd_, out + done, n_bytes - done, file_offset + done);
+        if (got <= 0) {
+          LOG(ERROR) << "Failed to stream PQ codes at byte offset " << (file_offset + done);
+          crash();
+        }
+        done += (uint64_t) got;
+      }
+    }
+
+    void read_code(uint32_t id, uint8_t *out) const {
+      if (stream_fd_ < 0) {
+        LOG(ERROR) << "PQ stream fd is not open.";
+        crash();
+      }
+      const uint64_t file_offset = 2 * sizeof(uint32_t) + (uint64_t) id * pq_table.n_chunks;
+      const uint64_t page = file_offset / SECTOR_LEN;
+      const uint64_t page_off = file_offset % SECTOR_LEN;
+      const uint8_t *page_data = stream_page(page);
+      if (page_off + pq_table.n_chunks <= SECTOR_LEN) {
+        memcpy(out, page_data + page_off, pq_table.n_chunks);
+        return;
+      }
+      const uint64_t first = SECTOR_LEN - page_off;
+      memcpy(out, page_data + page_off, first);
+      const uint8_t *next_page = stream_page(page + 1);
+      memcpy(out + first, next_page, pq_table.n_chunks - first);
+    }
+
+    void aggregate_coords_for_ids(const unsigned *ids, const uint64_t n_ids, uint8_t *out) {
+      if (this->codes() != nullptr) {
+        aggregate_coords(ids, n_ids, this->codes(), pq_table.n_chunks, out);
+        return;
+      }
+      for (uint64_t i = 0; i < n_ids; i++) {
+        read_code(ids[i], out + i * pq_table.n_chunks);
+      }
+    }
+
+    struct StreamPageCache {
+      int fd = -1;
+      uint64_t generation = 0;
+      std::unordered_map<uint64_t, size_t> page_to_slot;
+      std::vector<std::array<uint8_t, SECTOR_LEN>> pages;
+
+      void reset_if_needed(int new_fd, uint64_t new_generation) {
+        if (fd == new_fd && generation == new_generation) {
+          return;
+        }
+        fd = new_fd;
+        generation = new_generation;
+        page_to_slot.clear();
+        pages.clear();
+      }
+    };
+
+    uint64_t stream_cache_max_pages() const {
+      const char *env = std::getenv("PIPEANN_PQ_STREAM_CACHE_PAGES");
+      if (env == nullptr || *env == '\0') {
+        return 1024;
+      }
+      char *end = nullptr;
+      uint64_t value = std::strtoull(env, &end, 10);
+      return (end == env || *end != '\0' || value == 0) ? 1024 : value;
+    }
+
+    const uint8_t *stream_page(uint64_t page) const {
+      static thread_local StreamPageCache cache;
+      cache.reset_if_needed(stream_fd_, stream_generation_);
+      auto found = cache.page_to_slot.find(page);
+      if (found != cache.page_to_slot.end()) {
+        return cache.pages[found->second].data();
+      }
+      const uint64_t max_pages = stream_cache_max_pages();
+      if (cache.pages.size() >= max_pages) {
+        cache.page_to_slot.clear();
+        cache.pages.clear();
+      }
+      size_t slot = cache.pages.size();
+      cache.pages.emplace_back();
+      ssize_t got = pread(stream_fd_, cache.pages.back().data(), SECTOR_LEN, page * SECTOR_LEN);
+      if (got <= 0) {
+        LOG(ERROR) << "Failed to read PQ stream page " << page;
+        crash();
+      }
+      if (got < (ssize_t) SECTOR_LEN) {
+        memset(cache.pages.back().data() + got, 0, SECTOR_LEN - got);
+      }
+      cache.page_to_slot[page] = slot;
+      return cache.pages[slot].data();
+    }
 
     inline void aggregate_coords(const unsigned *ids, const uint64_t n_ids, const uint8_t *all_coords,
                                  const uint64_t ndims, uint8_t *out) {

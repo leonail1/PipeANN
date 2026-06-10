@@ -273,6 +273,7 @@ namespace pipeann {
     // ElseIf nnodes_per_sector == 0, page_layout[i] is the id of the i-th node (starting from loc_sector_no(i)).
     std::vector<uint32_t> loc2id_;
     pipeann::ReaderOptSharedMutex loc2id_resize_mu_;
+    bool equal_mapping_without_tables_ = false;
     std::mutex alloc_lock;
     ConcurrentQueue<uint32_t> empty_pages = ConcurrentQueue<uint32_t>(kInvalidID);
 
@@ -289,7 +290,7 @@ namespace pipeann {
 
     // Load id2loc and loc2id (i.e., page_layout), to support index reordering.
     void load_page_layout(const std::string &index_prefix, const uint64_t nnodes_per_sector = 0,
-                          const uint64_t num_points = 0);
+                          const uint64_t num_points = 0, bool materialize_equal_mapping = true);
 
     void load_tags(const std::string &tag_file, size_t offset = 0);
 

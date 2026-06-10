@@ -16,6 +16,7 @@ oh_add_acceptance_exe(oh_materialize_cycle_vectors src/oh_materialize_cycle_vect
 oh_add_acceptance_exe(oh_static_filtered src/oh_static_filtered.cpp)
 oh_add_acceptance_exe(oh_dynamic_chain src/oh_dynamic_chain.cpp)
 oh_add_acceptance_exe(oh_single_query src/oh_single_query.cpp)
+oh_add_acceptance_exe(oh_rebuild_pq src/oh_rebuild_pq.cpp)
 oh_add_acceptance_exe(oh_summarize_results src/oh_summarize_results.cpp)
 
 add_executable(oh_build_space src/oh_build_space.cpp)

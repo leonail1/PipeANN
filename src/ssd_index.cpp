@@ -57,7 +57,7 @@ namespace pipeann {
   template<typename T, typename TagT>
   SSDIndex<T, TagT>::SSDIndex(pipeann::Metric m, std::shared_ptr<AlignedFileReader> &file_reader,
                               AbstractNeighbor<T> *nbr_handler, bool tags, IndexBuildParameters *parameters)
-      : reader(file_reader), nbr_handler(nbr_handler), metric(m), enable_tags(tags) {
+      : reader(file_reader), nbr_handler(nbr_handler), metric(m), tags(0), enable_tags(tags) {
     this->dist_cmp.reset(pipeann::get_distance_function<T>(m));
 
     if (parameters != nullptr) {
@@ -189,7 +189,7 @@ namespace pipeann {
     this->init_buffers(params.max_nthreads);
 
     // load page layout.
-    this->load_page_layout(index_prefix, meta_.nnodes_per_sector, meta_.npoints);
+    this->load_page_layout(index_prefix, meta_.nnodes_per_sector, meta_.npoints, enable_writes);
 
     // load tags
     if (this->enable_tags) {
@@ -205,13 +205,16 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::load_page_layout(const std::string &index_prefix, const uint64_t nnodes_per_sector,
-                                           const uint64_t num_points) {
+                                           const uint64_t num_points, bool materialize_equal_mapping) {
     std::string partition_file = index_prefix + "_partition.bin.aligned";
-    id2loc_.resize(num_points);  // pre-allocate space first.
-    loc2id_.resize(cur_loc);     // pre-allocate space first.
+    id2loc_.clear();
+    loc2id_.clear();
+    equal_mapping_without_tables_ = false;
 
     if (file_exists(partition_file)) {
       LOG(INFO) << "Loading partition file " << partition_file;
+      id2loc_.resize(num_points);  // pre-allocate space first.
+      loc2id_.resize(cur_loc);     // pre-allocate space first.
       std::ifstream part(partition_file);
       uint64_t C, partition_nums, nd;
       part.read((char *) &C, sizeof(uint64_t));
@@ -252,6 +255,14 @@ namespace pipeann {
                 << " ms";
     } else {
       LOG(INFO) << partition_file << " does not exist, use equal partition mapping";
+      if (!materialize_equal_mapping) {
+        equal_mapping_without_tables_ = true;
+        LOG(INFO) << "Use compact equal partition mapping without id2loc/loc2id tables.";
+        LOG(INFO) << "Page layout loaded.";
+        return;
+      }
+      id2loc_.resize(num_points);  // pre-allocate space first.
+      loc2id_.resize(cur_loc);     // pre-allocate space first.
 // use equal mapping for id2loc and page_layout.
 #ifndef NO_MAPPING
 #pragma omp parallel for
@@ -279,13 +290,23 @@ namespace pipeann {
     } else {
       LOG(INFO) << "Load tags from existing file: " << tag_file_name;
       pipeann::load_bin<TagT>(tag_file_name, tag_v, tag_num, tag_dim, offset);
-      tags.reserve(tag_v.size());
 
+      uint64_t non_identity_tags = 0;
+#pragma omp parallel for reduction(+ : non_identity_tags)
+      for (size_t i = 0; i < tag_num; ++i) {
+        if (tag_v[i] != static_cast<TagT>(i)) {
+          non_identity_tags++;
+        }
+      }
+      tags.reserve(non_identity_tags);
 #pragma omp parallel for
       for (size_t i = 0; i < tag_num; ++i) {
-        tags.insert_or_assign(i, tag_v[i]);
+        if (tag_v[i] != static_cast<TagT>(i)) {
+          tags.insert_or_assign(i, tag_v[i]);
+        }
       }
-      LOG(INFO) << "Loaded " << tags.size() << " tags";
+      LOG(INFO) << "Loaded " << tags.size() << " non-identity tags, skipped "
+                << (tag_num - non_identity_tags) << " identity tags";
     }
   }
 
@@ -456,6 +477,14 @@ namespace pipeann {
 #ifdef NO_MAPPING
     return id;
 #else
+    if (likely(equal_mapping_without_tables_)) {
+      if (unlikely(id >= meta_.npoints)) {
+        LOG(ERROR) << "id " << id << " is out of range " << meta_.npoints;
+        crash();
+        return kInvalidID;
+      }
+      return id;
+    }
     id2loc_resize_mu_.lock_shared();
     if (unlikely(id >= id2loc_.size())) {
       LOG(ERROR) << "id " << id << " is out of range " << id2loc_.size();
@@ -473,6 +502,10 @@ namespace pipeann {
 #ifdef NO_MAPPING
     return;
 #else
+    if (unlikely(equal_mapping_without_tables_)) {
+      LOG(ERROR) << "Cannot mutate compact equal partition mapping.";
+      crash();
+    }
     if (unlikely(id >= id2loc_.size())) {
       id2loc_resize_mu_.lock();
       if (likely(id >= id2loc_.size())) {
@@ -501,6 +534,15 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   uint32_t SSDIndex<T, TagT>::loc2id(uint32_t loc) {
+    if (likely(equal_mapping_without_tables_)) {
+      const uint64_t cur = cur_loc.load();
+      if (unlikely((uint64_t) loc >= cur)) {
+        LOG(ERROR) << "loc " << loc << " is out of range " << cur;
+        crash();
+        return kInvalidID;
+      }
+      return (uint64_t) loc < meta_.npoints ? loc : kInvalidID;
+    }
     loc2id_resize_mu_.lock_shared();
     if (unlikely(loc > loc2id_.size())) {
       LOG(ERROR) << "loc " << loc << " is out of range " << loc2id_.size();
@@ -514,6 +556,10 @@ namespace pipeann {
 
   template<typename T, typename TagT>
   void SSDIndex<T, TagT>::set_loc2id(uint32_t loc, uint32_t id) {
+    if (unlikely(equal_mapping_without_tables_)) {
+      LOG(ERROR) << "Cannot mutate compact equal partition mapping.";
+      crash();
+    }
     if (unlikely(loc >= loc2id_.size())) {
       loc2id_resize_mu_.lock();
       if (likely(loc >= loc2id_.size())) {
@@ -654,8 +700,19 @@ namespace pipeann {
     PageArr ret;
     auto st = sector_to_loc(page_no, 0);
     auto ed = meta_.nnodes_per_sector == 0 ? st + 1 : st + meta_.nnodes_per_sector;
-    for (uint32_t i = st; i < ed; ++i) {
-      ret.push_back(loc2id_[i]);
+    if (likely(equal_mapping_without_tables_)) {
+      const uint64_t cur = cur_loc.load();
+      for (uint32_t i = st; i < ed; ++i) {
+        if (unlikely((uint64_t) i >= cur)) {
+          LOG(ERROR) << "loc " << i << " is out of range " << cur;
+          crash();
+        }
+        ret.push_back((uint64_t) i < meta_.npoints ? i : kInvalidID);
+      }
+    } else {
+      for (uint32_t i = st; i < ed; ++i) {
+        ret.push_back(loc2id_[i]);
+      }
     }
     loc2id_resize_mu_.unlock_shared();
     return ret;

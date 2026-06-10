@@ -46,6 +46,9 @@ namespace pipeann {
   };
 
   struct PageCache {
+    PageCache() : cache(0) {
+    }
+
     // max file size: SECTOR_LEN * 4GB = 16TB.
     bool get(PageCacheKey key, uint8_t *value, bool ref = false) {
       bool ret = cache.update_fn(key.raw, [&](PageCacheItem &v) {

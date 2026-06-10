@@ -8,6 +8,30 @@
 
 namespace {
 
+uint64_t current_rss_bytes() {
+  std::ifstream status("/proc/self/status");
+  std::string key;
+  while (status >> key) {
+    if (key == "VmRSS:") {
+      uint64_t kb = 0;
+      std::string unit;
+      status >> kb >> unit;
+      return kb * 1024;
+    }
+    status.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  }
+  return 0;
+}
+
+void write_rss_trace(const std::string &path, const std::string &stage) {
+  if (path.empty()) {
+    return;
+  }
+  oh::ensure_parent(path);
+  std::ofstream out(path, std::ios::app);
+  out << "{\"stage\":\"" << oh::json_escape(stage) << "\",\"rss_bytes\":" << current_rss_bytes() << "}\n";
+}
+
 template<typename T>
 int run_single(int argc, char **argv) {
   oh::Args args(argc, argv);
@@ -22,19 +46,25 @@ int run_single(int argc, char **argv) {
   const uint64_t k = args.u64("k", 10);
   const uint64_t l_search = args.u64("L", 100);
   const auto out_jsonl = std::filesystem::path(args.get("out-jsonl", "results/single_query_resource.jsonl"));
+  const std::string rss_trace_path = args.get("rss-trace", "");
 
   if (index_prefix.empty() || query_path.empty()) {
     throw std::runtime_error("--index-prefix and --query are required");
   }
 
+  write_rss_trace(rss_trace_path, "start");
   T *query = nullptr;
   size_t query_num = 0, query_dim = 0;
   pipeann::load_bin<T>(query_path, query, query_num, query_dim);
   if (query_num == 0) {
     throw std::runtime_error("query file is empty");
   }
+  write_rss_trace(rss_trace_path, "after_query_load");
 
   auto metric = pipeann::get_metric(metric_name);
+  setenv("PIPEANN_PQ_STREAM_LOAD", args.get("pq-stream", "0").c_str(), 1);
+  setenv("PIPEANN_PQ_MMAP_LOAD", args.get("pq-mmap", "0").c_str(), 1);
+  setenv("PIPEANN_PQ_MMAP_DONTNEED_EVERY", args.get("pq-mmap-dontneed-every", "0").c_str(), 1);
   std::shared_ptr<AlignedFileReader> reader(new LinuxAlignedFileReader());
   pipeann::AbstractNeighbor<T> *nbr_handler = pipeann::get_nbr_handler<T>(metric, nbr_type);
   pipeann::IndexBuildParameters params;
@@ -43,6 +73,7 @@ int run_single(int argc, char **argv) {
   if (index.load(index_prefix.c_str(), false) != 0) {
     throw std::runtime_error("Failed to load index: " + index_prefix);
   }
+  write_rss_trace(rss_trace_path, "after_index_load");
 
   std::map<uint32_t, pipeann::AttrIndex *> base_stores;
   pipeann::Selector *selector = nullptr;
@@ -53,6 +84,7 @@ int run_single(int argc, char **argv) {
     selector = ret.first;
     query_attrs = std::move(ret.second);
   }
+  write_rss_trace(rss_trace_path, "after_selector_load");
 
   std::vector<uint32_t> result_tags(k);
   std::vector<float> result_dists(k);
@@ -65,6 +97,7 @@ int run_single(int argc, char **argv) {
     index.pipe_search(query, k, mem_l, l_search, result_tags.data(), result_dists.data(), beamwidth, &stats);
   }
   auto t1 = std::chrono::high_resolution_clock::now();
+  write_rss_trace(rss_trace_path, "after_search");
   double wall_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
   double latency_ms = stats.total_us > 0 ? stats.total_us / 1000.0 : wall_ms;
 
