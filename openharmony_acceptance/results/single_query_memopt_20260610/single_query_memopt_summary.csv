@@ -9,5 +9,5 @@ pq32_stream,range_s10,40,19.761,23384,23945216,fail_latency_pass_rss,per-id stre
 pq32_stream_cache1024,range_s10,40,39.09,29600,30310400,fail_latency_fail_rss,4MB page cache nearly meets RSS but much slower
 pq16_base_vector,range_s10,78,11.867,34172,34992128,fail_latency_fail_rss,base-matched PQ16 needs L=78 for recall>=98 and still fails single-query
 pq14_base_vector,range_s10,120,12.907,31812,32575488,fail_latency_fail_rss,base-matched PQ14 passes static recall but fails single-query RSS and latency
-pq12_base_vector,range_s10,150,13.194,29552,30261248,fail_latency_fail_rss,base-matched PQ12 nearly meets RSS but fails strict 30MB maxRSS and latency
+pq12_base_vector,range_s10,145,13.446,29656,30367744,fail_latency_fail_rss,base-matched PQ12 uses the minimal static-recall-passing L but still fails strict 30MB maxRSS and latency
 pq8_base_static,range_s10,200,8.058,,,fail_recall,PQ8 reaches only 96.00 recall@10 at L=200
