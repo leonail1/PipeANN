@@ -7,6 +7,7 @@ set(IO_ENGINE "uring" CACHE STRING "I/O engine: uring, aio, or spdk")
 set_property(CACHE IO_ENGINE PROPERTY STRINGS uring aio spdk)
 option(USE_TCMALLOC "Use tcmalloc allocator" ON)
 option(BUILD_PYTHON_INTERFACE "Build Python interface (requires pybind11)" OFF)
+option(IN_PLACE_RECORD_UPDATE "Update disk records in place during dynamic insert" OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -41,12 +42,16 @@ add_compile_options(
 )
 add_compile_options(-g -O3 -march=native -mtune=native -ftree-vectorize -funroll-loops -Wl,--no-as-needed)
 
+if("$ENV{ADDITIONAL_DEFINITIONS}" MATCHES "(^|[ ;])-DBG_IO_THREAD($|[ ;])")
+	message(FATAL_ERROR "BG_IO_THREAD is disabled for the OpenHarmony CLI adapter build; remove -DBG_IO_THREAD from ADDITIONAL_DEFINITIONS")
+endif()
+
 message(STATUS "Additional definitions: " $ENV{ADDITIONAL_DEFINITIONS})
 add_definitions(
 	$ENV{ADDITIONAL_DEFINITIONS}
 	-DNDEBUG
 	# -DIN_PLACE_RECORD_UPDATE # disable design #1
-	-DBG_IO_THREAD # enable opt #1.2
+	# background insert I/O thread opt is disabled for CLI adapter lifecycle safety
 
 	# -DNO_POLLUTE_ORIGINAL
 
@@ -54,6 +59,11 @@ add_definitions(
 	# -DREAD_ONLY_TESTS
 	# -DNO_MAPPING # page_search (Starling): must disable this!
 )
+
+if(IN_PLACE_RECORD_UPDATE)
+	add_definitions(-DIN_PLACE_RECORD_UPDATE)
+	message(STATUS "Dynamic insert uses IN_PLACE_RECORD_UPDATE")
+endif()
 
 # add_compile_options(-fsanitize=address,undefined -lasan -lubsan)
 # add_link_options(-fsanitize=address,undefined)
@@ -168,3 +178,4 @@ endif()
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(tests/utils)
+add_subdirectory(openharmony_acceptance)

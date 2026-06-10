@@ -275,13 +275,15 @@ class DynamicIndex : public BaseDynamicIndex {
                 pipeann::QueryStats *stats = nullptr, pipeann::Selector *selector = nullptr,
                 const pipeann::Attributes *query_attrs = nullptr,
                 float range = std::numeric_limits<float>::infinity()) {
-    std::vector<TagT> tags(L);
-    std::vector<float> distances(L);
+    const uint32_t result_capacity = std::max(topk, L);
+    std::vector<TagT> tags(result_capacity);
+    std::vector<float> distances(result_capacity);
     const bool use_range = !std::isinf(range);
     size_t n_valid = L;
 
     if (selector != nullptr) {
-      disk_index_->spec_filter_search(query, L, L, selector, *query_attrs, tags.data(), distances.data(), 32, stats);
+      n_valid = disk_index_->spec_filter_search(query, topk, L, selector, *query_attrs, tags.data(), distances.data(),
+                                                32, stats);
     } else if (use_range) {
       n_valid = disk_index_->range_search(query, range, tags.data(), distances.data(), 32, mem_L, L, stats);
     } else if (use_disk_index_) {
@@ -298,11 +300,9 @@ class DynamicIndex : public BaseDynamicIndex {
         pos++;
       }
     }
-    if (use_range) {
-      for (size_t j = pos; j < topk; j++) {
-        out_ids[j] = std::numeric_limits<TagT>::max();
-        out_dists[j] = std::numeric_limits<float>::max();
-      }
+    for (size_t j = pos; j < topk; j++) {
+      out_ids[j] = std::numeric_limits<TagT>::max();
+      out_dists[j] = std::numeric_limits<float>::max();
     }
     return pos;
   }

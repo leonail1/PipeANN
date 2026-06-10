@@ -40,6 +40,15 @@ struct cmpmaxstruct {
 };
 using maxPQIFCS = std::priority_queue<pairIF, std::vector<pairIF>, cmpmaxstruct>;
 
+inline void push_topk(maxPQIFCS &heap, int point_id, float dist, size_t k) {
+  if (heap.size() < k) {
+    heap.emplace(point_id, dist);
+  } else if (heap.top().second > dist) {
+    heap.emplace(point_id, dist);
+    heap.pop();
+  }
+}
+
 void exact_knn(const size_t dim, const size_t k,
                int *const closest_points,         // k * num_queries preallocated
                float *const dist_closest_points,  // k * num_queries preallocated
@@ -55,23 +64,42 @@ void exact_knn(const size_t dim, const size_t k,
     int64_t q_b = b * q_batch_size;
     int64_t q_e = ((b + 1) * q_batch_size > nqueries) ? nqueries : (b + 1) * q_batch_size;
 
-    distance->bulk_compare(queries_in + q_b * dim, q_e - q_b, points_in, npoints, dim, dist_matrix);
+    int64_t q_count = q_e - q_b;
+    distance->bulk_compare(queries_in + q_b * dim, q_count, points_in, npoints, dim, dist_matrix);
 
-#pragma omp parallel for schedule(dynamic, 16)
-    for (int64_t q = q_b; q < q_e; q++) {
-      maxPQIFCS point_dist;
-      for (uint64_t p = 0; p < npoints; p++) {
-        if (!filter(q, p))
-          continue;
-        float dist = dist_matrix[(q - q_b) * npoints + p];
-        if (point_dist.size() < k) {
-          point_dist.emplace(p, dist);
-        } else if (point_dist.top().second > dist) {
-          point_dist.emplace(p, dist);
-          point_dist.pop();
+    static constexpr uint64_t kPointBlockSize = 4096;
+    int max_threads = omp_get_max_threads();
+    int64_t num_blocks = (int64_t) DIV_ROUND_UP(npoints, kPointBlockSize);
+    std::vector<maxPQIFCS> local_heaps((size_t) max_threads * (size_t) q_count);
+
+#pragma omp parallel for collapse(2) schedule(dynamic, 1)
+    for (int64_t local_q = 0; local_q < q_count; local_q++) {
+      for (int64_t block = 0; block < num_blocks; block++) {
+        int tid = omp_get_thread_num();
+        maxPQIFCS &point_dist = local_heaps[(size_t) tid * (size_t) q_count + (size_t) local_q];
+        uint64_t p_b = (uint64_t) block * kPointBlockSize;
+        uint64_t p_e = std::min<uint64_t>(p_b + kPointBlockSize, npoints);
+        int64_t q = q_b + local_q;
+        for (uint64_t p = p_b; p < p_e; p++) {
+          if (!filter(q, p))
+            continue;
+          float dist = dist_matrix[(size_t) local_q * npoints + p];
+          push_topk(point_dist, (int) p, dist, k);
         }
       }
-      // Write results (pad with -1 if fewer than k matches)
+    }
+
+    for (int64_t local_q = 0; local_q < q_count; local_q++) {
+      maxPQIFCS point_dist;
+      for (int tid = 0; tid < max_threads; tid++) {
+        maxPQIFCS &heap = local_heaps[(size_t) tid * (size_t) q_count + (size_t) local_q];
+        while (!heap.empty()) {
+          push_topk(point_dist, heap.top().first, heap.top().second, k);
+          heap.pop();
+        }
+      }
+
+      int64_t q = q_b + local_q;
       size_t valid = point_dist.size();
       for (int64_t l = 0; l < (int64_t) k; ++l) {
         int64_t idx = (k - 1 - l) + q * k;

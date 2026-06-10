@@ -9,7 +9,11 @@
 #include <vector>
 #include <array>
 #include <cstring>
+#include <cstdlib>
+#include <cerrno>
 #include <cstdint>
+#include <chrono>
+#include <limits>
 #include <map>
 #include <atomic>
 #include <mutex>
@@ -21,6 +25,189 @@
 namespace pipeann {
   // Currently, we only support vector of uint32_t attributes.
   using Attribute = std::vector<uint32_t>;
+
+  inline bool attr_env_enabled(const char *name, bool default_value) {
+    const char *env = std::getenv(name);
+    if (env == nullptr || *env == '\0') {
+      return default_value;
+    }
+    return std::strcmp(env, "0") != 0 && std::strcmp(env, "false") != 0 && std::strcmp(env, "FALSE") != 0;
+  }
+
+  inline uint64_t attr_env_uint64(const char *name, uint64_t default_value) {
+    const char *env = std::getenv(name);
+    if (env == nullptr || *env == '\0') {
+      return default_value;
+    }
+    char *end = nullptr;
+    errno = 0;
+    uint64_t value = std::strtoull(env, &end, 10);
+    if (end == env || *end != '\0' || value == 0 || errno == ERANGE) {
+      LOG(WARNING) << "Ignoring invalid " << name << "=" << env;
+      return default_value;
+    }
+    return value;
+  }
+
+  inline uint64_t attr_delta_merge_threshold(uint64_t default_bytes) {
+    static const uint64_t configured_bytes = []() -> uint64_t {
+      const char *env = std::getenv("PIPEANN_ATTR_DELTA_MERGE_BYTES");
+      if (env == nullptr || *env == '\0') {
+        return 0;
+      }
+      char *end = nullptr;
+      errno = 0;
+      uint64_t value = std::strtoull(env, &end, 10);
+      if (end == env || *end != '\0' || value == 0 || errno == ERANGE) {
+        LOG(WARNING) << "Ignoring invalid PIPEANN_ATTR_DELTA_MERGE_BYTES=" << env;
+        return 0;
+      }
+      LOG(INFO) << "Using PIPEANN_ATTR_DELTA_MERGE_BYTES=" << value;
+      return value;
+    }();
+    return configured_bytes == 0 ? default_bytes : configured_bytes;
+  }
+
+  struct FastIdRemap {
+    enum class Mode { IdentityAll, PrefixIdentity, Dense, HashFallback };
+    static constexpr uint32_t kInvalid = std::numeric_limits<uint32_t>::max();
+
+    Mode mode = Mode::HashFallback;
+    uint64_t merged_size = 0;
+    uint64_t old_domain_hint = 0;
+    uint64_t mapped_count = 0;
+    uint64_t dense_bytes = 0;
+    std::vector<uint32_t> dense;
+    const libcuckoo::cuckoohash_map<uint32_t, uint32_t> *hash_map = nullptr;
+
+    const char *mode_name() const {
+      switch (mode) {
+        case Mode::IdentityAll:
+          return "IdentityAll";
+        case Mode::PrefixIdentity:
+          return "PrefixIdentity";
+        case Mode::Dense:
+          return "Dense";
+        case Mode::HashFallback:
+        default:
+          return "HashFallback";
+      }
+    }
+
+    bool lookup(uint32_t old_id, uint32_t &new_id) const {
+      switch (mode) {
+        case Mode::IdentityAll:
+        case Mode::PrefixIdentity:
+          if ((uint64_t) old_id >= merged_size) {
+            return false;
+          }
+          new_id = old_id;
+          return true;
+        case Mode::Dense:
+          if ((uint64_t) old_id >= dense.size()) {
+            return false;
+          }
+          new_id = dense[old_id];
+          return new_id != kInvalid && (uint64_t) new_id < merged_size;
+        case Mode::HashFallback:
+        default:
+          if (hash_map == nullptr || !hash_map->find(old_id, new_id)) {
+            return false;
+          }
+          return (uint64_t) new_id < merged_size;
+      }
+    }
+  };
+
+  inline FastIdRemap build_fast_id_remap(
+      const libcuckoo::cuckoohash_map<uint32_t, uint32_t> &id_map, uint64_t old_domain_hint,
+      uint64_t merged_size) {
+    FastIdRemap remap;
+    remap.hash_map = &id_map;
+    remap.merged_size = merged_size;
+    remap.old_domain_hint = old_domain_hint;
+
+    if (id_map.empty()) {
+      remap.mode = FastIdRemap::Mode::IdentityAll;
+      remap.mapped_count = merged_size;
+      return remap;
+    }
+
+    if (id_map.size() == merged_size) {
+      bool prefix_identity = true;
+      for (uint64_t old_id = 0; old_id < merged_size; ++old_id) {
+        uint32_t new_id = FastIdRemap::kInvalid;
+        if (!id_map.find((uint32_t) old_id, new_id) || new_id != old_id) {
+          prefix_identity = false;
+          break;
+        }
+      }
+      if (prefix_identity) {
+        remap.mode = FastIdRemap::Mode::PrefixIdentity;
+        remap.mapped_count = merged_size;
+        return remap;
+      }
+    }
+
+    const bool enable_dense = attr_env_enabled("PIPEANN_ATTR_DENSE_REMAP", true);
+    const uint64_t max_dense_bytes =
+        attr_env_uint64("PIPEANN_ATTR_DENSE_REMAP_MAX_MB", 256) * 1024ULL * 1024ULL;
+    remap.dense_bytes = old_domain_hint * sizeof(uint32_t);
+    if (!enable_dense || old_domain_hint == 0 || remap.dense_bytes > max_dense_bytes) {
+      remap.mode = FastIdRemap::Mode::HashFallback;
+      return remap;
+    }
+
+    remap.dense.assign(old_domain_hint, FastIdRemap::kInvalid);
+    auto locked = const_cast<libcuckoo::cuckoohash_map<uint32_t, uint32_t> &>(id_map).lock_table();
+    for (const auto &entry : locked) {
+      if (entry.first < remap.dense.size() && (uint64_t) entry.second < merged_size) {
+        remap.dense[entry.first] = entry.second;
+        remap.mapped_count++;
+      }
+    }
+    if (remap.mapped_count != id_map.size()) {
+      remap.dense.clear();
+      remap.mode = FastIdRemap::Mode::HashFallback;
+      return remap;
+    }
+    remap.mode = FastIdRemap::Mode::Dense;
+    return remap;
+  }
+
+  inline double attr_elapsed_ms(std::chrono::steady_clock::time_point start) {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+  }
+
+  inline void attr_timing_record(const std::string &index_type, const std::string &index_key,
+                                 const std::string &phase, double ms, uint64_t n_vectors,
+                                 uint64_t base_n_vectors, uint64_t merged_size, uint64_t id_map_size,
+                                 uint64_t old_domain_hint, const FastIdRemap &remap, uint64_t old_items,
+                                 uint64_t kept_old, uint64_t delta_items, uint64_t kept_delta,
+                                 uint64_t bad_new_id_count) {
+    if (!attr_env_enabled("PIPEANN_ATTR_TIMING", false)) {
+      return;
+    }
+    const char *path_env = std::getenv("PIPEANN_ATTR_TIMING_PATH");
+    const std::string path = (path_env == nullptr || *path_env == '\0') ? "/tmp/pipeann_attr_timing.csv" : path_env;
+    static std::mutex timing_mu;
+    std::lock_guard<std::mutex> guard(timing_mu);
+    const bool exists = file_exists(path);
+    std::ofstream out(path, std::ios::app);
+    if (!out.is_open()) {
+      LOG(WARNING) << "Failed to open attr timing file: " << path;
+      return;
+    }
+    if (!exists) {
+      out << "index_type,index_key,phase,ms,n_vectors,base_n_vectors,merged_size,id_map_size,old_domain_hint,"
+             "remap_mode,dense_bytes,mapped_count,old_items,kept_old,delta_items,kept_delta,bad_new_id_count\n";
+    }
+    out << index_type << ',' << index_key << ',' << phase << ',' << ms << ',' << n_vectors << ','
+        << base_n_vectors << ',' << merged_size << ',' << id_map_size << ',' << old_domain_hint << ','
+        << remap.mode_name() << ',' << remap.dense_bytes << ',' << remap.mapped_count << ',' << old_items
+        << ',' << kept_old << ',' << delta_items << ',' << kept_delta << ',' << bad_new_id_count << '\n';
+  }
+
   inline std::tuple<int64_t, std::vector<int64_t>, std::vector<int32_t>, std::vector<float>> load_spmat(
       const std::string &spmat_filename) {
     std::ifstream reader(spmat_filename, std::ios::binary);
@@ -424,15 +611,13 @@ namespace pipeann {
       pipeann::save_bin<uint8_t>(filename + ".filter", bloom_filters_.data(), n_vectors, bloom_bytes_per_point_);
     }
 
-    void remap_approx(const libcuckoo::cuckoohash_map<uint32_t, uint32_t> &id_map) {
-      uint64_t new_n_vectors = id_map.empty() ? (uint64_t) n_vectors : id_map.size();
+    void remap_approx(const FastIdRemap &fast_remap, uint64_t old_domain_hint, uint64_t new_n_vectors) {
       std::vector<uint8_t> remapped(new_n_vectors * bloom_bytes_per_point_, 0);
-      uint32_t old_n_vectors = std::min<uint64_t>(bloom_filters_.size() / bloom_bytes_per_point_, n_vectors);
+      uint32_t old_n_vectors =
+          std::min<uint64_t>(bloom_filters_.size() / bloom_bytes_per_point_, old_domain_hint);
       for (uint32_t old_id = 0; old_id < old_n_vectors; old_id++) {
         uint32_t new_id;
-        if (id_map.empty()) {
-          new_id = old_id;
-        } else if (!id_map.find(old_id, new_id)) {
+        if (!fast_remap.lookup(old_id, new_id)) {
           continue;
         }
         memcpy(remapped.data() + new_id * bloom_bytes_per_point_,
@@ -539,7 +724,8 @@ namespace pipeann {
         bf.add(label);
       }
 
-      if (delta_bytes_ >= std::max<uint64_t>(4 * 1024 * 1024, bloom_bytes_per_point_ * base_n_vectors_ / 8)) {
+      uint64_t merge_threshold = attr_delta_merge_threshold(std::max<uint64_t>(4 * 1024 * 1024, bloom_bytes_per_point_ * base_n_vectors_ / 8));
+      if (delta_bytes_ >= merge_threshold) {
         do_merge(libcuckoo::cuckoohash_map<uint32_t, uint32_t>());
       }
       delta_attrs_mu_.unlock();
@@ -849,8 +1035,17 @@ namespace pipeann {
     }
 
     void do_merge(const libcuckoo::cuckoohash_map<uint32_t, uint32_t> &id_map) {
+      auto total_start = std::chrono::steady_clock::now();
       std::vector<std::vector<uint32_t>> vector_ids(label_loc_.size());
+      const uint64_t old_n_vectors_before = n_vectors;
+      const uint64_t old_base_n_vectors_before = base_n_vectors_;
+      const uint64_t old_domain_hint = std::max(old_n_vectors_before, old_base_n_vectors_before);
       uint64_t merged_size = id_map.empty() ? (uint64_t) n_vectors : id_map.size();
+      auto remap_start = std::chrono::steady_clock::now();
+      auto fast_remap = build_fast_id_remap(id_map, old_domain_hint, merged_size);
+      attr_timing_record("label", filename, "label_build_remap", attr_elapsed_ms(remap_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, 0, 0, 0, 0, 0);
 
       std::ifstream reader(filename, std::ios::binary);
       if (!reader.is_open()) {
@@ -858,6 +1053,10 @@ namespace pipeann {
         crash();
       }
 
+      auto old_start = std::chrono::steady_clock::now();
+      uint64_t old_items = 0;
+      uint64_t kept_old = 0;
+      uint64_t bad_new_id_count = 0;
       for (uint32_t label = 0; label < label_loc_.size(); label++) {
         auto [st, ed] = label_loc_[label];
         if (st == ed) {
@@ -867,51 +1066,80 @@ namespace pipeann {
         reader.seekg(st, std::ios::beg);
         reader.read((char *) old_ids.data(), ed - st);
         for (uint32_t old_id : old_ids) {
+          old_items++;
           uint32_t new_id = 0;
-          if (id_map.empty()) {
-            new_id = old_id;
+          if (fast_remap.lookup(old_id, new_id)) {
             vector_ids[label].push_back(new_id);
-          } else if (id_map.find(old_id, new_id)) {
-            vector_ids[label].push_back(new_id);
+            kept_old++;
+          } else if ((uint64_t) old_id < old_domain_hint) {
+            // Deleted ids are expected during merge_deletes; out-of-range mappings are counted separately below.
           }
         }
       }
+      attr_timing_record("label", filename, "label_read_old_postings", attr_elapsed_ms(old_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, old_items, kept_old, 0, 0, bad_new_id_count);
 
+      auto delta_start = std::chrono::steady_clock::now();
+      uint64_t delta_items = 0;
+      uint64_t kept_delta = 0;
       for (const auto &[label, ids] : delta_) {
         if (label >= vector_ids.size()) {
           vector_ids.resize(label + 1);
         }
         for (uint32_t old_id : ids) {
+          delta_items++;
           uint32_t new_id = 0;
-          if (id_map.empty()) {
-            new_id = old_id;
+          if (fast_remap.lookup(old_id, new_id)) {
             vector_ids[label].push_back(new_id);
-          } else if (id_map.find(old_id, new_id)) {
-            vector_ids[label].push_back(new_id);
+            kept_delta++;
           }
         }
       }
+      attr_timing_record("label", filename, "label_process_delta", attr_elapsed_ms(delta_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, old_items, kept_old, delta_items, kept_delta, bad_new_id_count);
 
+      auto sort_start = std::chrono::steady_clock::now();
       max_attrs_ = 0;
       std::vector<uint32_t> attr_counts(merged_size, 0);
       for (auto &ids : vector_ids) {
         std::sort(ids.begin(), ids.end());
         ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
         for (uint32_t id : ids) {
+          if ((uint64_t) id >= merged_size) {
+            bad_new_id_count++;
+            continue;
+          }
           attr_counts[id]++;
           max_attrs_ = std::max(max_attrs_, (size_t) attr_counts[id]);
         }
       }
+      attr_timing_record("label", filename, "label_sort_unique_attr_counts", attr_elapsed_ms(sort_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, old_items, kept_old, delta_items, kept_delta, bad_new_id_count);
 
       n_vectors = merged_size;
       base_n_vectors_ = merged_size;
 
+      auto save_start = std::chrono::steady_clock::now();
       save_inverted(vector_ids);
-      remap_approx(id_map);
+      attr_timing_record("label", filename, "label_save_inverted", attr_elapsed_ms(save_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, old_items, kept_old, delta_items, kept_delta, bad_new_id_count);
+
+      auto approx_start = std::chrono::steady_clock::now();
+      remap_approx(fast_remap, old_domain_hint, merged_size);
       save_approx();
+      attr_timing_record("label", filename, "label_remap_save_approx", attr_elapsed_ms(approx_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, old_items, kept_old, delta_items, kept_delta, bad_new_id_count);
 
       delta_.clear();
       delta_bytes_ = 0;
+      attr_timing_record("label", filename, "label_merge_total", attr_elapsed_ms(total_start), old_n_vectors_before,
+                         old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint, fast_remap, old_items,
+                         kept_old, delta_items, kept_delta, bad_new_id_count);
     }
   };
 
@@ -967,7 +1195,8 @@ namespace pipeann {
     void load_histogram() {
       std::ifstream reader(filename, std::ios::binary);
       histogram_.clear();
-      stride = ROUND_UP(base_n_vectors_ / kHistogramBuckets, SECTOR_LEN / sizeof(uint32_t));
+      stride = std::max<uint64_t>(
+          1, ROUND_UP(base_n_vectors_ / kHistogramBuckets, SECTOR_LEN / sizeof(uint32_t)));
       for (size_t i = 0; i < base_n_vectors_; i += stride) {
         uint32_t attr;
         reader.seekg(i * sizeof(uint32_t), std::ios::beg);
@@ -1054,7 +1283,8 @@ namespace pipeann {
       uint32_t bid = it == bucket_boundaries_.begin() ? 0 : (uint32_t) (it - bucket_boundaries_.begin() - 1);
       bucket_ids_[vector_id] = (uint8_t) std::min(bid, kQuantizeBuckets - 1);
 
-      if (delta_bytes_ >= std::max<uint64_t>(4 * 1024 * 1024, 2 * sizeof(uint32_t) * base_n_vectors_ / 8)) {
+      uint64_t merge_threshold = attr_delta_merge_threshold(std::max<uint64_t>(4 * 1024 * 1024, 2 * sizeof(uint32_t) * base_n_vectors_ / 8));
+      if (delta_bytes_ >= merge_threshold) {
         do_merge(libcuckoo::cuckoohash_map<uint32_t, uint32_t>());
       }
       delta_attrs_mu_.unlock();
@@ -1274,13 +1504,11 @@ namespace pipeann {
                 << " vectors";
     }
 
-    void remap_approx(const libcuckoo::cuckoohash_map<uint32_t, uint32_t> &id_map) {
-      std::vector<uint8_t> remapped(id_map.empty() ? bucket_ids_.size() : id_map.size());
+    void remap_approx(const FastIdRemap &fast_remap, uint64_t new_n_vectors) {
+      std::vector<uint8_t> remapped(new_n_vectors);
       for (uint32_t old_id = 0; old_id < bucket_ids_.size(); old_id++) {
         uint32_t new_id = 0;
-        if (id_map.empty()) {
-          new_id = old_id;
-        } else if (!id_map.find(old_id, new_id)) {
+        if (!fast_remap.lookup(old_id, new_id)) {
           continue;
         }
         remapped[new_id] = bucket_ids_[old_id];
@@ -1298,8 +1526,22 @@ namespace pipeann {
     // Merge delta attributes with on-disk index.
     // id_map: old_id -> new_id for reordering during merge_deletes.
     void do_merge(const libcuckoo::cuckoohash_map<uint32_t, uint32_t> &id_map) {
+      auto total_start = std::chrono::steady_clock::now();
+      const uint64_t old_n_vectors_before = n_vectors;
+      const uint64_t old_base_n_vectors_before = base_n_vectors_;
+      uint64_t old_domain_hint = std::max(old_n_vectors_before, old_base_n_vectors_before);
+      old_domain_hint = std::max<uint64_t>(old_domain_hint, bucket_ids_.size());
+      const uint64_t merged_size = id_map.empty() ? (uint64_t) n_vectors : id_map.size();
+
+      auto remap_start = std::chrono::steady_clock::now();
+      auto fast_remap = build_fast_id_remap(id_map, old_domain_hint, merged_size);
+      attr_timing_record("range", filename, "range_build_remap", attr_elapsed_ms(remap_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, 0, 0, 0, 0, 0);
+
       ids_offset = ROUND_UP(base_n_vectors_ * sizeof(uint32_t), SECTOR_LEN);
 
+      auto read_start = std::chrono::steady_clock::now();
       std::vector<uint32_t> old_attrs(base_n_vectors_);
       std::vector<uint32_t> old_ids(base_n_vectors_);
       std::ifstream reader(filename, std::ios::binary);
@@ -1310,44 +1552,57 @@ namespace pipeann {
       reader.read((char *) old_attrs.data(), base_n_vectors_ * sizeof(uint32_t));
       reader.seekg(ids_offset, std::ios::beg);
       reader.read((char *) old_ids.data(), base_n_vectors_ * sizeof(uint32_t));
+      attr_timing_record("range", filename, "range_read_old_pairs", attr_elapsed_ms(read_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, base_n_vectors_, 0, 0, 0, 0);
 
       size_t delta_size = 0;
       for (const auto &[_, ids] : delta_) {
         delta_size += ids.size();
       }
 
+      auto process_start = std::chrono::steady_clock::now();
       std::vector<std::pair<uint32_t, uint32_t>> data;
       data.reserve(base_n_vectors_ + delta_size);
+      uint64_t old_items = 0;
+      uint64_t kept_old = 0;
+      uint64_t delta_items = 0;
+      uint64_t kept_delta = 0;
+      uint64_t bad_new_id_count = 0;
       for (uint32_t i = 0; i < base_n_vectors_; i++) {
+        old_items++;
         uint32_t new_id = 0;
-        if (id_map.empty()) {
-          new_id = old_ids[i];
+        if (fast_remap.lookup(old_ids[i], new_id)) {
           data.push_back({old_attrs[i], new_id});
-        } else if (id_map.find(old_ids[i], new_id)) {
-          data.push_back({old_attrs[i], new_id});
+          kept_old++;
         }
       }
 
       for (const auto &[value, ids] : delta_) {
         for (uint32_t old_id : ids) {
+          delta_items++;
           uint32_t new_id = 0;
-          if (id_map.empty()) {
-            new_id = old_id;
+          if (fast_remap.lookup(old_id, new_id)) {
             data.push_back({value, new_id});
-          } else if (id_map.find(old_id, new_id)) {
-            data.push_back({value, new_id});
+            kept_delta++;
           }
         }
       }
+      attr_timing_record("range", filename, "range_process_old_delta", attr_elapsed_ms(process_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, old_items, kept_old, delta_items, kept_delta, bad_new_id_count);
 
+      auto sort_start = std::chrono::steady_clock::now();
       std::sort(data.begin(), data.end());
       std::vector<uint32_t> sorted_attrs(data.size()), sorted_ids(data.size());
       for (size_t i = 0; i < data.size(); i++) {
         sorted_attrs[i] = data[i].first;
         sorted_ids[i] = data[i].second;
       }
+      attr_timing_record("range", filename, "range_sort_pairs", attr_elapsed_ms(sort_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, old_items, kept_old, delta_items, kept_delta, bad_new_id_count);
 
-      uint64_t merged_size = id_map.empty() ? (uint64_t) n_vectors : id_map.size();
       n_vectors = merged_size;
       base_n_vectors_ = merged_size;
       histogram_.clear();
@@ -1356,12 +1611,19 @@ namespace pipeann {
         histogram_.push_back(sorted_attrs[i]);
       }
 
-      remap_approx(id_map);
+      auto write_start = std::chrono::steady_clock::now();
+      remap_approx(fast_remap, merged_size);
       write_sorted_index(sorted_attrs, sorted_ids);
       save_quantized_buckets();
+      attr_timing_record("range", filename, "range_write_indexes", attr_elapsed_ms(write_start),
+                         old_n_vectors_before, old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint,
+                         fast_remap, old_items, kept_old, delta_items, kept_delta, bad_new_id_count);
 
       delta_.clear();
       delta_bytes_ = 0;
+      attr_timing_record("range", filename, "range_merge_total", attr_elapsed_ms(total_start), old_n_vectors_before,
+                         old_base_n_vectors_before, merged_size, id_map.size(), old_domain_hint, fast_remap, old_items,
+                         kept_old, delta_items, kept_delta, bad_new_id_count);
     }
   };
 

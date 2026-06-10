@@ -13,3 +13,7 @@ pipeann/__pycache__/*
 pipeann.egg-info/
 dist/
 logs/**/*
+acceptance_gt_cache/
+acceptance_logs/
+acceptance_results/
+acceptance_work/
