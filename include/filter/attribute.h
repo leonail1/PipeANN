@@ -726,7 +726,7 @@ namespace pipeann {
 
       uint64_t merge_threshold = attr_delta_merge_threshold(std::max<uint64_t>(4 * 1024 * 1024, bloom_bytes_per_point_ * base_n_vectors_ / 8));
       if (delta_bytes_ >= merge_threshold) {
-        do_merge(libcuckoo::cuckoohash_map<uint32_t, uint32_t>());
+        do_merge(libcuckoo::cuckoohash_map<uint32_t, uint32_t>(0));
       }
       delta_attrs_mu_.unlock();
     }
@@ -1285,7 +1285,7 @@ namespace pipeann {
 
       uint64_t merge_threshold = attr_delta_merge_threshold(std::max<uint64_t>(4 * 1024 * 1024, 2 * sizeof(uint32_t) * base_n_vectors_ / 8));
       if (delta_bytes_ >= merge_threshold) {
-        do_merge(libcuckoo::cuckoohash_map<uint32_t, uint32_t>());
+        do_merge(libcuckoo::cuckoohash_map<uint32_t, uint32_t>(0));
       }
       delta_attrs_mu_.unlock();
     }

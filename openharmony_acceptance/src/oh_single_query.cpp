@@ -35,6 +35,28 @@ void write_rss_trace(const std::string &path, const std::string &stage) {
 }
 
 template<typename T>
+void load_first_query(const std::string &query_path, T *&query, size_t &query_num, size_t &query_dim) {
+  std::ifstream reader(query_path, std::ios::binary);
+  if (!reader) {
+    throw std::runtime_error("failed to open query file: " + query_path);
+  }
+  int npts_i32 = 0;
+  int dim_i32 = 0;
+  reader.read(reinterpret_cast<char *>(&npts_i32), sizeof(int));
+  reader.read(reinterpret_cast<char *>(&dim_i32), sizeof(int));
+  if (!reader || npts_i32 <= 0 || dim_i32 <= 0) {
+    throw std::runtime_error("invalid query file header: " + query_path);
+  }
+  query_num = 1;
+  query_dim = static_cast<size_t>(dim_i32);
+  query = new T[query_dim];
+  reader.read(reinterpret_cast<char *>(query), query_dim * sizeof(T));
+  if (!reader) {
+    throw std::runtime_error("failed to read first query vector: " + query_path);
+  }
+}
+
+template<typename T>
 int run_single(int argc, char **argv) {
   oh::Args args(argc, argv);
   const std::string index_prefix = args.get("index-prefix");
@@ -59,7 +81,7 @@ int run_single(int argc, char **argv) {
   write_rss_trace(rss_trace_path, "start");
   T *query = nullptr;
   size_t query_num = 0, query_dim = 0;
-  pipeann::load_bin<T>(query_path, query, query_num, query_dim);
+  load_first_query(query_path, query, query_num, query_dim);
   if (query_num == 0) {
     throw std::runtime_error("query file is empty");
   }

@@ -11,3 +11,6 @@ pq16_base_vector,range_s10,78,11.867,34172,34992128,fail_latency_fail_rss,base-m
 pq14_base_vector,range_s10,120,12.907,31812,32575488,fail_latency_fail_rss,base-matched PQ14 passes static recall but fails single-query RSS and latency
 pq12_base_vector,range_s10,145,13.446,29656,30367744,fail_latency_fail_rss,base-matched PQ12 uses the minimal static-recall-passing L but still fails strict 30MB maxRSS and latency
 pq8_base_static,range_s10,200,8.058,,,fail_recall,PQ8 reaches only 96.00 recall@10 at L=200
+query1_only_pq32,range_s10,40,9.076,53480,54763520,pass_latency_fail_rss,single-query runner reads only the first query instead of the full 1000-query file; RSS remains dominated by PQ32/index state
+query1_only_pq13,range_s10,121,12.189,30048,30769152,fail_latency_fail_rss,PQ13 with refined minimal-L nearly reaches strict RSS but still exceeds 30MB time peak and exceeds 10ms latency
+hashmap_default_probe,range_s10,40,7.480,53664,54951936,pass_latency_fail_rss,lowering libcuckoo global default had negligible single-query RSS effect and was not retained due broad performance risk

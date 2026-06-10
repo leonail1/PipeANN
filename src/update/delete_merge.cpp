@@ -40,8 +40,11 @@ namespace pipeann {
     std::string disk_index_out = out_path_prefix + "_disk.index";
     // Note that the index is immutable currently.
     // Step 1: populate neighborhoods, allocate IDs.
-    libcuckoo::cuckoohash_map<uint32_t, uint32_t> id_map, rev_id_map;           // old_id -> new_id & new_id -> old_id
-    libcuckoo::cuckoohash_map<uint32_t, std::vector<uint32_t>> deleted_nhoods;  // id -> nhood
+    const uint64_t unique_deleted_nodes = deleted_nodes_set.size();
+    const uint64_t expected_live_nodes = cur_id > unique_deleted_nodes ? cur_id - unique_deleted_nodes : 0;
+    libcuckoo::cuckoohash_map<uint32_t, uint32_t> id_map(expected_live_nodes);
+    libcuckoo::cuckoohash_map<uint32_t, uint32_t> rev_id_map(expected_live_nodes);
+    libcuckoo::cuckoohash_map<uint32_t, std::vector<uint32_t>> deleted_nhoods(unique_deleted_nodes);
     std::atomic<uint64_t> new_npoints = 0;
     Timer delete_timer;
 
