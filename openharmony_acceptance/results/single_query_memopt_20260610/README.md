@@ -14,5 +14,6 @@ Key findings:
 - `/proc/*/smaps_rollup` shows the remaining PQ32 RSS is dominated by private anonymous memory when loaded as a vector, and by file-backed PQ pages when loaded via mmap.
 - PQ32 compressed codes remain the dominant RSS component. PQ mmap/stream and PQ12/PQ14/PQ16/PQ8 trials did not find a configuration that satisfies both `<10 ms` latency and `<30 MB` max RSS for this selector.
 - PQ12/PQ13/PQ14/PQ16/PQ8 were not adopted: smaller PQ sidecars reduce RSS, but require larger L or trigger slower search paths and fail the single-query latency check.
+- `valgrind_massif_summary.md` contains the Massif heap breakdown. It attributes 32,000,000 bytes to PQ32 compressed codes and 8,388,608 bytes to the PQ all-to-all centroid distance table.
 
 Artifacts are small summaries only; full raw experiment directories remain under `acceptance_results/` on node4.
