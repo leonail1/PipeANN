@@ -1042,9 +1042,6 @@ int run_dynamic(int argc, char **argv) {
     auto t1 = std::chrono::high_resolution_clock::now();
     double delete_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     write_progress(progress, cycle, "mark_delete_done", count, count, delete_ms);
-    if (foreground_enabled) {
-      foreground_search(*foreground_snapshot->index, queries, k, L, foreground_rounds, search_threads, "after_mark_delete", cycle, fg);
-    }
 
     write_progress(progress, cycle, "merge_start", 0, 0, 0.0);
     auto merge_start = std::chrono::high_resolution_clock::now();
