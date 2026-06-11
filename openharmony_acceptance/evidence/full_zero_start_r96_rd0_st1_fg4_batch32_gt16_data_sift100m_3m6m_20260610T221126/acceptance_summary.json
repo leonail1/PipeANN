@@ -1,0 +1,19 @@
+{
+  "pass": false,
+  "thresholds": {"space_expansion_lt": 2, "recall_at_10_min": 98, "avg_latency_ms_lt": 10, "delete_ms_per_vector_lte": 0.5, "single_query_max_rss_bytes_lt": 30000000},
+  "metrics": {
+    "space_expansion_ratio": 2.07059,
+    "static_rows": 25, "static_min_recall": 98.4, "static_worst_avg_latency_ms": 4.54562,
+    "dynamic_batch_checkpoint_rows": 125, "dynamic_batch_checkpoint_min_recall": 98.05, "dynamic_batch_checkpoint_worst_avg_latency_ms": 9.13025,
+    "dynamic_foreground_rows": 737, "dynamic_foreground_worst_avg_latency_ms": 12.1851,
+    "dynamic_foreground_delete_rows": 1, "dynamic_foreground_max_delete_ms_per_vector": 8.9096e-05,
+    "dynamic_batch_delete_rows": 5, "dynamic_batch_max_delete_ms_per_vector": 7.25778e-05,
+    "single_query_latency_ms": 21.406, "single_query_max_rss_bytes": 50880512
+  },
+  "failures": [
+    {"check":"space","detail":"expansion_ratio=2.070587"},
+    {"check":"dynamic_foreground","detail":"phase=merge,cycle=1,avg_latency_ms=12.185100"},
+    {"check":"single_query","detail":"latency_ms=21.406000"},
+    {"check":"rss","detail":"max_rss_bytes=50880512"}
+  ]
+}
