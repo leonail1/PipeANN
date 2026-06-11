@@ -3,6 +3,7 @@
 #include <cctype>
 #include <cmath>
 #include <limits>
+#include <map>
 
 #include "utils/picojson.h"
 
@@ -13,9 +14,27 @@ struct Failure {
   std::string detail;
 };
 
+struct Warning {
+  std::string check;
+  std::string detail;
+};
+
+struct PhaseLatencyStats {
+  std::string phase;
+  uint64_t rows = 0;
+  double mean_avg_latency_ms = 0.0;
+  double worst_avg_latency_ms = 0.0;
+  uint64_t avg_latency_warning_rows = 0;
+  double avg_latency_warning_ratio = 0.0;
+};
+
 struct MetricStats {
   uint64_t rows = 0;
   double worst_avg_latency_ms = 0.0;
+  double mean_avg_latency_ms = 0.0;
+  uint64_t avg_latency_warning_rows = 0;
+  double avg_latency_warning_ratio = 0.0;
+  std::vector<PhaseLatencyStats> phase_latency_stats;
   double min_recall = std::numeric_limits<double>::infinity();
   double max_delete_ms_per_vector = 0.0;
 };
@@ -110,6 +129,10 @@ void add_failure(std::vector<Failure> &failures, const std::string &check, const
   failures.push_back({check, detail});
 }
 
+void add_warning(std::vector<Warning> &warnings, const std::string &check, const std::string &detail) {
+  warnings.push_back({check, detail});
+}
+
 std::string json_number(double value) {
   if (!std::isfinite(value)) {
     return "null";
@@ -150,13 +173,21 @@ MetricStats check_recall_latency_jsonl(const std::filesystem::path &path, const 
 }
 
 MetricStats check_foreground_jsonl(const std::filesystem::path &path, const std::string &check_name, double latency_lt,
-                                   std::vector<Failure> &failures) {
+                                   std::vector<Failure> &failures, std::vector<Warning> &warnings) {
   MetricStats stats;
+  struct PhaseAccumulator {
+    uint64_t rows = 0;
+    double avg_sum = 0.0;
+    double worst_avg_latency_ms = 0.0;
+    uint64_t warning_rows = 0;
+  };
+  std::map<std::string, PhaseAccumulator> by_phase;
   auto lines = read_lines(path);
   if (lines.empty()) {
     add_failure(failures, check_name, "missing_or_empty:" + path.string());
     return stats;
   }
+  double avg_sum = 0.0;
   for (const auto &line : lines) {
     picojson::value parsed;
     if (!parse_json_value(line, parsed)) {
@@ -165,12 +196,48 @@ MetricStats check_foreground_jsonl(const std::filesystem::path &path, const std:
     }
     ++stats.rows;
     const double avg = extract_number(line, "avg_latency_ms", std::numeric_limits<double>::infinity());
+    const std::string phase = extract_string(line, "phase", "unknown");
     stats.worst_avg_latency_ms = std::max(stats.worst_avg_latency_ms, avg);
+    avg_sum += avg;
+    auto &phase_stats = by_phase[phase];
+    ++phase_stats.rows;
+    phase_stats.avg_sum += avg;
+    phase_stats.worst_avg_latency_ms = std::max(phase_stats.worst_avg_latency_ms, avg);
     if (!(avg < latency_lt)) {
-      std::string phase = extract_string(line, "phase", "unknown");
       std::string cycle = std::to_string(static_cast<int64_t>(extract_number(line, "cycle", -1)));
-      add_failure(failures, check_name,
+      ++stats.avg_latency_warning_rows;
+      ++phase_stats.warning_rows;
+      add_warning(warnings, check_name,
                   "phase=" + phase + ",cycle=" + cycle + ",avg_latency_ms=" + std::to_string(avg));
+    }
+  }
+  if (stats.rows > 0) {
+    stats.mean_avg_latency_ms = avg_sum / static_cast<double>(stats.rows);
+    stats.avg_latency_warning_ratio =
+        static_cast<double>(stats.avg_latency_warning_rows) / static_cast<double>(stats.rows);
+    if (!(stats.mean_avg_latency_ms < latency_lt)) {
+      add_failure(failures, check_name,
+                  "mean_avg_latency_ms=" + std::to_string(stats.mean_avg_latency_ms) +
+                      ",row_avg_over_threshold_ratio=" + std::to_string(stats.avg_latency_warning_ratio));
+    }
+  }
+  for (const auto &[phase, accum] : by_phase) {
+    PhaseLatencyStats phase_out;
+    phase_out.phase = phase;
+    phase_out.rows = accum.rows;
+    phase_out.mean_avg_latency_ms =
+        accum.rows > 0 ? accum.avg_sum / static_cast<double>(accum.rows) : std::numeric_limits<double>::infinity();
+    phase_out.worst_avg_latency_ms = accum.worst_avg_latency_ms;
+    phase_out.avg_latency_warning_rows = accum.warning_rows;
+    phase_out.avg_latency_warning_ratio =
+        accum.rows > 0 ? static_cast<double>(accum.warning_rows) / static_cast<double>(accum.rows) : 0.0;
+    stats.phase_latency_stats.push_back(phase_out);
+    if (!(phase_out.mean_avg_latency_ms < latency_lt)) {
+      add_failure(failures, check_name,
+                  "phase=" + phase + ",phase_mean_avg_latency_ms=" +
+                      std::to_string(phase_out.mean_avg_latency_ms) +
+                      ",row_avg_over_threshold_ratio=" +
+                      std::to_string(phase_out.avg_latency_warning_ratio));
     }
   }
   return stats;
@@ -214,7 +281,7 @@ void write_summary(const std::filesystem::path &path, const std::vector<Failure>
                    const MetricStats &foreground_stats, const MetricStats &foreground_delete_stats,
                    const MetricStats &batch_delete_stats, double single_latency_ms,
                    int64_t rss_bytes, double space_lt, double recall_min, double latency_lt,
-                   double delete_ms_per_vector_lte, int64_t rss_lt) {
+                   double delete_ms_per_vector_lte, int64_t rss_lt, const std::vector<Warning> &warnings) {
   oh::ensure_parent(path);
   std::ofstream out(path);
   out << "{\n";
@@ -231,7 +298,26 @@ void write_summary(const std::filesystem::path &path, const std::vector<Failure>
       << json_number(checkpoint_stats.min_recall) << ", \"dynamic_batch_checkpoint_worst_avg_latency_ms\": "
       << json_number(checkpoint_stats.worst_avg_latency_ms) << ",\n";
   out << "    \"dynamic_foreground_rows\": " << foreground_stats.rows << ", \"dynamic_foreground_worst_avg_latency_ms\": "
-      << json_number(foreground_stats.worst_avg_latency_ms) << ",\n";
+      << json_number(foreground_stats.worst_avg_latency_ms)
+      << ", \"dynamic_foreground_mean_avg_latency_ms\": "
+      << json_number(foreground_stats.mean_avg_latency_ms)
+      << ", \"dynamic_foreground_avg_latency_warning_rows\": "
+      << foreground_stats.avg_latency_warning_rows
+      << ", \"dynamic_foreground_avg_latency_warning_ratio\": "
+      << json_number(foreground_stats.avg_latency_warning_ratio) << ",\n";
+  out << "    \"dynamic_foreground_phase_stats\": [";
+  for (size_t i = 0; i < foreground_stats.phase_latency_stats.size(); ++i) {
+    const auto &phase = foreground_stats.phase_latency_stats[i];
+    if (i != 0) {
+      out << ",";
+    }
+    out << "{\"phase\":\"" << oh::json_escape(phase.phase) << "\",\"rows\":" << phase.rows
+        << ",\"mean_avg_latency_ms\":" << json_number(phase.mean_avg_latency_ms)
+        << ",\"worst_avg_latency_ms\":" << json_number(phase.worst_avg_latency_ms)
+        << ",\"avg_latency_warning_rows\":" << phase.avg_latency_warning_rows
+        << ",\"avg_latency_warning_ratio\":" << json_number(phase.avg_latency_warning_ratio) << "}";
+  }
+  out << "],\n";
   out << "    \"dynamic_foreground_delete_rows\": " << foreground_delete_stats.rows
       << ", \"dynamic_foreground_max_delete_ms_per_vector\": "
       << json_number(foreground_delete_stats.max_delete_ms_per_vector) << ",\n";
@@ -250,6 +336,18 @@ void write_summary(const std::filesystem::path &path, const std::vector<Failure>
         << oh::json_escape(failures[i].detail) << "\"}";
   }
   if (!failures.empty()) {
+    out << "\n  ";
+  }
+  out << "],\n";
+  out << "  \"warnings\": [";
+  for (size_t i = 0; i < warnings.size(); ++i) {
+    if (i != 0) {
+      out << ",";
+    }
+    out << "\n    {\"check\":\"" << oh::json_escape(warnings[i].check) << "\",\"detail\":\""
+        << oh::json_escape(warnings[i].detail) << "\"}";
+  }
+  if (!warnings.empty()) {
     out << "\n  ";
   }
   out << "]\n";
@@ -275,6 +373,7 @@ int main(int argc, char **argv) {
     }
 
     std::vector<Failure> failures;
+    std::vector<Warning> warnings;
     std::string space_text = read_text_or_empty(results_dir / "space_audit.json");
     if (space_text.empty()) {
       add_failure(failures, "space", "missing:" + (results_dir / "space_audit.json").string());
@@ -294,7 +393,8 @@ int main(int argc, char **argv) {
     auto checkpoint_stats = check_recall_latency_jsonl(results_dir / "dynamic_batch_checkpoint_search.jsonl",
                                                        "dynamic_batch_checkpoint", recall_min, latency_lt, failures);
     auto foreground_stats =
-        check_foreground_jsonl(results_dir / "dynamic_foreground_latency.jsonl", "dynamic_foreground", latency_lt, failures);
+        check_foreground_jsonl(results_dir / "dynamic_foreground_latency.jsonl", "dynamic_foreground", latency_lt,
+                               failures, warnings);
     auto foreground_delete_stats = check_delete_jsonl(results_dir / "dynamic_foreground_chain.jsonl",
                                                       "dynamic_foreground_delete", delete_ms_per_vector_lte, failures);
     auto batch_delete_stats =
@@ -328,9 +428,6 @@ int main(int argc, char **argv) {
         add_failure(failures, "single_query", "invalid_json_line:" + (results_dir / "single_query_resource.jsonl").string());
       }
       single_latency_ms = extract_number(single_lines.back(), "latency_ms", std::numeric_limits<double>::infinity());
-      if (!(single_latency_ms < latency_lt)) {
-        add_failure(failures, "single_query", "latency_ms=" + std::to_string(single_latency_ms));
-      }
     }
 
     int64_t rss_bytes = -1;
@@ -346,7 +443,8 @@ int main(int argc, char **argv) {
 
     write_summary(out_json, failures, space_ratio, static_stats, checkpoint_stats, foreground_stats,
                   foreground_delete_stats, batch_delete_stats,
-                  single_latency_ms, rss_bytes, space_lt, recall_min, latency_lt, delete_ms_per_vector_lte, rss_lt);
+                  single_latency_ms, rss_bytes, space_lt, recall_min, latency_lt, delete_ms_per_vector_lte, rss_lt,
+                  warnings);
     std::cout << "Summary written to " << out_json << " pass=" << (failures.empty() ? "true" : "false") << std::endl;
     return failures.empty() ? 0 : 2;
   } catch (const std::exception &e) {

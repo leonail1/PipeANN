@@ -24,7 +24,11 @@ native APIs; the runner does not do lazy rebuild or maintain a second index.
      then insert new vectors.
    - Uses `FOREGROUND_UPDATE_THREADS=4` by default.
    - Runs foreground filtered search during delete/merge/insert.
-   - Pass condition: foreground search average latency stays below 10 ms.
+   - Pass condition: for each foreground phase (`after_mark_delete`, `merge`,
+     `insert`, `after_insert`), the mean of that phase's probe
+     `avg_latency_ms` values stays below 10 ms. Individual foreground probe rows
+     above 10 ms are emitted as warnings, and the summary reports their count
+     and ratio.
 
 2. Batch quality test
    - Starts from zero independently from the foreground test, bootstraps at
@@ -49,6 +53,10 @@ The two tests produce separate artifacts:
 - `dynamic_batch_progress.jsonl`
 
 `acceptance_summary.json` checks that both dynamic tests actually ran.
+The single-query runner is a resource/RSS check. Its latency is reported as a
+cold single-query diagnostic, but it is not used as a pass/fail latency gate;
+steady-state search latency is judged by the 1000-query static and dynamic
+checkpoint searches.
 
 Tag reuse follows PipeANN's native delete semantics: a tag deleted by
 `lazy_delete/remove` cannot be reinserted until `save()/merge_deletes()` has

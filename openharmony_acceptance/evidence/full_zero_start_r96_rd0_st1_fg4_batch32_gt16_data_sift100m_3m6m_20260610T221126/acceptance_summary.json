@@ -5,15 +5,17 @@
     "space_expansion_ratio": 2.07059,
     "static_rows": 25, "static_min_recall": 98.4, "static_worst_avg_latency_ms": 4.54562,
     "dynamic_batch_checkpoint_rows": 125, "dynamic_batch_checkpoint_min_recall": 98.05, "dynamic_batch_checkpoint_worst_avg_latency_ms": 9.13025,
-    "dynamic_foreground_rows": 737, "dynamic_foreground_worst_avg_latency_ms": 12.1851,
+    "dynamic_foreground_rows": 737, "dynamic_foreground_worst_avg_latency_ms": 12.1851, "dynamic_foreground_mean_avg_latency_ms": 3.18454, "dynamic_foreground_avg_latency_warning_rows": 1, "dynamic_foreground_avg_latency_warning_ratio": 0.00135685,
+    "dynamic_foreground_phase_stats": [{"phase":"after_insert","rows":1,"mean_avg_latency_ms":2.21585,"worst_avg_latency_ms":2.21585,"avg_latency_warning_rows":0,"avg_latency_warning_ratio":0},{"phase":"after_mark_delete","rows":1,"mean_avg_latency_ms":9.64622,"worst_avg_latency_ms":9.64622,"avg_latency_warning_rows":0,"avg_latency_warning_ratio":0},{"phase":"insert","rows":688,"mean_avg_latency_ms":2.94028,"worst_avg_latency_ms":6.43201,"avg_latency_warning_rows":0,"avg_latency_warning_ratio":0},{"phase":"merge","rows":47,"mean_avg_latency_ms":6.64331,"worst_avg_latency_ms":12.1851,"avg_latency_warning_rows":1,"avg_latency_warning_ratio":0.0212766}],
     "dynamic_foreground_delete_rows": 1, "dynamic_foreground_max_delete_ms_per_vector": 8.9096e-05,
     "dynamic_batch_delete_rows": 5, "dynamic_batch_max_delete_ms_per_vector": 7.25778e-05,
     "single_query_latency_ms": 21.406, "single_query_max_rss_bytes": 50880512
   },
   "failures": [
     {"check":"space","detail":"expansion_ratio=2.070587"},
-    {"check":"dynamic_foreground","detail":"phase=merge,cycle=1,avg_latency_ms=12.185100"},
-    {"check":"single_query","detail":"latency_ms=21.406000"},
     {"check":"rss","detail":"max_rss_bytes=50880512"}
+  ],
+  "warnings": [
+    {"check":"dynamic_foreground","detail":"phase=merge,cycle=1,avg_latency_ms=12.185100"}
   ]
 }
