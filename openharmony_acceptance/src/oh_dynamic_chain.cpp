@@ -164,6 +164,28 @@ void run_shell_command(const std::string &command) {
   }
 }
 
+double rebuild_pq_sidecar(const std::string &type, const std::string &rebuild_binary,
+                          const std::string &index_prefix, const std::filesystem::path &data_path,
+                          const std::string &metric, uint32_t pq_bytes, uint32_t threads) {
+  if (!std::filesystem::exists(data_path)) {
+    throw std::runtime_error("PQ retrain data file is missing: " + data_path.string());
+  }
+  auto start = std::chrono::high_resolution_clock::now();
+  std::ostringstream cmd;
+  cmd << "env OMP_NUM_THREADS=" << threads
+      << " OMP_THREAD_LIMIT=" << threads
+      << " OMP_MAX_ACTIVE_LEVELS=1 MKL_NUM_THREADS=1 MKL_DYNAMIC=FALSE OPENBLAS_NUM_THREADS=1 "
+      << shell_quote(rebuild_binary)
+      << " --type " << shell_quote(type)
+      << " --index-prefix " << shell_quote(index_prefix)
+      << " --data " << shell_quote(data_path.string())
+      << " --metric " << shell_quote(metric)
+      << " --pq-bytes " << pq_bytes;
+  run_shell_command(cmd.str());
+  auto done = std::chrono::high_resolution_clock::now();
+  return std::chrono::duration<double, std::milli>(done - start).count();
+}
+
 uint32_t eq_label(size_t i) {
   return static_cast<uint32_t>(i);
 }
@@ -799,6 +821,11 @@ int run_dynamic(int argc, char **argv) {
   const uint32_t build_pq_bytes = args.u32("build-PQ-bytes", 32);
   const uint32_t build_mem_gb = args.u32("build-mem-gb", 64);
   const uint32_t build_threads = args.u32("build-threads", std::max(1u, std::thread::hardware_concurrency()));
+  const bool pq_retrain_after_insert = args.get("pq-retrain-after-insert", "0") != "0";
+  const std::string pq_retrain_binary = args.get("pq-retrain-binary", "build/openharmony_acceptance/oh_rebuild_pq");
+  const auto pq_retrain_data_dir = std::filesystem::path(args.get("pq-retrain-data-dir", ""));
+  const uint32_t pq_retrain_threads = args.u32("pq-retrain-threads", 8);
+  const uint32_t pq_retrain_pq_bytes = args.u32("pq-retrain-pq-bytes", build_pq_bytes);
   const std::string zero_probe_selector_id = args.get("zero-probe-selector-id", "");
   const std::string checkpoint_mode = args.get("checkpoint-mode", "dynamic");
   const auto out_dynamic = std::filesystem::path(args.get("out-jsonl", "results/dynamic_chain.jsonl"));
@@ -822,6 +849,20 @@ int run_dynamic(int argc, char **argv) {
   }
   if (checkpoint_mode != "dynamic" && checkpoint_mode != "static") {
     throw std::runtime_error("Unsupported --checkpoint-mode: " + checkpoint_mode);
+  }
+  if (pq_retrain_after_insert) {
+    if (nbr_type != "pq") {
+      throw std::runtime_error("--pq-retrain-after-insert requires --nbr-type pq");
+    }
+    if (!save_after_insert) {
+      throw std::runtime_error("--pq-retrain-after-insert requires --save-after-insert 1");
+    }
+    if (pq_retrain_data_dir.empty()) {
+      throw std::runtime_error("--pq-retrain-data-dir is required when PQ retrain is enabled");
+    }
+    if (pq_retrain_threads == 0) {
+      throw std::runtime_error("--pq-retrain-threads must be greater than 0");
+    }
   }
 
   QueryBundle<T> queries;
@@ -989,6 +1030,19 @@ int run_dynamic(int argc, char **argv) {
       }
     }
 
+    double pq_retrain_ms = 0.0;
+    if (pq_retrain_after_insert) {
+      const auto pq_data_path = pq_retrain_data_dir / ("cycle" + std::to_string(cycle) + ".bin");
+      write_progress(progress, cycle, "pq_retrain_start", 0, 0, 0.0);
+      pq_retrain_ms = rebuild_pq_sidecar(type, pq_retrain_binary, index.index_prefix(), pq_data_path, metric_name,
+                                         pq_retrain_pq_bytes, pq_retrain_threads);
+      write_progress(progress, cycle, "pq_retrain_done", 0, 0, pq_retrain_ms);
+      if (foreground_enabled) {
+        reload_foreground_snapshot(foreground_snapshot, foreground_indexes, queries, metric, nbr_type, index.index_prefix(),
+                                   foreground_snapshot_base, foreground_snapshot_version, label_config, search_threads);
+      }
+    }
+
     if (foreground_enabled) {
       foreground_search(*foreground_snapshot->index, queries, k, L, foreground_rounds, search_threads, "after_insert", cycle, fg);
     }
@@ -1012,6 +1066,8 @@ int run_dynamic(int argc, char **argv) {
         << ",\"deleted_count\":" << count << ",\"delete_ms\":" << delete_ms
         << ",\"delete_ms_per_vector\":" << (delete_ms / static_cast<double>(count)) << ",\"merge_ms\":" << merge_ms
         << ",\"insert_ms\":" << insert_ms << ",\"post_insert_save_ms\":" << post_insert_save_ms
+        << ",\"pq_retrain_ms\":" << pq_retrain_ms << ",\"pq_retrain_threads\":" << pq_retrain_threads
+        << ",\"pq_retrain_pq_bytes\":" << pq_retrain_pq_bytes
         << ",\"search_threads\":" << search_threads << ",\"live_count\":" << npoints << "}\n";
     dyn.flush();
   }

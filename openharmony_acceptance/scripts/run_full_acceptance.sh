@@ -13,6 +13,8 @@ SEARCH_THREADS=${SEARCH_THREADS:-1}
 FOREGROUND_UPDATE_THREADS=${FOREGROUND_UPDATE_THREADS:-4}
 BATCH_UPDATE_THREADS=${BATCH_UPDATE_THREADS:-${UPDATE_THREADS:-32}}
 GT_THREADS=${GT_THREADS:-16}
+PQ_RETRAIN_AFTER_INSERT=${PQ_RETRAIN_AFTER_INSERT:-1}
+PQ_RETRAIN_THREADS=${PQ_RETRAIN_THREADS:-8}
 : "${PIPEANN_ATTR_DELTA_MERGE_BYTES:=${ATTR_DELTA_MERGE_BYTES:-67108864}}"
 export PIPEANN_ATTR_DELTA_MERGE_BYTES
 : "${PIPEANN_ATTR_TIMING:=0}"
@@ -88,6 +90,8 @@ echo "GT cache dir: ${GT_CACHE_DIR}"
 echo "PIPEANN_ATTR_DELTA_MERGE_BYTES=${PIPEANN_ATTR_DELTA_MERGE_BYTES}"
 echo "PIPEANN_ATTR_TIMING=${PIPEANN_ATTR_TIMING}"
 echo "PIPEANN_ATTR_TIMING_PATH=${PIPEANN_ATTR_TIMING_PATH}"
+echo "PQ_RETRAIN_AFTER_INSERT=${PQ_RETRAIN_AFTER_INSERT}"
+echo "PQ_RETRAIN_THREADS=${PQ_RETRAIN_THREADS}"
 
 compute_gt_cached() {
   local cycle="$1"
@@ -288,6 +292,11 @@ echo "Running batch dynamic quality test: cycles=${BATCH_CYCLES} update_threads=
   --foreground-enabled 0 \
   --checkpoint-enabled 1 \
   --save-after-insert 1 \
+  --pq-retrain-after-insert "${PQ_RETRAIN_AFTER_INSERT}" \
+  --pq-retrain-binary "${OH_BIN_DIR}/oh_rebuild_pq" \
+  --pq-retrain-data-dir "${WORK_DIR}" \
+  --pq-retrain-threads "${PQ_RETRAIN_THREADS}" \
+  --pq-retrain-pq-bytes "${PQ_BYTES}" \
   --checkpoint-mode static \
   --out-jsonl "${RESULTS_DIR}/dynamic_batch_chain.jsonl" \
   --out-foreground-jsonl "${RESULTS_DIR}/dynamic_batch_foreground_latency.jsonl" \
