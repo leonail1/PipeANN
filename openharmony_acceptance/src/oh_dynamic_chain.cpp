@@ -164,6 +164,90 @@ void run_shell_command(const std::string &command) {
   }
 }
 
+std::vector<uint32_t> load_internal_id_tags(const std::filesystem::path &tag_file) {
+  std::ifstream reader(tag_file, std::ios::binary);
+  if (!reader) {
+    throw std::runtime_error("Failed to open tag file for PQ retrain ordering: " + tag_file.string());
+  }
+  uint32_t npts = 0;
+  uint32_t dim = 0;
+  reader.read(reinterpret_cast<char *>(&npts), sizeof(uint32_t));
+  reader.read(reinterpret_cast<char *>(&dim), sizeof(uint32_t));
+  if (!reader || dim != 1) {
+    throw std::runtime_error("Invalid tag file for PQ retrain ordering: " + tag_file.string());
+  }
+  std::vector<uint32_t> tags(npts);
+  reader.read(reinterpret_cast<char *>(tags.data()), static_cast<std::streamsize>(sizeof(uint32_t) * tags.size()));
+  if (!reader) {
+    throw std::runtime_error("Failed to read tags for PQ retrain ordering: " + tag_file.string());
+  }
+  return tags;
+}
+
+template<typename T>
+std::filesystem::path materialize_internal_order_pq_data(const std::filesystem::path &tag_order_data_path,
+                                                         const std::string &index_prefix,
+                                                         const std::filesystem::path &work_dir, uint32_t cycle) {
+  const auto tag_file = std::filesystem::path(index_prefix + "_disk.index.tags");
+  auto internal_id_to_tag = load_internal_id_tags(tag_file);
+
+  uint32_t data_npts = 0;
+  uint32_t data_dim = 0;
+  oh::read_bin_metadata<T>(tag_order_data_path, data_npts, data_dim);
+  if (internal_id_to_tag.size() != data_npts) {
+    throw std::runtime_error("PQ retrain data rows (" + std::to_string(data_npts) +
+                             ") do not match saved tag rows (" + std::to_string(internal_id_to_tag.size()) + ")");
+  }
+
+  bool identity = true;
+  for (uint32_t i = 0; i < internal_id_to_tag.size(); ++i) {
+    if (internal_id_to_tag[i] != i) {
+      identity = false;
+      break;
+    }
+  }
+  if (identity) {
+    return tag_order_data_path;
+  }
+
+  uint32_t loaded_dim = 0;
+  auto tag_order_data = oh::read_bin_rows<T>(tag_order_data_path, 0, data_npts, loaded_dim);
+  if (loaded_dim != data_dim) {
+    throw std::runtime_error("PQ retrain data dimension changed while reading " + tag_order_data_path.string());
+  }
+
+  std::vector<T> internal_order_data(static_cast<size_t>(data_npts) * data_dim);
+  std::vector<uint8_t> seen(data_npts, 0);
+  for (uint32_t internal_id = 0; internal_id < data_npts; ++internal_id) {
+    uint32_t tag = internal_id_to_tag[internal_id];
+    if (tag >= data_npts) {
+      throw std::runtime_error("Saved tag " + std::to_string(tag) + " is outside PQ retrain data rows " +
+                               std::to_string(data_npts));
+    }
+    if (seen[tag] != 0) {
+      throw std::runtime_error("Duplicate saved tag " + std::to_string(tag) + " in " +
+                               std::filesystem::path(index_prefix + "_disk.index.tags").string());
+    }
+    seen[tag] = 1;
+    auto src = tag_order_data.begin() + static_cast<std::ptrdiff_t>(static_cast<size_t>(tag) * data_dim);
+    auto dst = internal_order_data.begin() + static_cast<std::ptrdiff_t>(static_cast<size_t>(internal_id) * data_dim);
+    std::copy_n(src, data_dim, dst);
+  }
+
+  auto out_path = work_dir / ("cycle" + std::to_string(cycle) + "_pq_internal_order.bin");
+  auto tmp_path = out_path;
+  tmp_path += ".tmp";
+  oh::write_bin_matrix<T>(tmp_path, internal_order_data, data_npts, data_dim);
+  const uint64_t expected_bytes = 2 * sizeof(uint32_t) + static_cast<uint64_t>(data_npts) * data_dim * sizeof(T);
+  const uint64_t actual_bytes = oh::file_size_or_zero(tmp_path);
+  if (actual_bytes != expected_bytes) {
+    throw std::runtime_error("PQ retrain reordered data size mismatch for " + tmp_path.string() + ": expected " +
+                             std::to_string(expected_bytes) + " got " + std::to_string(actual_bytes));
+  }
+  std::filesystem::rename(tmp_path, out_path);
+  return out_path;
+}
+
 double rebuild_pq_sidecar(const std::string &type, const std::string &rebuild_binary,
                           const std::string &index_prefix, const std::filesystem::path &data_path,
                           const std::string &metric, uint32_t pq_bytes, uint32_t threads) {
@@ -1030,9 +1114,17 @@ int run_dynamic(int argc, char **argv) {
       }
     }
 
+    double pq_retrain_reorder_ms = 0.0;
     double pq_retrain_ms = 0.0;
     if (pq_retrain_after_insert) {
-      const auto pq_data_path = pq_retrain_data_dir / ("cycle" + std::to_string(cycle) + ".bin");
+      const auto tag_order_pq_data_path = pq_retrain_data_dir / ("cycle" + std::to_string(cycle) + ".bin");
+      write_progress(progress, cycle, "pq_retrain_reorder_start", 0, 0, 0.0);
+      auto reorder_start = std::chrono::high_resolution_clock::now();
+      const auto pq_data_path =
+          materialize_internal_order_pq_data<T>(tag_order_pq_data_path, index.index_prefix(), pq_retrain_data_dir, cycle);
+      auto reorder_done = std::chrono::high_resolution_clock::now();
+      pq_retrain_reorder_ms = std::chrono::duration<double, std::milli>(reorder_done - reorder_start).count();
+      write_progress(progress, cycle, "pq_retrain_reorder_done", 0, 0, pq_retrain_reorder_ms);
       write_progress(progress, cycle, "pq_retrain_start", 0, 0, 0.0);
       pq_retrain_ms = rebuild_pq_sidecar(type, pq_retrain_binary, index.index_prefix(), pq_data_path, metric_name,
                                          pq_retrain_pq_bytes, pq_retrain_threads);
@@ -1066,7 +1158,8 @@ int run_dynamic(int argc, char **argv) {
         << ",\"deleted_count\":" << count << ",\"delete_ms\":" << delete_ms
         << ",\"delete_ms_per_vector\":" << (delete_ms / static_cast<double>(count)) << ",\"merge_ms\":" << merge_ms
         << ",\"insert_ms\":" << insert_ms << ",\"post_insert_save_ms\":" << post_insert_save_ms
-        << ",\"pq_retrain_ms\":" << pq_retrain_ms << ",\"pq_retrain_threads\":" << pq_retrain_threads
+        << ",\"pq_retrain_reorder_ms\":" << pq_retrain_reorder_ms << ",\"pq_retrain_ms\":" << pq_retrain_ms
+        << ",\"pq_retrain_threads\":" << pq_retrain_threads
         << ",\"pq_retrain_pq_bytes\":" << pq_retrain_pq_bytes
         << ",\"search_threads\":" << search_threads << ",\"live_count\":" << npoints << "}\n";
     dyn.flush();
