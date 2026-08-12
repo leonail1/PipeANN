@@ -1,7 +1,0 @@
-{
-  "raw_bytes": 512000008,
-  "index_bytes": 1060140468,
-  "expansion_ratio": 2.070587,
-  "pass": false,
-  "core_files": [{"path":"/mnt/nvme2n1/pipeann_recovery_20260610T091347/PipeANN-0.3-s2pq-openharmony/acceptance_work/full_node4_r96_rd0_st1_fg4_batch32_gt16_save_static_sift100m_3m6m_20260610T100604/index/sift1m_disk.index","bytes":1024004096},{"path":"/mnt/nvme2n1/pipeann_recovery_20260610T091347/PipeANN-0.3-s2pq-openharmony/acceptance_work/full_node4_r96_rd0_st1_fg4_batch32_gt16_save_static_sift100m_3m6m_20260610T100604/index/sift1m_disk.index.tags","bytes":4000008},{"path":"/mnt/nvme2n1/pipeann_recovery_20260610T091347/PipeANN-0.3-s2pq-openharmony/acceptance_work/full_node4_r96_rd0_st1_fg4_batch32_gt16_save_static_sift100m_3m6m_20260610T100604/index/sift1m_pq_pivots.bin","bytes":136356},{"path":"/mnt/nvme2n1/pipeann_recovery_20260610T091347/PipeANN-0.3-s2pq-openharmony/acceptance_work/full_node4_r96_rd0_st1_fg4_batch32_gt16_save_static_sift100m_3m6m_20260610T100604/index/sift1m_pq_compressed.bin","bytes":32000008}]
-}

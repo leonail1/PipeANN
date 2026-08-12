@@ -17,3 +17,6 @@ acceptance_gt_cache/
 acceptance_logs/
 acceptance_results/
 acceptance_work/
+openharmony_acceptance/evidence/
+openharmony_acceptance/results/
+run_repro*.sh

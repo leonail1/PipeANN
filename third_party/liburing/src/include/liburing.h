@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <sched.h>
 #include <linux/swab.h>
+#include <linux/blkdev.h>
 #include <sys/wait.h>
 #include "liburing/compat.h"
 #include "liburing/io_uring.h"
