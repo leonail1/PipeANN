@@ -30,25 +30,6 @@ OpenHarmony-oriented acceptance suite.
 - **Pluggable I/O engines.** io_uring (default), Linux AIO, or SPDK, selected
   at configure time (`-DIO_ENGINE=uring|aio|spdk`).
 
-## OpenHarmony Acceptance Suite
-
-`openharmony_acceptance/` contains a C++ acceptance runner that drives the
-index through the six OpenHarmony requirements:
-
-1. Static filtered search: recall@10 ≥ 98% with avg latency < 10 ms
-2. 5-cycle dynamic delete/insert: recall ≥ 98% and avg < 10 ms after each cycle
-3. Single-query RSS < 30 MB
-4. Extra index space expansion < 1× raw vectors
-5. Low-cost mark-delete
-6. Foreground search latency during background updates < 10 ms
-
-It generates labels, computes exact ground truth (with caching), runs static
-and dynamic test matrices, audits space/RSS, and emits a machine-readable
-`acceptance_summary.json`. See
-[openharmony_acceptance/README.md](openharmony_acceptance/README.md) for usage.
-Experiment data and results are kept locally and are **not** part of this
-repository (see `.gitignore`).
-
 ## Repository Layout
 
 ```
