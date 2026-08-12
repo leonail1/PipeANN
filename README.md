@@ -1,111 +1,89 @@
-<p align="center">
-  <img src="docs/assets/logo-wordmark.svg" alt="PipeANN" width="55%">
-</p>
+# PipeANN for OpenHarmony
 
-<h3 align="center">
-A low-latency, billion-scale, and updatable graph-based vector store on SSD.
-</h3>
+A filtered vector search engine on SSD, built for the OpenHarmony vector+scalar
+joint query (向标联合查询) workload.
 
-## ✨ Key Features
+This project is built on top of [PipeANN](https://github.com/thustorage/PipeANN)
+**v0.2.0** (OSDI '25), with selected upstream fixes synced afterwards. It keeps
+the PipeANN SSD-resident graph index kernel and adds our own designs for
+filtered search routing, dynamic updates from an empty index, and an
+OpenHarmony-oriented acceptance suite.
 
-| Feature | Description |
-|---------|-------------|
-| ⚡ **Ultra-Low Latency** | <1ms for 1 billion vectors (top-10, 90% recall), only 1.14x-2.02x of in-memory index |
-| 📈 **High Throughput** | 20K QPS for 1 billion vectors, outperforming DiskANN and SPANN |
-| 🔄 **Efficient Updates** | Insert/delete with minimal search interference (1.07x fluctuation) |
-| 🎯 **Speculative Filtering** | 3K QPS & 6ms latency for attribute-filtered ANNS on 100 million vectors |
-| 💾 **Memory Efficient** | >10x less memory than in-memory indexes (~40GB for 1B vectors) |
-| 🐍 **Easy-to-Use** | Both Python (`faiss`-like) and C++ interfaces supported |
-| 🔌 **Seamless Integration** | LangChain- and Qdrant-compatible APIs for easy integration |
-| 🗄️ **Multi-SSD Scaling** | Scales to 70K QPS & 2ms tail latency on 1B vectors (4 SSDs, SPDK backend) |
+## Our Designs on Top of PipeANN
 
-## 📊 Performance Comparison
+- **Hybrid filtered search routing.** Every filtered query is routed by an
+  auto-calibrated threshold τ on the candidate count: selective queries go
+  through a prefilter path (candidate generation + exact rerank), while
+  unselective ones stay on the graph search path. Routing decisions are
+  per-query and can be forced via overrides.
+- **DenseBit label index.** Labels are stored with a bitmap/posting-list dual
+  encoding (dense bitmaps for high-selectivity labels, posting lists for
+  low-selectivity ones) in an mmap-friendly file format, shrinking a ~30 MB
+  sparse-matrix label file for SIFT1M-scale data to under 1 MB.
+  `equality` / `subset` / `range` / `match_all` filter semantics are supported.
+- **Zero-start dynamic index.** Below a bootstrap threshold (10k vectors),
+  queries are served by an in-memory exact path; the disk graph index is built
+  and swapped in automatically once the threshold is crossed. Inserts use the
+  native dynamic insert path (low-RSS), deletes are cheap mark-deletes with
+  background merge/save, and PQ codebooks are retrained after batch inserts to
+  suppress quantization drift.
+- **Pluggable I/O engines.** io_uring (default), Linux AIO, or SPDK, selected
+  at configure time (`-DIO_ENGINE=uring|aio|spdk`).
 
-PipeANN is suitable for both **large-scale** and **memory-constraint** scenarios.
+## OpenHarmony Acceptance Suite
 
+`openharmony_acceptance/` contains a C++ acceptance runner that drives the
+index through the six OpenHarmony requirements:
 
-| Dataset | Dimension | Memory | Latency | QPS | PipeANN | HNSW | DiskANN |
-|---------|-----|--------|---------|-----|---------|-------------| -------- |
-| 1B (SPACEV) | 100 | 40GB | 2ms | 5K | ✅ | ❌ 1TB mem | ❌ 6ms |
-| 80M (Wiki) | 768 | 10GB | 1.5ms | 5K | ✅ | ❌ 300GB mem | ❌ 4ms |
-| 10M (SIFT) | 128 | 550MB | <1ms | 10K | ✅ | ❌ 4GB mem | ❌ 3ms |
+1. Static filtered search: recall@10 ≥ 98% with avg latency < 10 ms
+2. 5-cycle dynamic delete/insert: recall ≥ 98% and avg < 10 ms after each cycle
+3. Single-query RSS < 30 MB
+4. Extra index space expansion < 1× raw vectors
+5. Low-cost mark-delete
+6. Foreground search latency during background updates < 10 ms
 
-> Recall@10 = 0.99, Samsung PM9A3 SSD, 32B PQ-compressed vectors (128B for Wiki).
+It generates labels, computes exact ground truth (with caching), runs static
+and dynamic test matrices, audits space/RSS, and emits a machine-readable
+`acceptance_summary.json`. See
+[openharmony_acceptance/README.md](openharmony_acceptance/README.md) for usage.
+Experiment data and results are kept locally and are **not** part of this
+repository (see `.gitignore`).
 
----
+## Repository Layout
 
-## 🚀 Quick Start
+```
+include/                 index headers (SSD index, filters, PQ/RaBitQ, utils)
+src/                     index kernel (search, update, I/O engines)
+openharmony_acceptance/  OpenHarmony acceptance runner (C++ tools + scripts)
+tests/                   index build/search tools and unit drivers
+scripts/                 benchmark helper scripts
+pipeann/, tests_py/      Python bindings and examples
+third_party/             bundled dependencies (liburing, etc.)
+docs/                    PipeANN documentation
+```
 
-For **best performance**, we recommend Linux with `io_uring` support (e.g., Ubuntu 22.04 with Kernel 6.8). 
+## Build
 
-### 🏗️ Build
-
-Install dependencies:
+Requirements: CMake ≥ 3.16, a C++17 compiler, OpenMP, BLAS/LAPACK (MKL or
+OpenBLAS); tcmalloc is used when available. io_uring requires Linux ≥ 5.1
+(AIO fallback works everywhere).
 
 ```bash
-# Ubuntu >= 22.04
-# libmkl could be replaced by other BLAS libraries (e.g., openblas).
-sudo apt install make cmake g++ libaio-dev libgoogle-perftools-dev \
-                 clang-format libmkl-full-dev libeigen3-dev
-
-# For Python interface
-pip install "pybind11[global]"
-
-# Build liburing
-cd third_party/liburing
-./configure && make -j
-cd ../..
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DIO_ENGINE=uring
+make -j
 ```
 
-Build PipeANN:
+## Quick Start
 
 ```bash
-# For C++ users: build C++ binaries under build/
-bash ./build.sh
+# 1. Smoke test the acceptance pipeline on synthetic data
+bash openharmony_acceptance/scripts/run_smoke.sh
 
-# For Python users: build and install the Python interface
-pip install -e .
+# 2. Full acceptance (needs base/update/query vectors in .bin format)
+BASE_BIN=/path/base_1m.bin UPDATES_BIN=/path/updates_3m.bin QUERY_BIN=/path/query.bin \
+PQ_BYTES=16 bash openharmony_acceptance/scripts/run_full_acceptance.sh
 ```
-
-### ⚡ C++
-
-```bash
-# Search an existing on-disk index with PipeANN pipelined search
-build/tests/search_disk_index uint8 index_prefix 1 32 query.bin gt.bin 10 l2 pq 2 10 10 20 30 40
-```
-
-See [C++ Interface](docs/cpp-interface.md) for index building, index updates, and filtered / OOD search, 
-and [SPDK Backend](docs/cpp-interface-spdk.md) to use SPDK as I/O engine (fastest).
-
-### 🐍 Python
-
-```python
-from pipeann import IndexPipeANN, Metric
-
-idx = IndexPipeANN(data_dim=128, data_type='float32', metric=Metric.L2)
-idx.omp_set_num_threads(32)
-idx.set_index_prefix(index_prefix)
-idx.add(vectors, tags)                          # insert (auto disk-convert at 100K)
-ids, dists = idx.search(queries, topk=10, L=50) # search
-idx.save(index_prefix)                          # persist
-```
-
-See [Python Interface](docs/python-interface.md#python-interface) for the full API, including filtered / OOD search and example output.
-
-See [Application Integrations](docs/application-integrations.md) for integration with LangChain, Qdrant, and Open WebUI.
-
-## 📰 Updates
-
-- **May 18, 2026**: SPDK backend supported, stable tail latency with better multi-SSD scalability
-- **May 18, 2026**: Filtered Search (Speculative Filtering), OOD search ([NGFix](https://dl.acm.org/doi/abs/10.1145/3769783)) & range search supported
-- **May 18, 2026**: PipeANN is integrated into OdinANN (search + insert), higher performance with less threads
-- **Mar 27, 2026**: [PiPNN](http://arxiv.org/abs/2602.21247) indexing algorithm supported
-- **Dec 4, 2025**: Inner product and filtered ANNS (*arbitrary filter*) supported
-- **Oct 14, 2025**: [RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library) (1-bit and multi-bit quantization) supported
-- **Sep 29, 2025**: Python interface released
-- **Jul 16, 2025**: Vector update (insert/delete) supported
-
----
 
 ## 📖 Citation
 
